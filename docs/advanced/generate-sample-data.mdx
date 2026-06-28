@@ -1,0 +1,143 @@
+---
+sidebar_position: 0.5
+title: Generate sample data
+---
+
+# Generate sample data
+
+:::info Start here
+The advanced scenarios **read** series, events and graphs that already exist. To run any
+of them end-to-end, first populate a sandbox with realistic synthetic data — that's what
+this page does, using the same SDK ingestion calls you'd use for real data. Point each
+scenario's `external_id`s at the series you create here.
+:::
+
+Everything below is Python (`numpy` + `pandas` + the SDK). Each generator builds a signal
+with the *shape* a model needs to learn, then ingests it.
+
+## A reusable ingest helper
+
+```python
+import datahub_sdk, numpy as np, pandas as pd
+
+client = datahub_sdk.DataHubClient.from_env()
+
+def ingest(external_id, index, values, unit=None, name=None):
+    client.timeseries.create([datahub_sdk.TimeSeries(
+        external_id=external_id, name=name or external_id, unit=unit)])
+    client.timeseries.insert_from_lists(timestamps=index, values=np.asarray(values), ts=external_id)
+    print(f"ingested {len(values):,} points → {external_id}")
+```
+
+## A. A degrading sensor signal
+
+For [predictive maintenance](/advanced/predictive-maintenance),
+[LSTM anomaly detection](/advanced/lstm-anomaly-detection) and
+[health scoring](/advanced/asset-health-score): a vibration signal that runs healthy,
+then develops a fault — rising amplitude and impulsiveness over the final stretch.
+
+```python
+def degrading_vibration(hours=24*60, fs_per_hour=3600):
+    n = hours * fs_per_hour
+    idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=n, freq="1s")
+    t = np.linspace(0, 1, n)
+    healthy = 0.6 * np.sin(2 * np.pi * 50 * np.arange(n) / fs_per_hour)   # base tone
+    fault = np.where(t > 0.8, (t - 0.8) * 4, 0.0)                          # ramps in late
+    impulses = fault * np.random.standard_normal(n) * 3                    # impulsiveness
+    return idx, healthy + fault + impulses + np.random.normal(0, 0.1, n)
+
+idx, vib = degrading_vibration()
+ingest("pump_07_vibration_mm_s", idx, vib, unit="mm_s")
+```
+
+## B. A production decline curve
+
+For [demand forecasting](/advanced/demand-forecasting) and
+[LSTM forecasting](/advanced/lstm-forecasting): a hyperbolic decline with noise and a
+weekly wobble — the shape of a producing well's rate.
+
+```python
+def decline_curve(days=730, qi=1200, b=0.8, d=0.0025):
+    idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=days, freq="1d")
+    t = np.arange(days)
+    rate = qi / (1 + b * d * t) ** (1 / b)              # hyperbolic decline
+    weekly = 1 + 0.03 * np.sin(2 * np.pi * t / 7)
+    return idx, rate * weekly + np.random.normal(0, 15, days)
+
+idx, rate = decline_curve()
+ingest("well_a12_oil_rate_bpd", idx, rate, unit="bpd")
+```
+
+## C. Correlated multivariate process data, with a fault
+
+For [PCA process monitoring](/advanced/pca-process-monitoring) and the multivariate
+[LSTM autoencoder](/advanced/lstm-anomaly-detection): several sensors that move together
+normally, with a fault window where one breaks the correlation.
+
+```python
+def correlated_process(minutes=60*24*14):
+    idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=minutes, freq="1min")
+    feed = 100 + 10 * np.sin(2 * np.pi * np.arange(minutes) / (60*24)) + np.random.normal(0, 1, minutes)
+    top_temp = 150 + 0.4 * feed + np.random.normal(0, 0.5, minutes)        # correlated with feed
+    pressure = 200 + 0.8 * feed + np.random.normal(0, 1, minutes)
+    reflux   = 2.0 + 0.005 * feed + np.random.normal(0, 0.02, minutes)
+    top_temp[-600:] += np.linspace(0, 12, 600)            # fault: temp drifts off the relationship
+    return idx, {"cdu_1_feed_bpd": feed, "cdu_1_top_temp_c": top_temp,
+                 "cdu_1_pressure_kpa": pressure, "cdu_1_reflux_ratio": reflux}
+
+idx, channels = correlated_process()
+for tag, values in channels.items():
+    ingest(tag, idx, values)
+```
+
+## D. Sparse lab samples vs. dense sensors
+
+For the [soft sensor](/advanced/random-forest-soft-sensor): cheap online sensors every
+minute, plus an expensive lab measurement only once an hour that depends on them.
+
+```python
+idx, channels = correlated_process()                      # reuse the dense sensors above
+# lab value is a (hidden) function of the sensors, sampled hourly with measurement noise
+lab_idx = idx[::60]
+lab = (3.0 + 0.02 * channels["cdu_1_top_temp_c"][::60]
+           - 0.5 * channels["cdu_1_reflux_ratio"][::60] + np.random.normal(0, 0.3, len(lab_idx)))
+ingest("cdu_1_product_sulfur_ppm_lab", lab_idx, lab, unit="ppm")
+```
+
+## E. A labelled failure history (events)
+
+For [XGBoost failure prediction](/advanced/xgboost-failure-prediction): historical
+failures as events, so each `(asset, day)` row can be labelled.
+
+```python
+for day_offset in (40, 95, 160, 240):                     # a few past failures
+    when = pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=day_offset)
+    client.events.create([datahub_sdk.Event(
+        external_id=f"esp_failure_a12_{int(when.timestamp())}",
+        type="esp_failure", status="closed", event_time=when,
+        metadata={"pump": "pump_esp_a12"})])
+```
+
+## F. A small graph
+
+For the graph-feature builds ([fraud classification](/advanced/fraud-classification),
+[K-Means communities](/advanced/kmeans-clustering)): a handful of accounts and the
+transfers between them.
+
+```python
+nodes = [datahub_sdk.Resource(external_id=f"account_{i}", name=f"Account {i}") for i in range(1, 8)]
+edges = [
+    datahub_sdk.RelForm.by_external_ids("account_1", "account_2", "sent_to"),
+    datahub_sdk.RelForm.by_external_ids("account_2", "account_3", "sent_to"),
+    datahub_sdk.RelForm.by_external_ids("account_3", "account_1", "sent_to"),   # a loop
+    datahub_sdk.RelForm.by_external_ids("account_3", "account_4", "sent_to"),
+]
+client.resources.create(nodes, edges)
+```
+
+---
+
+With the sandbox populated, every advanced scenario will find the series, events and
+graph it reads. As you swap in real data, the only thing that changes is where the
+numbers come from — the [ingestion guide](/guides/ingest-timeseries) covers doing it at
+production volume.

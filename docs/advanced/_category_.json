@@ -4,6 +4,6 @@
   "link": {
     "type": "generated-index",
     "title": "Advanced scenarios",
-    "description": "Longer, end-to-end builds that go past CRUD into real feature engineering and prediction/classification. The SDK is the data plane — it extracts the signals, and writes derived series and events back; the modelling in between is shown in Python, where the data-science tooling lives (the same SDK calls have Java and Rust equivalents in the reference). Each page carries an effort estimate."
+    "description": "Longer, end-to-end builds that go past CRUD into prediction and classification. No data-science background needed — start with 'Machine learning, gently' for the ideas in plain language, then 'Generate sample data' to get a sandbox you can run everything against. The SDK gets data in and out; the learning step in between is shown in Python. Each page carries an effort estimate."
   }
 }

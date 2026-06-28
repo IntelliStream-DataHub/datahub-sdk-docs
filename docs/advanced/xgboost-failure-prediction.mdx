@@ -1,0 +1,178 @@
+---
+sidebar_position: 9
+title: Failure prediction with XGBoost
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Failure prediction with XGBoost
+
+:::info At a glance
+**Effort:** ~1–2 hours · **You'll build:** an engineered tabular feature set and a
+gradient-boosted classifier with feature importance · **Stack:** the SDK for data in/out,
+plus `pandas`, `numpy` and `xgboost`.
+:::
+
+Some questions are best answered from **tabular features**, not raw sequences: *will
+this asset fail in the next week?* XGBoost is the workhorse here — it eats engineered
+features, handles missing values natively, trains fast, and tells you which features
+drive the prediction. We'll predict an electric submersible pump (ESP) failure seven
+days out, but the recipe fits any "label the history, predict the window" problem.
+
+:::tip Need data to run this?
+These steps read series and failure events that already exist. [Generate a sandbox](/advanced/generate-sample-data)
+first — section E ingests the labelled failure history this build trains on.
+:::
+
+## 1. Engineer one feature row per asset per day
+
+For each pump on each day, summarise the recent week of its sensors into a feature row.
+Gaps stay as `NaN` — XGBoost handles missing values without imputation.
+
+<Tabs groupId="lang">
+<TabItem value="python" label="Python">
+
+```python
+import datahub_sdk, numpy as np, pandas as pd
+
+client = datahub_sdk.DataHubClient.from_env()
+
+def feature_row(pump, day):
+    def agg(metric, *aggs):
+        rf = datahub_sdk.RetrieveFilter(
+            ts=f"{pump}_{metric}", start=day - pd.Timedelta(days=7), end=day,
+            aggregates=list(aggs), granularity="7d")
+        pts = client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()
+        return pts[-1] if pts else None
+    ip, mt, vb = agg("intake_pressure_bar", "average", "min"), \
+                 agg("motor_temp_c", "average", "max"), \
+                 agg("vibration_mm_s", "average", "max")
+    return {
+        "intake_avg": float(ip.average) if ip else np.nan,
+        "intake_min": float(ip.min) if ip else np.nan,
+        "motor_avg":  float(mt.average) if mt else np.nan,
+        "motor_max":  float(mt.max) if mt else np.nan,
+        "vib_avg":    float(vb.average) if vb else np.nan,
+        "vib_max":    float(vb.max) if vb else np.nan,
+    }
+```
+
+</TabItem>
+<TabItem value="java" label="Java">
+
+```java
+// Java pulls each pump's weekly aggregates; the model below is Python.
+var filter = new RetrieveFilter();
+filter.setExternalId("pump_esp_a12_motor_temp_c");
+filter.setStart(ZonedDateTime.now().minusDays(7));
+filter.setEnd(ZonedDateTime.now());
+filter.setAggregates(List.of("average", "max"));
+filter.setGranularity("7d");
+
+var request = new DataRetriever<RetrieveFilter>();
+request.setItems(List.of(filter));
+var agg = client.timeseries().retrieve(request).getItems().get(0).getDatapoints();
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+// Rust pulls each pump's weekly aggregates; the model below is Python.
+use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+
+let filter = RetrieveFilter {
+    external_id: Some("pump_esp_a12_motor_temp_c".into()),
+    aggregates: vec!["average".into(), "max".into()],
+    granularity: Some("7d".into()),
+    ..Default::default()
+};
+let agg = api.time_series
+    .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?
+    .get_items().remove(0);
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Label from the failure history
+
+A row is positive if the pump failed within the next 7 days. Pull historical failure
+events and label each `(pump, day)` accordingly.
+
+```python
+# failures: DataFrame of (pump, failed_on) from /events (type = esp_failure)
+def label(pump, day, failures):
+    upcoming = failures[(failures["pump"] == pump) &
+                        (failures["failed_on"] > day) &
+                        (failures["failed_on"] <= day + pd.Timedelta(days=7))]
+    return int(len(upcoming) > 0)
+
+rows = [(feature_row(p, d), label(p, d, failures)) for p, d in training_grid]
+X = pd.DataFrame([r for r, _ in rows])
+y = np.array([lab for _, lab in rows])
+```
+
+## 3. Train — with class imbalance and early stopping
+
+Failures are rare, so weight the positive class and optimise for ranking (`aucpr`).
+Early stopping on a validation split avoids over-fitting.
+
+```python
+from xgboost import XGBClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import average_precision_score
+
+Xtr, Xte, ytr, yte = train_test_split(X, y, test_size=0.2, stratify=y, random_state=0)
+
+clf = XGBClassifier(
+    n_estimators=600, max_depth=5, learning_rate=0.03,
+    subsample=0.8, colsample_bytree=0.8,
+    eval_metric="aucpr", early_stopping_rounds=40,
+    scale_pos_weight=(y == 0).sum() / max((y == 1).sum(), 1))
+clf.fit(Xtr, ytr, eval_set=[(Xte, yte)], verbose=False)
+
+print(f"avg precision: {average_precision_score(yte, clf.predict_proba(Xte)[:, 1]):.3f}")
+```
+
+## 4. Score live, with the reasons attached
+
+Score today's row per pump, write the risk back as a series, and raise a
+`failure_predicted` event for high-risk pumps — including the **feature importances** so
+the planner sees *why* (rising vibration vs. falling intake pressure point to different
+fixes).
+
+```python
+import_ = dict(sorted(zip(X.columns, clf.feature_importances_),
+                      key=lambda kv: kv[1], reverse=True)[:3])
+
+today = pd.DataFrame([feature_row("pump_esp_a12", pd.Timestamp.now(tz="UTC"))])
+risk = float(clf.predict_proba(today)[0, 1])
+
+client.timeseries.create([datahub_sdk.TimeSeries(
+    external_id="pump_esp_a12_failure_risk", name="ESP A-12 7-day failure risk")])
+client.timeseries.insert_from_lists(
+    timestamps=[pd.Timestamp.now(tz="UTC")], values=[risk], ts="pump_esp_a12_failure_risk")
+
+if risk > 0.6:
+    client.events.create([datahub_sdk.Event(
+        external_id=f"failure_predicted_a12_{int(pd.Timestamp.now().timestamp())}",
+        type="failure_predicted", status="open",
+        metadata={"pump": "pump_esp_a12", "risk": f"{risk:.2f}",
+                  "top_drivers": ", ".join(import_)})])
+```
+
+## Where to take it further
+
+- **Real explainability.** Use SHAP for per-prediction attributions, not just global
+  importance — the planner sees what drove *this* pump's score.
+- **Monotonic constraints.** Tell XGBoost that higher vibration only ever raises risk
+  (`monotone_constraints`) for a model that matches engineering intuition.
+- **Compare.** Benchmark against [Random Forest](/advanced/random-forest-soft-sensor) and
+  the sklearn gradient booster in [fraud classification](/advanced/fraud-classification).
+
+## See also
+
+- [Oil & gas — production monitoring](/industries/oil-and-gas) — the ESPs this protects.
+- [Predictive maintenance](/advanced/predictive-maintenance) — the unsupervised counterpart.
+- [Turn readings into events](/guides/detect-events) — emitting the prediction.

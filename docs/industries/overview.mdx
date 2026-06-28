@@ -4,15 +4,29 @@ title: Browse scenarios by theme
 
 # Industry scenarios
 
-Thirty worked examples, each starting from a real problem an industry needs solved and
-showing how to solve it with the SDK. They're grouped below by the **kind** of problem,
-so you can jump to the closest match to yours.
+Worked examples, each starting from a real problem an industry needs solved and showing
+how to solve it with the SDK. They're grouped below by the **kind** of problem, so you
+can jump to the closest match to yours.
 
 :::tip Two depths
 The scenarios on this page are **quick starts (~5 min)** — read one, copy the shape,
-adapt the ids. When you're ready to go past CRUD into feature engineering and
-prediction, see **[Advanced scenarios](/advanced/predictive-maintenance)** (~20 min to
-2 hours each).
+adapt the ids. When you're ready to go past CRUD into prediction, see
+**[Advanced scenarios](/advanced/machine-learning-gently)** — no data-science background
+needed; they start gently (~20 min to 2 hours each).
+:::
+
+:::note Sector spotlight — oil & gas
+Oil & gas is covered end to end, upstream to downstream:
+[drilling](/industries/oil-and-gas-drilling) ·
+[production](/industries/oil-and-gas) ·
+[pipelines](/industries/oil-and-gas-pipeline) ·
+[refining](/industries/oil-and-gas-refining) ·
+[storage & custody](/industries/oil-and-gas-storage) ·
+[emissions & flaring](/industries/oil-and-gas-emissions).
+The advanced builds use oil & gas examples too —
+[LSTM production forecasting](/advanced/lstm-forecasting),
+[kick detection](/advanced/lstm-anomaly-detection) and
+[ESP failure prediction](/advanced/xgboost-failure-prediction).
 :::
 
 ## Live monitoring & alerting
@@ -29,6 +43,7 @@ React to data as it lands — a push connection, a rule, an alert in time to act
 - [Airports](/industries/airports) — catch a turnaround slipping before the slot is lost
 - [Logistics](/industries/logistics) — spot a delivery route falling behind
 - [Banking (AML)](/industries/banking) — react to a flagged payment in real time
+- [Oil & gas — drilling](/industries/oil-and-gas-drilling) — catch a well-control kick in its first seconds
 
 ## Throughput, efficiency & aggregation
 
@@ -42,6 +57,7 @@ Turn a firehose of readings into the roll-ups a dashboard or plan is built on.
 - [Telecom](/industries/telecom) — busy-hour capacity planning
 - [Retail](/industries/retail) — per-region demand, segmented by dataset
 - [Waste management](/industries/waste-management) — collect on fill level, not a calendar
+- [Oil & gas — refining](/industries/oil-and-gas-refining) — keep refinery units on-spec and energy-efficient
 
 ## Knowledge graph — root cause & traceability
 
@@ -55,6 +71,7 @@ Model the connections, then traverse them to answer questions a flat lookup can'
 - [Insurance](/industries/insurance) — expand a claim into its fraud ring
 - [Rail](/industries/rail) — is the line still connected after a closure?
 - [Water utilities](/industries/water-utilities) — where two quality alerts' flows converge
+- [Oil & gas — pipeline](/industries/oil-and-gas-pipeline) — find and locate a leak on the network
 
 ## Data quality, documents & risk
 
@@ -64,34 +81,40 @@ Get the foundations right — exact values, units, attached documents, segmentat
 - [Construction](/industries/construction) — drawings and permits tied to the site
 - [Agriculture](/industries/agriculture) — drone imagery alongside soil sensors
 - [Environmental](/industries/environmental) — heterogeneous sensors, correct units
+- [Oil & gas — tank storage](/industries/oil-and-gas-storage) — reconcile inventory, catch unexplained loss
+- [Oil & gas — emissions](/industries/oil-and-gas-emissions) — methane & flaring compliance reporting
 
 ## Going deeper
 
-The [Advanced scenarios](/advanced/predictive-maintenance) take a few of these further
-into real algorithms — feature engineering, prediction and classification. They're
-grouped here by what the model *does*.
+The [Advanced scenarios](/advanced/machine-learning-gently) take these further into real
+algorithms — forecasting, classification, clustering and anomaly detection. **No
+data-science background needed:** start with
+[Machine learning, gently](/advanced/machine-learning-gently) for the ideas in plain
+language, then [Generate sample data](/advanced/generate-sample-data) for a sandbox to
+run them against. They're grouped here by what the model *does*.
 
 ### Detect & monitor condition
 
 Learn what healthy looks like, then surface the drift.
 
-- [Predictive maintenance](/advanced/predictive-maintenance) — learn a machine's healthy
-  vibration signature and flag the drift *(~1–2 hr)*
-- [Asset health scoring](/advanced/asset-health-score) — one composite health index from
-  many signals *(~20–30 min)*
+- [Predictive maintenance](/advanced/predictive-maintenance) — flag a machine drifting from its healthy vibration signature *(~1–2 hr)*
+- [Asset health scoring](/advanced/asset-health-score) — one composite health index from many signals *(~20–30 min)*
+- [LSTM anomaly detection](/advanced/lstm-anomaly-detection) — catch a multivariate event from the joint pattern *(~2 hr)*
+- [Process monitoring with PCA](/advanced/pca-process-monitoring) — spot a break in many sensors' normal relationship *(~1–1.5 hr)*
 
-### Forecast & warn ahead
+### Forecast & predict ahead
 
 Predict what's coming while there's still time to act.
 
-- [Demand forecasting](/advanced/demand-forecasting) — forecast load or sales and store it
-  as a series *(~1 hr)*
-- [Early warning](/advanced/oxygen-crash-early-warning) — predict a salmon-pen oxygen crash
-  before it happens *(~1 hr)*
+- [Demand forecasting](/advanced/demand-forecasting) — forecast load or sales with gradient boosting *(~1 hr)*
+- [LSTM forecasting](/advanced/lstm-forecasting) — forecast a decline curve with a neural network *(~2 hr)*
+- [Early warning](/advanced/oxygen-crash-early-warning) — predict a salmon-pen oxygen crash before it happens *(~1 hr)*
+- [Failure prediction with XGBoost](/advanced/xgboost-failure-prediction) — predict an ESP failure a week out, with feature importance *(~1–2 hr)*
 
-### Classify & score risk
+### Classify, cluster & infer
 
-Score an entity by its behaviour and its connections.
+Label, group or estimate from features.
 
-- [Fraud classification](/advanced/fraud-classification) — graph features + a model to
-  rank fraud/AML alerts by risk *(~1–2 hr)*
+- [Fraud classification](/advanced/fraud-classification) — graph features + a model to rank fraud/AML alerts *(~1–2 hr)*
+- [K-Means clustering](/advanced/kmeans-clustering) — discover operating regimes, asset cohorts and network communities *(~1–1.5 hr)*
+- [Soft sensor with Random Forest](/advanced/random-forest-soft-sensor) — infer a lab quality from cheap sensors *(~1 hr)*

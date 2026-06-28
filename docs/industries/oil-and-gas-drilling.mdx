@@ -1,0 +1,109 @@
+---
+sidebar_position: 1.1
+title: Oil & gas — drilling operations
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Oil & gas — drilling operations
+
+**The problem.** Drilling a well is the most dangerous and expensive phase of upstream
+oil & gas. A **kick** — formation fluid pushing into the wellbore — can escalate to a
+blowout in minutes if it isn't caught; a **stuck pipe** can cost millions and lose the
+well. The signature is in the data the rig already streams: when mud flowing *out*
+starts to exceed mud pumped *in*, and the pit volume creeps up, a kick is developing.
+The driller needs that flagged the instant it starts, not after the trip tank confirms
+it.
+
+What we solve here is catching a well-control event in its first seconds, while it can
+still be shut in safely.
+
+## 1. Stream the drilling signals live
+
+Weight-on-bit, standpipe pressure, and mud flow in/out stream from the rig into a
+subscription. The moment flow-out runs ahead of flow-in while pit volume rises, raise a
+`kick_detected` alarm. See [Consume live data](/guides/realtime-subscriptions).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+import ai.intellistream.datahub.sdk.subscriptions.SubscriptionListener;
+import ai.intellistream.datahub.sdk.subscriptions.SubscriptionMessage;
+import java.time.Duration;
+
+try (SubscriptionListener listener =
+         client.subscriptions().listen(List.of("rig_deepwater_1"))) {
+    while (running) {
+        SubscriptionMessage msg = listener.poll(Duration.ofSeconds(1));
+        if (msg == null) continue;
+        if (influxDetected(msg.payload())) {       // flow_out > flow_in & pit rising
+            EventModel kick = new EventModel();
+            kick.setExternalId("kick_detected_a12_" + System.currentTimeMillis());
+            kick.setType("kick_detected");
+            kick.setStatus("critical");
+            kick.setEventTime(ZonedDateTime.now());
+            kick.setMetadata(Map.of("well", "well_a12", "rig", "rig_deepwater_1",
+                                    "flow_delta_gpm", "18"));
+            client.events().create(List.of(kick));
+        }
+        listener.ack(msg.messageId());
+    }
+}
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+with client.subscriptions.listen(["rig_deepwater_1"]) as listener:
+    for msg in listener:
+        if influx_detected(msg.payload):           # flow_out > flow_in & pit rising
+            client.events.create([datahub_sdk.Event(
+                external_id=f"kick_detected_a12_{int(pd.Timestamp.now().timestamp())}",
+                type="kick_detected", status="critical",
+                metadata={"well": "well_a12", "rig": "rig_deepwater_1", "flow_delta_gpm": "18"})])
+        listener.ack([msg.message_id])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::events::Event;
+
+let mut listener = api.subscriptions.listen(&["rig_deepwater_1"]).await?;
+while let Some(Ok(msg)) = listener.next().await {
+    if influx_detected(&msg.payload) {             // flow_out > flow_in & pit rising
+        let mut kick = Event::new("kick_detected_a12".into());
+        kick.r#type = Some("kick_detected".into());
+        kick.status = Some("critical".into());
+        api.events.create(&vec![kick]).await?;
+    }
+    listener.ack(&[msg.message_id.as_str()]).await?;
+}
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Learn the drilling state, not just one signal
+
+A kick rarely shows in any single channel — it's the *pattern* across flow, pressure
+and pit volume over a few seconds that gives it away. A model that watches all the
+drilling signals together as a sequence catches it earlier and with fewer false alarms
+than a per-channel threshold. That's exactly what the
+[LSTM anomaly detector](/advanced/lstm-anomaly-detection) does.
+
+## 3. Cut non-productive time
+
+Rate-of-penetration, torque and connection times are series per well section; daily
+roll-ups surface the formations and crews where non-productive time accumulates, the
+single biggest controllable cost in a drilling programme. See
+[Query & aggregate](/guides/query-and-aggregate).
+
+## See also
+
+- [Consume live data](/guides/realtime-subscriptions) — the well-control monitoring loop.
+- **[LSTM anomaly detection (advanced)](/advanced/lstm-anomaly-detection)** — catch a kick from the multivariate signal pattern.
+- [Oil & gas — production monitoring](/industries/oil-and-gas) — once the well is producing.

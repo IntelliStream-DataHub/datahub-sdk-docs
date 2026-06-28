@@ -1,0 +1,124 @@
+---
+sidebar_position: 0
+title: Machine learning, gently
+---
+
+# Machine learning, gently
+
+:::tip No maths background needed
+You do **not** need a statistics or data-science background to use the advanced
+scenarios. This page explains every idea they rely on in plain language, once, so the
+scenarios themselves can stay short. Read it first and the rest will make sense.
+:::
+
+The advanced scenarios all follow the same simple shape:
+
+> **get data out of the platform → learn a pattern from it → write a result back.**
+
+The SDK does the first and last parts (you already know those). The middle part — the
+"learn a pattern" bit — is what people call *machine learning*. Here's all you need to
+know about it to follow along.
+
+## The five words that unlock everything
+
+- **Model** — a thing that has *learned a pattern* from past data and can apply it to new
+  data. Think of it as a function you didn't write by hand; you showed it examples and it
+  worked the rule out itself.
+- **Feature** — a single number that describes something useful about your data. "The
+  average vibration over the last minute" is a feature. Models work on lists of features,
+  not raw readings.
+- **Training** — showing the model lots of past examples so it can find the pattern. Done
+  once, up front; afterwards the model is fast.
+- **Label** — the answer you want to predict, when you have it. "This pump failed" is a
+  label. Some methods need labels (you teach by example); some don't.
+- **Score** — the model's output for a new example: a predicted number, a probability, or
+  a group it belongs to. The scenarios write this back to the platform as a new series or
+  an event.
+
+That's the whole vocabulary. Everything else is just *which* kind of pattern you're
+learning.
+
+## The four jobs, in plain English
+
+Every advanced scenario is doing one of these four things. Pick by the question you're
+asking:
+
+| You want to… | …it's called | Plain-English example |
+| --- | --- | --- |
+| Predict a **number** in the future | **forecasting** | "How much will this well produce next month?" |
+| Predict a **yes/no or a category** | **classification** | "Will this pump fail in the next week?" |
+| Spot the **weird / unusual** | **anomaly detection** | "Is this reading unlike anything normal?" |
+| **Group** similar things together | **clustering** | "Which assets behave alike?" |
+
+## The algorithms, one line each
+
+Each scenario uses one of these. You don't need to understand the maths — just the
+one-line idea and *when* you'd reach for it. The links go to plain explanations if you're
+curious.
+
+**For spotting the unusual (anomaly detection)**
+
+- **Isolation Forest** — learns what "normal" looks like and flags anything that stands
+  apart, with no examples of failure needed.
+  [What it is](https://en.wikipedia.org/wiki/Isolation_forest) ·
+  used in [Predictive maintenance](/advanced/predictive-maintenance).
+- **Autoencoder** — a model that learns to *redraw* normal data; when it can't redraw
+  something well, that thing is abnormal.
+  [What it is](https://en.wikipedia.org/wiki/Autoencoder) ·
+  used in [LSTM anomaly detection](/advanced/lstm-anomaly-detection).
+- **PCA** — boils dozens of related sensors down to a few summary numbers, then notices
+  when they stop relating to each other the normal way.
+  [What it is](https://en.wikipedia.org/wiki/Principal_component_analysis) ·
+  used in [Process monitoring with PCA](/advanced/pca-process-monitoring).
+
+**For predicting the future (forecasting)**
+
+- **LSTM** — a neural network with a memory, good at learning patterns that play out over
+  time (like a decline curve or a daily cycle).
+  [What it is](https://en.wikipedia.org/wiki/Long_short-term_memory) ·
+  used in [LSTM forecasting](/advanced/lstm-forecasting).
+- **Gradient boosting** — builds many tiny rules-of-thumb that together make accurate
+  predictions from tabular features; the dependable workhorse.
+  [What it is](https://en.wikipedia.org/wiki/Gradient_boosting) ·
+  used in [Demand forecasting](/advanced/demand-forecasting).
+
+**For predicting a label (classification)**
+
+- **XGBoost** — a fast, very popular version of gradient boosting, with a handy report of
+  which features mattered most.
+  [What it is](https://en.wikipedia.org/wiki/XGBoost) ·
+  used in [Failure prediction](/advanced/xgboost-failure-prediction).
+- **Random Forest** — averages the opinions of many decision trees; robust and almost
+  tuning-free. Works for labels *or* numbers.
+  [What it is](https://en.wikipedia.org/wiki/Random_forest) ·
+  used in [Soft sensor](/advanced/random-forest-soft-sensor).
+
+**For grouping (clustering)**
+
+- **K-Means** — sorts things into a chosen number of groups so that members of a group are
+  alike. [What it is](https://en.wikipedia.org/wiki/K-means_clustering) ·
+  used in [K-Means clustering](/advanced/kmeans-clustering).
+
+## What you actually need to run these
+
+The modelling code is **Python**, because that's where the data-science tools live —
+mainly [`scikit-learn`](https://scikit-learn.org/) (the standard ML toolbox),
+[`pandas`](https://pandas.pydata.org/) (tables of data) and, for the neural networks,
+[`tensorflow`/`keras`](https://keras.io/). Install with `pip`; each scenario lists what
+it needs at the top.
+
+The DataHub SDK's job is unchanged: it **gets the data out** (the same `retrieve` calls
+you've seen) and **writes results back** (the same `ingest` and event calls). The Java and
+Rust clients do those data steps too — the [reference](/reference/client) has the
+equivalents — but the learning step in the middle is Python.
+
+## A safe way to start
+
+1. **Populate a sandbox.** [Generate sample data](/advanced/generate-sample-data) creates
+   realistic signals to practise on — nothing touches real systems.
+2. **Pick the scenario that matches your question** from the four jobs above.
+3. **Run it top to bottom.** Each one is written to be followed step by step, with the
+   *why* spelled out as you go.
+
+You won't break anything by experimenting, and you don't have to understand the maths to
+get a useful result — that's rather the point.

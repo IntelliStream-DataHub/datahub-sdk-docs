@@ -1,0 +1,181 @@
+---
+sidebar_position: 8
+title: K-Means — regimes, cohorts & communities
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# K-Means — operating regimes, asset cohorts & network communities
+
+:::info At a glance
+**Effort:** ~1–1.5 hours · **You'll build:** behavioural and graph feature vectors and
+cluster them three ways · **Stack:** the SDK for data and traversal, plus `numpy`,
+`pandas`, `scikit-learn`, and `networkx` for the graph part.
+:::
+
+K-Means finds structure with no labels: it groups points so each sits near its cluster's
+centre. That one idea answers three different operational questions, all covered here —
+*what modes does this asset run in?* (operating regimes), *which assets behave alike?*
+(cohorts), and *which parts of the network belong together?* (communities). The trick is
+always the same: turn the thing you want to group into a **feature vector**.
+
+:::tip Need data to run this?
+These steps read series (and a graph for section 3) that already exist.
+[Generate a sandbox](/advanced/generate-sample-data) first.
+:::
+
+## 1. Asset cohorts — group assets that behave alike
+
+Summarise each asset by a behavioural signature — a few aggregates of its key series —
+then cluster. Assets land in peer groups you can benchmark within.
+
+<Tabs groupId="lang">
+<TabItem value="python" label="Python">
+
+```python
+import datahub_sdk, numpy as np, pandas as pd
+from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import KMeans
+
+client = datahub_sdk.DataHubClient.from_env()
+
+def signature(asset):
+    def agg(metric, *aggs):
+        rf = datahub_sdk.RetrieveFilter(
+            ts=f"{asset}_{metric}",
+            start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=30),
+            end=pd.Timestamp.now(tz="UTC"),
+            aggregates=list(aggs), granularity="30d")
+        return client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()[-1]
+    load = agg("load_mw", "average", "max")
+    return {"avg_load": float(load.average), "peak_load": float(load.max)}
+
+assets = ["pump_07", "pump_08", "pump_11", "pump_19"]   # ...your fleet
+X = pd.DataFrame([signature(a) for a in assets], index=assets)
+Xs = StandardScaler().fit_transform(X)
+
+km = KMeans(n_clusters=4, n_init=10, random_state=0).fit(Xs)
+X["cohort"] = km.labels_
+```
+
+</TabItem>
+<TabItem value="java" label="Java">
+
+```java
+// Java pulls each asset's aggregates the same way; the clustering below is Python.
+var filter = new RetrieveFilter();
+filter.setExternalId("pump_07_load_mw");
+filter.setStart(ZonedDateTime.now().minusDays(30));
+filter.setEnd(ZonedDateTime.now());
+filter.setAggregates(List.of("average", "max"));
+filter.setGranularity("30d");
+
+var request = new DataRetriever<RetrieveFilter>();
+request.setItems(List.of(filter));
+var sig = client.timeseries().retrieve(request).getItems().get(0).getDatapoints();
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+// Rust pulls each asset's aggregates the same way; the clustering below is Python.
+use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+
+let filter = RetrieveFilter {
+    external_id: Some("pump_07_load_mw".into()),
+    aggregates: vec!["average".into(), "max".into()],
+    granularity: Some("30d".into()),
+    ..Default::default()
+};
+let sig = api.time_series
+    .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?
+    .get_items().remove(0);
+```
+
+</TabItem>
+</Tabs>
+
+### The payoff: the asset that doesn't fit its cohort
+
+An asset far from its own cluster's centre is behaving unlike its peers — a strong,
+label-free anomaly signal. Flag it.
+
+```python
+dist = np.linalg.norm(Xs - km.cluster_centers_[km.labels_], axis=1)
+for asset, d in zip(assets, dist):
+    if d > np.percentile(dist, 90):
+        client.events.create([datahub_sdk.Event(
+            external_id=f"peer_outlier_{asset}_{int(pd.Timestamp.now().timestamp())}",
+            type="peer_outlier", status="open",
+            metadata={"asset": asset, "cohort": str(int(km.labels_[assets.index(asset)]))})])
+```
+
+## 2. Operating regimes — group an asset's *states*
+
+Now cluster *time* instead of assets. Each row is one moment described by the asset's
+sensor vector; the clusters are its operating modes — idle, ramp, steady, overload.
+Labelling history this way makes "we only see this fault in mode 3" answerable.
+
+```python
+# one row per minute: [load, temp, pressure, flow] for a single asset
+states = pd.DataFrame({c: load_series(f"unit_3_{c}") for c in
+                       ["load_mw", "temp_c", "pressure_kpa", "flow_m3h"]}).dropna()
+
+regimes = KMeans(n_clusters=4, n_init=10, random_state=0).fit_predict(
+    StandardScaler().fit_transform(states))
+states["regime"] = regimes        # now every minute is tagged with its operating mode
+```
+
+## 3. Network communities — cluster the graph
+
+K-Means needs vectors, and a raw graph isn't one — so featurise it. Either **enrich the
+behavioural vector with graph-structural features** (so two assets are "alike" only if
+they behave *and* sit similarly in the network), or cluster the structure directly with
+**spectral clustering**, which is literally K-Means on the graph Laplacian's
+eigenvectors.
+
+```python
+import networkx as nx
+
+# (a) structural features per node, to add to the behavioural signature
+def graph_features(asset):
+    net = client.resources.fetch_related(external_id=asset, depth=2)
+    g = nx.Graph(); g.add_edges_from((e.start, e.end) for e in net.edges)
+    fid = next((n.id for n in net.nodes if n.external_id == asset), None)
+    pr = nx.pagerank(g) if g.number_of_edges() else {}
+    return {
+        "degree":     g.degree(fid) if fid in g else 0,
+        "pagerank":   pr.get(fid, 0.0),
+        "clustering": nx.clustering(g, fid) if fid in g else 0.0,
+    }
+
+# (b) or detect communities directly — spectral clustering = K-Means on the Laplacian
+from sklearn.cluster import SpectralClustering
+
+g = nx.Graph(); g.add_edges_from((e.start, e.end) for e in big_network.edges)
+A = nx.to_numpy_array(g)
+communities = SpectralClustering(n_clusters=5, affinity="precomputed",
+                                 assign_labels="kmeans").fit_predict(A)
+```
+
+So yes — K-Means works **with** graphs: feed it structural features, or let spectral
+clustering turn the network into vectors for it.
+
+## Choosing k
+
+Don't guess the number of clusters — let the data say. The **silhouette score** peaks at
+the k that separates clusters best:
+
+```python
+from sklearn.metrics import silhouette_score
+scores = {k: silhouette_score(Xs, KMeans(k, n_init=10, random_state=0).fit_predict(Xs))
+          for k in range(2, 8)}
+best_k = max(scores, key=scores.get)
+```
+
+## See also
+
+- [Correlate alarms with the graph](/guides/correlate-alarms) — the traversal the graph features build on.
+- [Asset health scoring](/advanced/asset-health-score) — score within a cohort once you have one.
+- [Fraud classification](/advanced/fraud-classification) — graph features feeding a supervised model.

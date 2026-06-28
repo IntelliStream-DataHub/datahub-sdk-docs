@@ -1,0 +1,168 @@
+---
+sidebar_position: 7
+title: LSTM autoencoder anomaly detection
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Multivariate anomaly detection with an LSTM autoencoder
+
+:::info At a glance
+**Effort:** ~2 hours · **You'll build:** an LSTM autoencoder that learns normal
+multivariate sequences and flags reconstruction error · **Stack:** the SDK for data
+in/out, plus `numpy`, `pandas`, `scikit-learn` (scaling) and `tensorflow`/`keras`.
+:::
+
+Some failures only show up in how *several* signals move *together over time*. A
+drilling kick is the classic case: no single channel is alarming, but the joint pattern
+of mud flow-in, flow-out, pit volume and standpipe pressure over a few seconds is
+unmistakable. An **LSTM autoencoder** learns to reconstruct that normal joint behaviour;
+when a real event arrives, it can't reconstruct it well, and the reconstruction error
+spikes. It needs **no examples of failure** — only normal operation.
+
+:::tip Need data to run this?
+These steps read series that already exist. [Generate a sandbox](/advanced/generate-sample-data)
+first — section C ingests the correlated multivariate signal (with an injected fault) this build watches.
+:::
+
+## 1. Load the normal multivariate window
+
+Pull several channels over a period the operation ran normally, align them, and scale.
+
+<Tabs groupId="lang">
+<TabItem value="python" label="Python">
+
+```python
+import datahub_sdk, numpy as np, pandas as pd
+from sklearn.preprocessing import StandardScaler
+
+client = datahub_sdk.DataHubClient.from_env()
+
+CHANNELS = ["rig_dw1_flow_in_gpm", "rig_dw1_flow_out_gpm",
+            "rig_dw1_pit_volume_bbl", "rig_dw1_standpipe_psi"]
+
+def load(external_id, start, end):
+    rf = datahub_sdk.RetrieveFilter(ts=external_id, start=start, end=end, limit=200_000)
+    pts = client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()
+    return pd.Series([float(p.value) for p in pts],
+                     index=pd.to_datetime([p.timestamp for p in pts])).sort_index()
+
+start, end = pd.Timestamp("2026-05-01", tz="UTC"), pd.Timestamp("2026-05-10", tz="UTC")
+frame = pd.DataFrame({c: load(c, start, end) for c in CHANNELS}).asfreq("1s").interpolate()
+
+scaler = StandardScaler()
+normal = scaler.fit_transform(frame.to_numpy())
+```
+
+</TabItem>
+<TabItem value="java" label="Java">
+
+```java
+// Java pulls each channel the same way; the model below is Python.
+var filter = new RetrieveFilter();
+filter.setExternalId("rig_dw1_flow_out_gpm");
+filter.setStart(ZonedDateTime.parse("2026-05-01T00:00:00Z"));
+filter.setEnd(ZonedDateTime.parse("2026-05-10T00:00:00Z"));
+
+var request = new DataRetriever<RetrieveFilter>();
+request.setItems(List.of(filter));
+var points = client.timeseries().retrieve(request).getItems().get(0).getDatapoints();
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+// Rust pulls each channel the same way; the model below is Python.
+use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+
+let filter = RetrieveFilter {
+    external_id: Some("rig_dw1_flow_out_gpm".into()),
+    limit: Some(200_000),
+    ..Default::default()
+};
+let series = api.time_series
+    .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?
+    .get_items().remove(0);
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Build sequences and the autoencoder
+
+Slice the multivariate signal into fixed windows of shape `(timesteps, channels)`. The
+autoencoder squeezes each window through a bottleneck and rebuilds it — learning only
+what normal sequences look like.
+
+```python
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, RepeatVector, TimeDistributed, Dense
+
+STEPS, N_FEAT = 30, len(CHANNELS)
+
+def sequences(arr, n):
+    return np.stack([arr[i:i+n] for i in range(len(arr) - n)])
+
+X = sequences(normal, STEPS)          # (samples, STEPS, N_FEAT)
+
+model = Sequential([
+    LSTM(32, activation="tanh", input_shape=(STEPS, N_FEAT)),   # encoder
+    RepeatVector(STEPS),
+    LSTM(32, activation="tanh", return_sequences=True),         # decoder
+    TimeDistributed(Dense(N_FEAT)),
+])
+model.compile(optimizer="adam", loss="mse")
+model.fit(X, X, epochs=30, batch_size=128, validation_split=0.1, verbose=0)
+```
+
+## 3. Score by reconstruction error and set a limit
+
+The per-window reconstruction error on normal data sets the alarm threshold; anything
+above is something the model has never seen.
+
+```python
+recon = model.predict(X, verbose=0)
+train_error = np.mean((X - recon) ** 2, axis=(1, 2))
+THRESHOLD = np.percentile(train_error, 99.5)
+```
+
+## 4. Watch live and raise an event
+
+Pull the most recent window, score it, write the anomaly score back as a series, and
+raise an event when it stays above the limit — catching the kick from the joint pattern,
+seconds in.
+
+```python
+recent = scaler.transform(
+    pd.DataFrame({c: load(c, pd.Timestamp.now(tz="UTC") - pd.Timedelta(minutes=10),
+                          pd.Timestamp.now(tz="UTC")) for c in CHANNELS})
+    .asfreq("1s").interpolate().to_numpy())
+
+Xr = sequences(recent, STEPS)
+error = np.mean((Xr - model.predict(Xr, verbose=0)) ** 2, axis=(1, 2))
+score_index = pd.date_range(periods=len(error), end=pd.Timestamp.now(tz="UTC"), freq="1s")
+
+client.timeseries.create([datahub_sdk.TimeSeries(
+    external_id="rig_dw1_anomaly_score", name="Rig DW1 multivariate anomaly score")])
+client.timeseries.insert_from_lists(timestamps=score_index, values=error, ts="rig_dw1_anomaly_score")
+
+if error[-3:].mean() > THRESHOLD:
+    client.events.create([datahub_sdk.Event(
+        external_id=f"kick_detected_dw1_{int(pd.Timestamp.now().timestamp())}",
+        type="kick_detected", status="critical",
+        metadata={"rig": "rig_deepwater_1", "score": f"{error[-1]:.3f}", "model": "lstm_ae_v1"})])
+```
+
+## Where to take it further
+
+- **Attribute the anomaly.** Per-channel reconstruction error shows *which* signal broke
+  the pattern — flow-out vs. pit volume points to different failure modes.
+- **Compare with the simpler detector.** The [Isolation Forest](/advanced/predictive-maintenance)
+  on engineered features is cheaper; reach for the LSTM when the *temporal* pattern matters.
+
+## See also
+
+- [Oil & gas — drilling operations](/industries/oil-and-gas-drilling) — the reactive version this upgrades.
+- [Predictive maintenance](/advanced/predictive-maintenance) — feature-based anomaly detection.
+- [Turn readings into events](/guides/detect-events) — emitting the alarm.

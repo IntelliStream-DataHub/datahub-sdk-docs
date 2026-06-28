@@ -1,0 +1,129 @@
+---
+sidebar_position: 1.3
+title: Oil & gas — refinery operations
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Oil & gas — refinery operations
+
+**The problem.** A refinery turns crude into products through tightly-coupled units —
+distillation columns, crackers, reformers — each running a delicate balance of
+temperature, pressure and flow. Drift off that balance and the unit makes off-spec
+product (reprocessing cost), burns excess energy (the refinery's second-biggest
+expense after feed), or trips entirely. Operators need the **process KPIs that reveal
+drift** and an alert when a unit heads off-spec, early enough to nudge it back.
+
+What we solve here is keeping units on-spec and energy-efficient by turning raw process
+tags into the few numbers that actually run the plant.
+
+## 1. Track the process KPIs
+
+Column temperatures, reflux and feed are series; the numbers operators steer by —
+energy per barrel, reflux ratio, separation quality — come from rolling these up.
+See [Query & aggregate](/guides/query-and-aggregate).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+var filter = new RetrieveFilter();
+filter.setExternalId("cdu_1_energy_gj");
+filter.setStart(ZonedDateTime.now().minusDays(1));
+filter.setEnd(ZonedDateTime.now());
+filter.setAggregates(List.of("sum"));
+filter.setGranularity("1h");
+
+var request = new DataRetriever<RetrieveFilter>();
+request.setItems(List.of(filter));
+
+// divide hourly energy by hourly throughput for energy-per-barrel
+client.timeseries().retrieve(request).getItems().get(0).getDatapoints()
+    .forEach(p -> recordEnergyIntensity(p.getTimestamp(), p.getValue()));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import pandas as pd
+
+rf = datahub_sdk.RetrieveFilter(
+    ts="cdu_1_energy_gj",
+    start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=1),
+    end=pd.Timestamp.now(tz="UTC"),
+    aggregates=["sum"], granularity="1h")
+
+for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
+    record_energy_intensity(dp.timestamp, dp.sum)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+
+let filter = RetrieveFilter {
+    external_id: Some("cdu_1_energy_gj".into()),
+    aggregates: vec!["sum".into()],
+    granularity: Some("1h".into()),
+    ..Default::default()
+};
+let series = api.time_series
+    .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?
+    .get_items().remove(0);
+for p in &series.datapoints { record_energy_intensity(&p.timestamp, p.sum); }
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Catch a process upset early
+
+When a column's top temperature drifts out of its control band, raise a `process_upset`
+event so the board operator corrects before product goes off-spec or the unit trips.
+See [Turn readings into events](/guides/detect-events).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+EventModel upset = new EventModel();
+upset.setExternalId("process_upset_cdu1_" + System.currentTimeMillis());
+upset.setType("process_upset");
+upset.setStatus("open");
+upset.setEventTime(ZonedDateTime.now());
+upset.setMetadata(Map.of("unit", "crude_unit_1", "tag", "column_top_temp", "value_c", "168"));
+client.events().create(List.of(upset));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+client.events.create([datahub_sdk.Event(
+    external_id=f"process_upset_cdu1_{int(pd.Timestamp.now().timestamp())}",
+    type="process_upset", status="open",
+    metadata={"unit": "crude_unit_1", "tag": "column_top_temp", "value_c": "168"})])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::events::Event;
+
+let mut upset = Event::new("process_upset_cdu1".into());
+upset.r#type = Some("process_upset".into());
+api.events.create(&vec![upset]).await?;
+```
+
+</TabItem>
+</Tabs>
+
+## See also
+
+- [Query & aggregate](/guides/query-and-aggregate) — energy-intensity and yield KPIs.
+- [Turn readings into events](/guides/detect-events) — the upset rule.
+- [Manufacturing — OEE](/industries/manufacturing) — the same roll-up pattern for discrete plants.

@@ -1,0 +1,160 @@
+---
+sidebar_position: 11
+title: Process monitoring with PCA
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Multivariate process monitoring with PCA
+
+:::info At a glance
+**Effort:** ~1–1.5 hours · **You'll build:** a PCA model of normal operation plus the
+T² and Q monitoring statistics · **Stack:** the SDK for data in/out, plus `numpy`,
+`pandas` and `scikit-learn`.
+:::
+
+A process unit has dozens of sensors that all move together — when feed rises,
+temperatures, pressures and flows respond in a fixed, correlated dance. A fault breaks
+that dance: the sensors stop relating to each other the way they should, often *before*
+any single one crosses an alarm limit. **PCA** learns the normal correlation structure
+and reduces it to a few components; two statistics — **Hotelling's T²** and the **squared
+prediction error (Q / SPE)** — then flag when live data no longer fits, and a
+contribution check points at the sensor responsible.
+
+:::tip Need data to run this?
+These steps read correlated process sensors that already exist.
+[Generate a sandbox](/advanced/generate-sample-data) first — section C ingests them, fault and all.
+:::
+
+## 1. Learn normal operation
+
+Pull a clean stretch of normal running across all the unit's sensors, standardise, and
+fit PCA keeping the components that capture the bulk of the variance.
+
+<Tabs groupId="lang">
+<TabItem value="python" label="Python">
+
+```python
+import datahub_sdk, numpy as np, pandas as pd
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+
+client = datahub_sdk.DataHubClient.from_env()
+
+TAGS = ["cdu_1_top_temp_c", "cdu_1_bottom_temp_c", "cdu_1_pressure_kpa",
+        "cdu_1_reflux_ratio", "cdu_1_feed_bpd", "cdu_1_reboiler_duty_gj"]
+
+def series(tag, start, end):
+    rf = datahub_sdk.RetrieveFilter(ts=tag, start=start, end=end,
+                                    aggregates=["average"], granularity="1m")
+    pts = client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()
+    return pd.Series([float(p.value) for p in pts],
+                     index=pd.to_datetime([p.timestamp for p in pts])).sort_index()
+
+s, e = pd.Timestamp("2026-05-01", tz="UTC"), pd.Timestamp("2026-05-15", tz="UTC")
+normal = pd.DataFrame({t: series(t, s, e) for t in TAGS}).dropna()
+
+scaler = StandardScaler().fit(normal)
+Z = scaler.transform(normal)
+pca = PCA(n_components=4).fit(Z)        # keep 4 components
+```
+
+</TabItem>
+<TabItem value="java" label="Java">
+
+```java
+// Java pulls each tag the same way; the PCA below is Python.
+var filter = new RetrieveFilter();
+filter.setExternalId("cdu_1_top_temp_c");
+filter.setStart(ZonedDateTime.parse("2026-05-01T00:00:00Z"));
+filter.setEnd(ZonedDateTime.parse("2026-05-15T00:00:00Z"));
+filter.setAggregates(List.of("average"));
+filter.setGranularity("1m");
+
+var request = new DataRetriever<RetrieveFilter>();
+request.setItems(List.of(filter));
+var pts = client.timeseries().retrieve(request).getItems().get(0).getDatapoints();
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+// Rust pulls each tag the same way; the PCA below is Python.
+use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+
+let filter = RetrieveFilter {
+    external_id: Some("cdu_1_top_temp_c".into()),
+    aggregates: vec!["average".into()],
+    granularity: Some("1m".into()),
+    ..Default::default()
+};
+let pts = api.time_series
+    .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?
+    .get_items().remove(0);
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Define the monitoring statistics and their limits
+
+**T²** measures how far a point sits inside the model's space (an unusual but in-pattern
+state); **Q/SPE** measures how far it sits *outside* the model (a broken correlation —
+usually the real fault). Set each limit from the normal data.
+
+```python
+lam = pca.explained_variance_
+
+def t2(z):                              # Hotelling's T² in component space
+    t = pca.transform(z)
+    return np.sum(t**2 / lam, axis=1)
+
+def spe(z):                             # squared prediction error (residual)
+    t = pca.transform(z)
+    resid = z - pca.inverse_transform(t)
+    return np.sum(resid**2, axis=1)
+
+T2_LIMIT  = np.percentile(t2(Z), 99)
+SPE_LIMIT = np.percentile(spe(Z), 99)
+```
+
+## 3. Monitor live and name the culprit sensor
+
+Score the latest data; when either statistic exceeds its limit the process has moved off
+normal. The biggest term in the residual is the sensor most responsible — attach it to
+the event so operators know *where* to look.
+
+```python
+recent = pd.DataFrame({t: series(t, pd.Timestamp.now(tz="UTC") - pd.Timedelta(minutes=30),
+                                 pd.Timestamp.now(tz="UTC")) for t in TAGS}).dropna()
+znew = scaler.transform(recent)
+
+if t2(znew)[-1] > T2_LIMIT or spe(znew)[-1] > SPE_LIMIT:
+    z = znew[-1:]
+    residual = (z - pca.inverse_transform(pca.transform(z)))[0]
+    culprit = TAGS[int(np.argmax(residual**2))]       # contribution analysis
+    client.events.create([datahub_sdk.Event(
+        external_id=f"process_deviation_cdu1_{int(pd.Timestamp.now().timestamp())}",
+        type="process_deviation", status="open",
+        metadata={"unit": "crude_unit_1",
+                  "t2": f"{t2(znew)[-1]:.1f}", "spe": f"{spe(znew)[-1]:.1f}",
+                  "top_contributor": culprit})])
+```
+
+You can also publish T² and SPE as their own series for a live "process health" chart —
+two lines that capture the state of dozens of sensors at once.
+
+## Where to take it further
+
+- **Dimensionality first.** PCA is also a feature-reduction step *before* clustering or a
+  classifier — feed the components into [K-Means](/advanced/kmeans-clustering) instead of
+  raw tags.
+- **Dynamic PCA.** Include lagged sensor values so the model captures process dynamics,
+  not just instantaneous correlation.
+
+## See also
+
+- [Oil & gas — refinery operations](/industries/oil-and-gas-refining) — the unit this watches.
+- [Predictive maintenance](/advanced/predictive-maintenance) · [LSTM anomaly detection](/advanced/lstm-anomaly-detection) — other ways to flag the abnormal.
+- [Turn readings into events](/guides/detect-events) — emitting the deviation.
