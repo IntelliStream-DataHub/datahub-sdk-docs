@@ -1,0 +1,165 @@
+---
+sidebar_position: 5
+title: Healthcare — hospital operations
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Healthcare — hospital operations & patient flow
+
+**The problem.** A hospital runs at the edge of capacity. Beds free up and fill
+minute by minute, the emergency department backs up, and a ward that quietly hits
+100% occupancy turns into a corridor of waiting patients. The operations team needs a
+single live picture of capacity across every ward — and an alert the moment a unit is
+about to overflow, while there's still time to act.
+
+This scenario is about **live operational monitoring**: model the hospital, stream
+occupancy in, and drive a capacity wall-board off a push connection. It uses only
+operational signals — bed counts, wait times, census — never patient records.
+
+## 1. Model the hospital
+
+A hospital *contains* wards, a ward *contains* beds. The same hierarchy you'd model
+for any physical estate, which lets a ward-level alert roll up to the whole site.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+ResourceForm hospital = new ResourceForm();
+hospital.setExternalId("hospital_central");
+hospital.setName("Central Hospital");
+
+ResourceForm ward = new ResourceForm();
+ward.setExternalId("ward_icu");
+ward.setName("Intensive care");
+
+RelForm contains = new RelForm();
+contains.setName("contains");
+contains.setFromExternalId("hospital_central");
+contains.setToExternalId("ward_icu");
+
+client.resources().create(List.of(hospital, ward), List.of(contains));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import datahub_sdk
+
+client.resources.create(
+    [datahub_sdk.Resource(external_id="hospital_central", name="Central Hospital"),
+     datahub_sdk.Resource(external_id="ward_icu", name="Intensive care")],
+    [datahub_sdk.RelForm.by_external_ids("hospital_central", "ward_icu", "contains")])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::resources::Resource;
+use dataplatform_rust_sdk::relations::RelForm;
+
+let mut hospital = Resource::new();
+hospital.external_id = "hospital_central".into();
+hospital.name = "Central Hospital".into();
+
+let mut ward = Resource::new();
+ward.external_id = "ward_icu".into();
+ward.name = "Intensive care".into();
+
+api.resources.create(
+    vec![hospital, ward],
+    vec![RelForm::by_external_ids("hospital_central", "ward_icu", "contains")],
+).await?;
+```
+
+</TabItem>
+</Tabs>
+
+Capacity signals become series: `ward_icu_occupancy_pct`, `ward_icu_free_beds`,
+`ed_wait_minutes`.
+
+## 2. Drive the capacity wall-board live
+
+A wall-board polling every minute is already stale. Subscribe to the occupancy series
+and update the moment a reading lands — and raise a `capacity_warning` event when a
+ward crosses its threshold, so charge nurses are paged before it's full. See
+[Consume live data](/guides/realtime-subscriptions) for the listener lifecycle.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+import ai.intellistream.datahub.sdk.subscriptions.SubscriptionListener;
+import ai.intellistream.datahub.sdk.subscriptions.SubscriptionMessage;
+import java.time.Duration;
+
+try (SubscriptionListener listener =
+         client.subscriptions().listen(List.of("bed_capacity"))) {
+    while (running) {
+        SubscriptionMessage msg = listener.poll(Duration.ofSeconds(2));
+        if (msg == null) continue;
+        updateWallboard(msg.payload());
+        if (overThreshold(msg.payload())) {            // e.g. occupancy > 95%
+            EventModel warning = new EventModel();
+            warning.setExternalId("capacity_warning_icu_" + System.currentTimeMillis());
+            warning.setType("capacity_warning");
+            warning.setStatus("open");
+            warning.setEventTime(ZonedDateTime.now());
+            warning.setMetadata(Map.of("ward", "ward_icu", "occupancy_pct", "96"));
+            client.events().create(List.of(warning));
+        }
+        listener.ack(msg.messageId());
+    }
+}
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+with client.subscriptions.listen(["bed_capacity"]) as listener:
+    for msg in listener:
+        update_wallboard(msg.payload)
+        if over_threshold(msg.payload):                # e.g. occupancy > 95%
+            client.events.create([datahub_sdk.Event(
+                external_id=f"capacity_warning_icu_{int(pd.Timestamp.now().timestamp())}",
+                type="capacity_warning", status="open",
+                metadata={"ward": "ward_icu", "occupancy_pct": "96"})])
+        listener.ack([msg.message_id])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::events::Event;
+
+let mut listener = api.subscriptions.listen(&["bed_capacity"]).await?;
+while let Some(Ok(msg)) = listener.next().await {
+    update_wallboard(&msg.payload);
+    if over_threshold(&msg.payload) {                  // e.g. occupancy > 95%
+        let mut warning = Event::new("capacity_warning_icu".into());
+        warning.r#type = Some("capacity_warning".into());
+        warning.status = Some("open".into());
+        api.events.create(&vec![warning]).await?;
+    }
+    listener.ack(&[msg.message_id.as_str()]).await?;
+}
+```
+
+</TabItem>
+</Tabs>
+
+## 3. Review the day's pressure points
+
+Hourly-average occupancy per ward shows planners *when* the squeeze happens, so they
+can shift staff and elective schedules. See [Query & aggregate](/guides/query-and-aggregate).
+
+## See also
+
+- [Consume live data](/guides/realtime-subscriptions) — the capacity wall-board's push loop.
+- [Turn readings into events](/guides/detect-events) — the threshold rule.
+- [Query & aggregate](/guides/query-and-aggregate) — daily occupancy roll-ups.

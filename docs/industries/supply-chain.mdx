@@ -1,0 +1,145 @@
+---
+sidebar_position: 8
+title: Supply chain — traceability
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Supply chain — traceability & recall
+
+**The problem.** A defect is found in a component from one supplier lot. The clock
+starts immediately: which finished products contain a part from that lot, which
+shipments carried them, and which customers received them? Answering it by querying
+flat tables is slow and error-prone — but the supply chain *is* a graph (supplier →
+part → product → shipment), and one traversal turns a recalled lot into the exact,
+minimal recall list.
+
+This scenario centres on **graph traceability**: model the chain of custody as
+relationships, and trace a recall downstream from a single bad lot.
+
+## 1. Model the chain of custody
+
+Each hop is a relationship: a supplier lot `supplied` a part, a part `built_into` a
+product, a product `shipped_in` a shipment.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+List<RelForm> chain = List.of(
+    rel("supplied", "lot_acme_8842", "part_bearing_55"),
+    rel("built_into", "part_bearing_55", "product_gearbox_910"),
+    rel("shipped_in", "product_gearbox_910", "shipment_eu_2204"));
+
+client.resources().create(nodes, chain);
+```
+
+```java
+static RelForm rel(String type, String from, String to) {
+    RelForm r = new RelForm();
+    r.setName(type);
+    r.setFromExternalId(from);
+    r.setToExternalId(to);
+    return r;
+}
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import datahub_sdk
+
+chain = [
+    datahub_sdk.RelForm.by_external_ids("lot_acme_8842", "part_bearing_55", "supplied"),
+    datahub_sdk.RelForm.by_external_ids("part_bearing_55", "product_gearbox_910", "built_into"),
+    datahub_sdk.RelForm.by_external_ids("product_gearbox_910", "shipment_eu_2204", "shipped_in"),
+]
+client.resources.create(nodes, chain)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::relations::RelForm;
+
+let chain = vec![
+    RelForm::by_external_ids("lot_acme_8842", "part_bearing_55", "supplied"),
+    RelForm::by_external_ids("part_bearing_55", "product_gearbox_910", "built_into"),
+    RelForm::by_external_ids("product_gearbox_910", "shipment_eu_2204", "shipped_in"),
+];
+api.resources.create(nodes, chain).await?;
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Trace a recall downstream
+
+A bad lot is found. Walk the graph out from `lot_acme_8842` and everything reachable
+— parts, products, shipments — is exactly what the recall must cover. Nothing more,
+nothing missed.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+ResourceNetwork impacted = client.resources().fetchRelated("lot_acme_8842", 10);
+
+impacted.nodes().forEach(n -> {
+    if (n.getExternalId().startsWith("shipment_"))
+        System.out.println("recall shipment: " + n.getExternalId());
+    if (n.getExternalId().startsWith("product_"))
+        System.out.println("affected product: " + n.getExternalId());
+});
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+impacted = client.resources.fetch_related(external_id="lot_acme_8842", depth=10)
+
+for node in impacted.nodes:
+    if node.external_id.startswith("shipment_"):
+        print("recall shipment:", node.external_id)
+    elif node.external_id.startswith("product_"):
+        print("affected product:", node.external_id)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::resources::RelatedResourcesForm;
+
+let impacted = api.resources.fetch_related(
+    &RelatedResourcesForm::from_external_id("lot_acme_8842").with_depth(10)).await?;
+
+for node in impacted.nodes() {
+    if node.external_id.starts_with("shipment_") {
+        println!("recall shipment: {}", node.external_id);
+    }
+}
+```
+
+</TabItem>
+</Tabs>
+
+A generous `depth` follows the chain as far as it goes; filtering on the supply
+relationship types keeps the walk to the chain of custody. See
+[Correlate alarms with the graph](/guides/correlate-alarms) for the traversal pattern.
+
+## 3. Track flow, segment by facility
+
+Throughput and inventory are series (`dc_oslo_throughput_units`,
+`sku_4471_on_hand`); group each distribution centre's data with a
+[dataset](/reference/datasets) so each site sees only its own. A stockout becomes a
+`stockout` [event](/guides/detect-events) for the planning team.
+
+## See also
+
+- [Model assets as a graph](/guides/model-assets-graph) — modeling the chain of custody.
+- [Correlate alarms with the graph](/guides/correlate-alarms) — downstream traversal in detail.
+- [Datasets reference](/reference/datasets) — segment data per facility.
