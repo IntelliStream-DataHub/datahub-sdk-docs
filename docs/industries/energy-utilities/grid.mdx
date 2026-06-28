@@ -16,6 +16,24 @@ raise an overload alarm.
 This scenario centres on **aggregation** — turning a firehose of telemetry into the
 roll-ups a SCADA dashboard and a planning report actually consume.
 
+## Set up demo data
+
+New workspace? Run this once (Python) to create a feeder's load series with a day of
+hourly readings including an overload peak — so the roll-up and overload event below have
+data. The region/substation graph is created by step 1. Safe to re-run.
+
+```python
+import datahub_sdk, numpy as np, pandas as pd
+
+client = datahub_sdk.DataHubClient.from_env()
+
+client.timeseries.create([datahub_sdk.TimeSeries(external_id="feeder_f12_load_mw", name="Feeder F12 load", unit="mw")])
+idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=24, freq="1h")
+load = 8 + 4 * np.sin(np.arange(24) / 24 * 2 * np.pi) + np.random.normal(0, 0.5, 24)
+load[18] = 14.8                                   # an evening overload past the 12 MW rating
+client.timeseries.insert_from_lists(timestamps=idx, values=load, ts="feeder_f12_load_mw")
+```
+
 ## 1. Model the network
 
 A region *contains* substations, a substation *contains* transformers, a transformer

@@ -16,6 +16,20 @@ it isn't.
 What we solve here is collecting on demand instead of on a calendar — fewer overflows,
 fewer wasted trips.
 
+## Set up demo data
+
+New workspace? Run this once (Python) to create a bin's fill-level series with a near-full
+reading — so the `collection_due` rule below fires. Safe to re-run.
+
+```python
+import datahub_sdk, pandas as pd
+
+client = datahub_sdk.DataHubClient.from_env()
+
+client.timeseries.create([datahub_sdk.TimeSeries(external_id="bin_grunerlokka_114_fill_pct", name="Bin 114 fill")])
+client.timeseries.insert_from_lists(timestamps=[pd.Timestamp.now(tz="UTC")], values=[87.0], ts="bin_grunerlokka_114_fill_pct")
+```
+
 ## 1. Act on fill level, not the calendar
 
 Each bin reports its fill level. When a bin crosses its collection threshold, raise a

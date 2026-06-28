@@ -15,6 +15,25 @@ and to keep total site draw inside its limit.
 
 What we solve here is uptime drivers can trust and grid limits the site never breaches.
 
+## Set up demo data
+
+New workspace? Run this once (Python) to create a charger's status series, **create the
+subscription before we listen**, and push a fault reading — so the loop below raises a
+`charger_down`. Safe to re-run.
+
+```python
+import datahub_sdk, pandas as pd
+
+client = datahub_sdk.DataHubClient.from_env()
+
+client.timeseries.create([datahub_sdk.TimeSeries(external_id="charger_oslo_14_status", name="Charger Oslo 14 status")])
+client.subscriptions.create([datahub_sdk.Subscription(
+    external_id="network_status", name="Charging network status", timeseries=["charger_oslo_14_status"])])
+
+# status 1 = available; push a 0 (faulted) for the loop to catch
+client.timeseries.insert_from_lists(timestamps=[pd.Timestamp.now(tz="UTC")], values=[0.0], ts="charger_oslo_14_status")
+```
+
 ## 1. Detect a dead charger immediately
 
 Each charge point reports status and power. A connector that stops responding or faults

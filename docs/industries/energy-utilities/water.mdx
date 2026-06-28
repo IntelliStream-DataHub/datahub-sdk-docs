@@ -17,6 +17,29 @@ paths converge.
 This scenario introduces the **multi-source common-cause** graph pattern: trace
 upstream from each affected zone and intersect to find where the trouble enters.
 
+## Set up demo data
+
+New workspace? Run this once (Python) to create the flow-network graph (a source feeding a
+trunk main, which feeds two zones) and a turbidity reading out of range in each zone — so
+the upstream-convergence trace finds their shared main. Safe to re-run.
+
+```python
+import datahub_sdk, pandas as pd
+
+client = datahub_sdk.DataHubClient.from_env()
+
+client.resources.create(
+    [datahub_sdk.Resource(external_id=x, name=x) for x in
+     ["source_lake_a", "main_trunk_north", "zone_west_12", "zone_east_07"]],
+    [datahub_sdk.RelForm.by_external_ids("source_lake_a", "main_trunk_north", "feeds"),
+     datahub_sdk.RelForm.by_external_ids("main_trunk_north", "zone_west_12", "feeds"),
+     datahub_sdk.RelForm.by_external_ids("main_trunk_north", "zone_east_07", "feeds")])
+
+for s in ["zone_west_12_turbidity_ntu", "zone_east_07_turbidity_ntu"]:
+    client.timeseries.create([datahub_sdk.TimeSeries(external_id=s, name=s)])
+    client.timeseries.insert_from_lists(timestamps=[pd.Timestamp.now(tz="UTC")], values=[7.5], ts=s)
+```
+
 ## 1. Model the flow network
 
 Each `feeds` edge points downstream: source → main → zone. Walking *against* the flow

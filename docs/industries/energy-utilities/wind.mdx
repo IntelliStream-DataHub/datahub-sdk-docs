@@ -16,6 +16,25 @@ the **rolled-up capacity factor** over useful windows.
 This scenario centres on **aggregation** of generation data into the hourly and daily
 figures a forecasting model and a performance dashboard consume.
 
+## Set up demo data
+
+New workspace? Run this once (Python) to create a turbine's power and wind series with a
+week of hourly readings — so the capacity-factor roll-up has data. Safe to re-run.
+
+```python
+import datahub_sdk, numpy as np, pandas as pd
+
+client = datahub_sdk.DataHubClient.from_env()
+
+for s, u in [("turbine_t14_power_kw", "kw"), ("turbine_t14_wind_ms", "m_s")]:
+    client.timeseries.create([datahub_sdk.TimeSeries(external_id=s, name=s, unit=u)])
+idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=168, freq="1h")
+wind = np.clip(np.random.weibull(2.0, 168) * 6.0, 0, 25)
+power = np.clip(wind**3 * 2.0, 0, 3500)           # rated ~3500 kW
+client.timeseries.insert_from_lists(timestamps=idx, values=power, ts="turbine_t14_power_kw")
+client.timeseries.insert_from_lists(timestamps=idx, values=wind, ts="turbine_t14_wind_ms")
+```
+
 ## 1. Ingest per-turbine output
 
 Each turbine reports power and wind speed continuously. Hand the readings off in bulk.
