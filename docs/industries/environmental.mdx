@@ -1,0 +1,113 @@
+---
+sidebar_position: 19
+title: Environmental — air quality
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Environmental — air-quality monitoring
+
+**The problem.** An air-quality network mixes sensor types: particulates in
+micrograms per cubic metre, nitrogen dioxide in parts per billion, carbon monoxide in
+parts per million. If a series doesn't carry its unit, `42` is meaningless — is that a
+healthy CO reading or a hazardous one? Getting **units** right, consistently, across a
+heterogeneous fleet is what makes the data comparable and the dashboards trustworthy.
+
+This is the scenario where **units** are the hero: pick the right unit for each
+pollutant and tag every series with it.
+
+## 1. Find the right unit
+
+Browse the unit catalogue to get the canonical external id for each pollutant's unit.
+See the [Units reference](/reference/units).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+client.units().list().getItems().forEach(u ->
+    System.out.println(u.getExternalId() + "  " + u.getName() + "  (" + u.getSymbol() + ")"));
+// e.g. ug_m3  micrograms per cubic metre  (µg/m³)
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+for u in client.units.list():
+    print(u.external_id, u.name, u.symbol)
+
+ugm3 = client.units.by_external_ids("ug_m3")     # confirm the one you'll use
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+for u in api.units.list().await?.get_items() {
+    println!("{}  {}  ({})", u.external_id, u.name, u.symbol);
+}
+let ugm3 = api.units.by_external_id("ug_m3").await?;
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Tag each series with its unit
+
+Create one series per pollutant per station, each carrying its unit's external id — so
+every value is self-describing and a chart can label its axis correctly.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+client.timeseries().create(
+    Timeseries.of("station_kirkeveien_pm25").name("Kirkeveien PM2.5").unit("ug_m3"),
+    Timeseries.of("station_kirkeveien_no2").name("Kirkeveien NO2").unit("ppb"),
+    Timeseries.of("station_kirkeveien_co").name("Kirkeveien CO").unit("ppm"));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import datahub_sdk
+
+client.timeseries.create([
+    datahub_sdk.TimeSeries(external_id="station_kirkeveien_pm25", name="Kirkeveien PM2.5", unit="ug_m3"),
+    datahub_sdk.TimeSeries(external_id="station_kirkeveien_no2", name="Kirkeveien NO2", unit="ppb"),
+    datahub_sdk.TimeSeries(external_id="station_kirkeveien_co", name="Kirkeveien CO", unit="ppm")])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::timeseries::TimeSeries;
+
+for (id, name, unit) in [
+    ("station_kirkeveien_pm25", "Kirkeveien PM2.5", "ug_m3"),
+    ("station_kirkeveien_no2", "Kirkeveien NO2", "ppb"),
+] {
+    let mut ts = TimeSeries::new(id, name);
+    ts.unit = Some(unit.into());
+    api.time_series.create_one(&ts).await?;
+}
+```
+
+</TabItem>
+</Tabs>
+
+## 3. Daily averages and exceedances
+
+Roll each pollutant up to daily averages for the public index, and raise an
+`exceedance` [event](/guides/detect-events) when a station crosses a regulatory limit —
+the metadata carrying the pollutant, its unit, and the threshold so the record is
+unambiguous. See [Query & aggregate](/guides/query-and-aggregate).
+
+## See also
+
+- [Units reference](/reference/units) — the unit catalogue and lookups.
+- [Work with units of measure](/guides/work-with-units) — tagging series with units.
+- [Query & aggregate](/guides/query-and-aggregate) — daily-average index.
