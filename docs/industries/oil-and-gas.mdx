@@ -193,9 +193,68 @@ if low {
 </TabItem>
 </Tabs>
 
+## 4. Are two alarms one fault? Ask the graph
+
+On a busy platform, alarms rarely arrive alone. When a wellhead temperature alarm and
+a separate pump alarm fire together, the control room needs to know fast: two
+independent problems, or one upstream cause? The graph answers it. Walk out from each
+alarmed sensor and look for a subsystem they share — if both are `PART_OF` the
+platform `cooling_system`, a single cooling failure is driving both.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+ResourceNetwork na = client.resources().fetchRelated("wellhead_temp_a12", 5);
+ResourceNetwork nb = client.resources().fetchRelated("pump_temp_a12", 5);
+
+Set<String> aNodes = na.nodes().stream()
+    .map(Resource::getExternalId).collect(Collectors.toSet());
+Set<String> shared = nb.nodes().stream()
+    .map(Resource::getExternalId).filter(aNodes::contains).collect(Collectors.toSet());
+
+// shared contains "cooling_system" → one root cause, not two
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+na = client.resources.fetch_related(external_id="wellhead_temp_a12", depth=5)
+nb = client.resources.fetch_related(external_id="pump_temp_a12", depth=5)
+
+shared = {n.external_id for n in na.nodes} & {n.external_id for n in nb.nodes}
+# 'cooling_system' in shared → one root cause, not two
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::resources::RelatedResourcesForm;
+use std::collections::HashSet;
+
+let na = api.resources.fetch_related(
+    &RelatedResourcesForm::from_external_id("wellhead_temp_a12").with_depth(5)).await?;
+let nb = api.resources.fetch_related(
+    &RelatedResourcesForm::from_external_id("pump_temp_a12").with_depth(5)).await?;
+
+let a: HashSet<&str> = na.nodes().iter().map(|n| n.external_id.as_str()).collect();
+let shared: Vec<&str> = nb.nodes().iter()
+    .map(|n| n.external_id.as_str()).filter(|id| a.contains(id)).collect();
+// shared contains "cooling_system" → one root cause, not two
+```
+
+</TabItem>
+</Tabs>
+
+That single query turns two alarms into one incident — see
+[Correlate alarms with the graph](/guides/correlate-alarms) for the general pattern.
+
 ## See also
 
 - [Model assets as a graph](/guides/model-assets-graph) — the field/well/pump modeling pattern.
 - [High-throughput ingestion](/guides/ingest-timeseries) — sustaining field-scale write volume.
 - [Turn readings into events](/guides/detect-events) — the detection rule in detail.
+- [Correlate alarms with the graph](/guides/correlate-alarms) — find the shared subsystem behind two alarms.
 - [Consume live data](/guides/realtime-subscriptions) — drive the control-room view from a live stream.

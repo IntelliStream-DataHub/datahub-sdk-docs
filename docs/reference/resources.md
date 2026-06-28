@@ -180,3 +180,61 @@ api.resources.delete(&vec![IdAndExtId::from_external_id("pump_1")]).await?;
 
 </TabItem>
 </Tabs>
+
+## Traverse the graph
+
+`fetchRelated` walks the graph outward from a starting resource and returns the
+connected sub-graph — a `ResourceNetwork` of `nodes`, the `edges` between them, and
+their `labels`. Traversal is **undirected** and bounded by `depth` (`-1` = the whole
+connected component), optionally filtered to specific relationship types. Use it for
+relationship reasoning — root-cause correlation, blast radius — that a flat lookup
+can't do. See [Correlate alarms with the graph](/guides/correlate-alarms).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+// convenience: within `depth` hops of an external id
+ResourceNetwork net = client.resources().fetchRelated("sensor_a", 5);
+
+// or the full form, filtering which relationship types to follow
+RelatedResourcesForm form = new RelatedResourcesForm();
+form.setExternalId("sensor_a");
+form.setDepth(5);
+form.setRelationshipTypes(List.of("PART_OF"));
+ResourceNetwork filtered = client.resources().fetchRelated(form);
+
+net.nodes().forEach(n -> System.out.println(n.getExternalId()));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+net = client.resources.fetch_related(
+    external_id="sensor_a", depth=5, relationship_types=["PART_OF"])
+
+for node in net.nodes:
+    print(node.external_id)
+for edge in net.edges:
+    print(edge.start, "->", edge.end, edge.relationship_type)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::resources::RelatedResourcesForm;
+
+let net = api.resources.fetch_related(
+    &RelatedResourcesForm::from_external_id("sensor_a")
+        .with_depth(5)
+        .with_relationship_types(vec!["PART_OF".into()])).await?;
+
+for node in net.nodes() {
+    println!("{}", node.external_id);
+}
+```
+
+</TabItem>
+</Tabs>

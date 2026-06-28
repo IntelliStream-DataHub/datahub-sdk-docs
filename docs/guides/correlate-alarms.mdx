@@ -1,0 +1,148 @@
+---
+sidebar_position: 8
+title: Correlate alarms with the graph
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Correlate alarms with the graph
+
+Two alarms fire within seconds of each other. Are they one incident or two? A flat
+lookup can't tell you — but the **relationship graph** can. If both alarmed sensors
+sit under the same subsystem, it's almost certainly one root cause, not two
+coincidences.
+
+`fetchRelated` walks the graph outward from a node and returns the connected
+sub-graph. Walk the neighbourhood of each alarm and intersect the two: a shared
+ancestor — say a `cooling_system` both sensors are `PART_OF` — is the common cause.
+
+:::note Why a flat read isn't enough
+`byIds` returns a resource and its *direct* edges only. A shared subsystem might be
+several hops away (sensor → pump → skid → cooling_system). Graph traversal follows the
+chain; a single-hop read stops at the first neighbour.
+:::
+
+## 1. From alarms to resources
+
+An alarm is an [event](./detect-events.mdx) that references the resource it concerns
+(`relatedResourceExternalIds`). Start from the two resources the alarms point at —
+here `sensor_a` and `sensor_b`.
+
+## 2. Walk each alarm's neighbourhood
+
+Fetch the sub-graph around each sensor. Bounding to `PART_OF` edges keeps the walk to
+the *structural* hierarchy (containment), ignoring incidental links.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+RelatedResourcesForm a = new RelatedResourcesForm();
+a.setExternalId("sensor_a");
+a.setDepth(5);
+a.setRelationshipTypes(List.of("PART_OF"));
+
+RelatedResourcesForm b = new RelatedResourcesForm();
+b.setExternalId("sensor_b");
+b.setDepth(5);
+b.setRelationshipTypes(List.of("PART_OF"));
+
+ResourceNetwork na = client.resources().fetchRelated(a);
+ResourceNetwork nb = client.resources().fetchRelated(b);
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+na = client.resources.fetch_related(
+    external_id="sensor_a", depth=5, relationship_types=["PART_OF"])
+nb = client.resources.fetch_related(
+    external_id="sensor_b", depth=5, relationship_types=["PART_OF"])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::resources::RelatedResourcesForm;
+
+let na = api.resources.fetch_related(
+    &RelatedResourcesForm::from_external_id("sensor_a")
+        .with_depth(5)
+        .with_relationship_types(vec!["PART_OF".into()])).await?;
+let nb = api.resources.fetch_related(
+    &RelatedResourcesForm::from_external_id("sensor_b")
+        .with_depth(5)
+        .with_relationship_types(vec!["PART_OF".into()])).await?;
+```
+
+</TabItem>
+</Tabs>
+
+## 3. Find the shared subsystem
+
+Intersect the two node sets. Whatever remains (besides the sensors themselves) is a
+subsystem both alarms belong to — the likely common cause.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+Set<String> aNodes = na.nodes().stream()
+    .map(Resource::getExternalId).collect(Collectors.toSet());
+
+Set<String> shared = nb.nodes().stream()
+    .map(Resource::getExternalId)
+    .filter(aNodes::contains)
+    .collect(Collectors.toSet());
+shared.remove("sensor_a");
+shared.remove("sensor_b");
+
+if (!shared.isEmpty()) {
+    System.out.println("Both alarms are part of: " + shared);  // e.g. [cooling_system]
+}
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+a_nodes = {n.external_id for n in na.nodes}
+shared = {n.external_id for n in nb.nodes} & a_nodes
+shared -= {"sensor_a", "sensor_b"}
+
+if shared:
+    print("Both alarms are part of:", shared)   # e.g. {'cooling_system'}
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use std::collections::HashSet;
+
+let a_nodes: HashSet<&str> = na.nodes().iter().map(|n| n.external_id.as_str()).collect();
+let mut shared: HashSet<&str> = nb.nodes().iter()
+    .map(|n| n.external_id.as_str())
+    .filter(|id| a_nodes.contains(id))
+    .collect();
+shared.remove("sensor_a");
+shared.remove("sensor_b");
+
+if !shared.is_empty() {
+    println!("Both alarms are part of: {:?}", shared);  // e.g. {"cooling_system"}
+}
+```
+
+</TabItem>
+</Tabs>
+
+:::tip Deeper networks, smarter correlation
+Raise `depth` to correlate across a deeper hierarchy — a whole plant rather than one
+skid. Drop the relationship-type filter to follow *any* connection (power feeds, data
+flows), not just containment, when a fault can propagate sideways.
+:::
+
+The same pattern answers "what else might this failure affect?" — walk out from a
+failing component and the returned `nodes` are its blast radius.
