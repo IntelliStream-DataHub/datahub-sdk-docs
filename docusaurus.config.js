@@ -7,8 +7,6 @@ const config = {
   tagline: 'Java, Python & Rust client for the DataHub Platform',
   favicon: 'img/favicon.ico',
 
-  future: { v4: true },
-
   url: 'https://docs.intellistream.ai',
   baseUrl: '/',
   organizationName: 'intellistream',
