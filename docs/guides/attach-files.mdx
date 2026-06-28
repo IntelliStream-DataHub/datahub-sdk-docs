@@ -1,0 +1,151 @@
+---
+sidebar_position: 6
+title: Attach files to assets
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Attach files to assets
+
+Not everything is a number. A pump has a calibration certificate, a plant has a
+piping diagram, a daily run produces a CSV export. Store these as **files** —
+organized in folders, tagged with metadata, and linked to the dataset they belong to.
+
+## Upload a file
+
+Give the file a destination path and some metadata. The Java client uploads raw
+bytes; the Python and Rust clients upload a local file to a destination folder.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+import java.nio.file.Files;
+import java.nio.file.Path;
+
+byte[] content = Files.readAllBytes(Path.of("calibration_a12.pdf"));
+
+var uploaded = client.files().upload(
+    FileUploadRequest.builder()
+        .path("certificates/2026/calibration_a12.pdf")  // destination
+        .content(content)
+        .contentType("application/pdf")
+        .externalId("calibration_pump_esp_a12")
+        .dataSetId(42L)
+        .description("ESP A-12 calibration certificate")
+        .build());
+
+System.out.println("stored as id " + uploaded.getItems().iterator().next().getId());
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import datahub_sdk
+
+uploaded = client.files.upload_file(datahub_sdk.FileUpload(
+    path="calibration_a12.pdf",                # local file
+    destination_path="/certificates/2026/",
+    external_id="calibration_pump_esp_a12",
+    name="calibration_a12.pdf"))
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::files::FileUpload;
+
+// external id + MIME type are inferred from the file
+let upload = FileUpload::new_with_destination_path(
+    "calibration_a12.pdf", "/certificates/2026/");
+let uploaded = api.files.upload_file(upload).await?;
+```
+
+</TabItem>
+</Tabs>
+
+:::tip Link a file to its asset
+Set `dataSetId` (or the `external_id`/metadata) so a file is discoverable from the
+dataset and asset it documents — the calibration certificate next to the pump it
+certifies.
+:::
+
+## List a directory
+
+Browse the folder tree. Each entry is a file or a folder (`type`), with its name,
+path and size.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+var listing = client.files().list("/certificates/2026");
+listing.getItems().forEach(node ->
+    System.out.println(node.getType() + "  " + node.getName() + "  " + node.getSize() + " bytes"));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+for node in client.files.list_directory_by_path("/certificates/2026"):
+    print(node.type, node.name, node.size)
+
+roots = client.files.list_root_directory()   # top of the tree
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+let listing = api.files.list_directory_by_path("/certificates/2026").await?;
+for node in listing.get_items() {
+    println!("{}  {}  {} bytes", node.r#type, node.name, node.size.unwrap_or(0));
+}
+```
+
+</TabItem>
+</Tabs>
+
+## Download
+
+The Java client downloads a file's raw bytes by id:
+
+```java
+byte[] bytes = client.files().download("99");
+Files.write(Path.of("calibration_a12.pdf"), bytes);
+```
+
+## Delete
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+client.files().delete(List.of(IdCollection.createFromExternalId("calibration_pump_esp_a12")));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+client.files.delete(["calibration_pump_esp_a12"])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::generic::{DataWrapper, IdAndExtId};
+
+api.files.delete(&DataWrapper::from(
+    vec![IdAndExtId::from_external_id("calibration_pump_esp_a12")])).await?;
+```
+
+</TabItem>
+</Tabs>
+
+See the [Files reference](/reference/files) for every method and the upload metadata
+fields.

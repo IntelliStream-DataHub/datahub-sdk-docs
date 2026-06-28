@@ -1,0 +1,129 @@
+---
+sidebar_position: 7
+title: Work with units of measure
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Work with units of measure
+
+Units are shared reference data — `celsius`, `bar`, `m/s`, `usd`. Tagging a
+time-series with a unit makes its values self-describing: a chart can label its axis,
+and a consumer knows that `248.6` is bar, not psi. Browse the catalogue, then
+reference a unit by its external id when you create a series.
+
+## Browse the catalogue
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+client.units().list().getItems().forEach(u ->
+    System.out.println(u.getExternalId() + "  " + u.getName() + "  (" + u.getSymbol() + ")"));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+for u in client.units.list():
+    print(u.external_id, u.name, u.symbol, "—", u.quantity)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+for u in api.units.list().await?.get_items() {
+    println!("{}  {}  ({})", u.external_id, u.name, u.symbol);
+}
+```
+
+</TabItem>
+</Tabs>
+
+## Tag a series with a unit
+
+The everyday use: pass a unit's external id when you create a time-series. The value
+type stays numeric; the unit just describes what the numbers mean.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+client.timeseries().create(
+    Timeseries.of("wellhead_pressure_bar")
+        .name("Wellhead pressure")
+        .unit("bar"));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import datahub_sdk
+
+client.timeseries.create([datahub_sdk.TimeSeries(
+    external_id="wellhead_pressure_bar",
+    name="Wellhead pressure",
+    unit="bar")])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::timeseries::TimeSeries;
+
+let mut ts = TimeSeries::new("wellhead_pressure_bar", "Wellhead pressure");
+ts.unit = Some("bar".into());
+api.time_series.create_one(&ts).await?;
+```
+
+</TabItem>
+</Tabs>
+
+## Look up a specific unit
+
+Resolve a unit you already know — by external id, or by numeric id.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+`byIds` takes `UnitModel`s with their `id` set:
+
+```java
+UnitModel lookup = new UnitModel();
+lookup.setId(7L);
+UnitModel unit = client.units().byIds(List.of(lookup)).getItems().iterator().next();
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import datahub_sdk
+
+celsius = client.units.by_external_ids("celsius")
+by_id = client.units.by_ids([datahub_sdk.IdCollection(id=7)])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::generic::{DataWrapper, IdAndExtId};
+
+let celsius = api.units.by_external_id("celsius").await?;
+let by_id = api.units.by_ids(&DataWrapper::from(vec![IdAndExtId::from_id(7)])).await?;
+```
+
+</TabItem>
+</Tabs>
+
+:::note Unit external ids are canonical too
+Like every external id, a unit's is snake_case — `m_s` for metres per second, `deg_c`
+for degrees Celsius. Browse the catalogue to find the exact id to reference.
+:::
+
+See the [Units reference](/reference/units) for the full method list.
