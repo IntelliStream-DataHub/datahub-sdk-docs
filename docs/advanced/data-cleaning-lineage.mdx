@@ -1,0 +1,183 @@
+---
+sidebar_position: 0.7
+title: Data pipeline & lineage
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Build a data pipeline with full lineage
+
+:::info At a glance
+**Effort:** ~1–1.5 hours · **What you'll build:** a multi-step pipeline (clean →
+transform → extract features → score) where every derived series is written back **and**
+linked in the graph, so the whole `raw → … → result` chain is traceable both directions ·
+**Stack:** the SDK for data and graph, plus `pandas`, `numpy`.
+:::
+
+:::tip New to this?
+No data-science background needed — see the [gentle primer](/advanced/machine-learning-gently)
+for any unfamiliar term, and [generate a sandbox](/advanced/generate-sample-data) to run
+this against.
+:::
+
+**The idea in one paragraph.** Real data never goes straight from sensor to model. It's
+cleaned, resampled, turned into features, combined, scored — often a dozen steps, each
+producing a new series. After a few of these, nobody remembers what came from what. Two
+questions then become impossible to answer: *"this number looks wrong — where did it come
+from?"* and *"this sensor was faulty — what did it poison?"* **Data lineage** fixes both:
+record every step as nodes in the graph — `raw → cleaning function → cleaned → feature
+function → feature → …` — and the answers become a single graph walk.
+
+## 1. Run the transformations, writing each result back
+
+Each step reads its input series and writes a **new** derived series (never over the
+input). A tiny helper keeps it readable:
+
+```python
+import datahub_sdk, numpy as np, pandas as pd
+
+client = datahub_sdk.DataHubClient.from_env()
+
+def load(ext_id):
+    rf = datahub_sdk.RetrieveFilter(ts=ext_id,
+        start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=7), end=pd.Timestamp.now(tz="UTC"))
+    pts = client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()
+    return pd.Series([float(p.value) for p in pts],
+                     index=pd.to_datetime([p.timestamp for p in pts])).sort_index()
+
+def store(ext_id, series, name=None):
+    client.timeseries.create([datahub_sdk.TimeSeries(external_id=ext_id, name=name or ext_id,
+                                                     description="Derived series — not a raw measurement.")])
+    s = series.dropna()
+    client.timeseries.insert_from_lists(timestamps=s.index, values=s.to_numpy(), ts=ext_id)
+```
+
+The pipeline — two raw sensors, cleaned, then several features extracted from each, then
+assembled and scored:
+
+```python
+# --- clean (range + rolling-median outliers + short-gap fill) ---
+def clean(s):
+    s = s.where((s > -1e6) & (s < 1e6))
+    med = s.rolling(7, center=True).median()
+    mad = (s - med).abs().rolling(7, center=True).median()
+    return s.mask((s - med).abs() > 5 * mad).interpolate(limit=5)
+
+temp_clean = clean(load("engine_temperature_raw")); store("engine_temperature_clean", temp_clean)
+vib_clean  = clean(load("engine_vibration_raw"));    store("engine_vibration_clean", vib_clean)
+
+# --- features off the cleaned temperature ---
+store("engine_temp_roll_mean", temp_clean.rolling("1h").mean())     # smoothed trend
+store("engine_temp_roc",       temp_clean.diff())                   # rate of change
+
+# --- features off the cleaned vibration ---
+store("engine_vib_rms",        vib_clean.pow(2).rolling("1min").mean().pow(0.5))   # energy
+store("engine_vib_band",       vib_clean.rolling("1min").std())                    # proxy for band energy
+
+# --- assemble the features and score (your model goes here) ---
+feature_vector = pd.concat(
+    [load(f) for f in ["engine_temp_roll_mean", "engine_temp_roc",
+                       "engine_vib_rms", "engine_vib_band"]], axis=1).mean(axis=1)
+store("engine_feature_vector", feature_vector)
+store("engine_health_score", (100 - feature_vector.abs()).clip(0, 100))
+```
+
+Every box in the pipeline is now a stored series — but stored series alone don't tell you
+how they *relate*. That's step 2.
+
+## 2. Record the lineage graph
+
+Model each transformation as a **function node** and link it up: each input series is
+`processed_by` the function, which `produces` an output series. Done across the pipeline,
+this builds a branching, ten-deep lineage DAG in one call. (`resources.create` is the
+same call in Java and Rust — see [model assets as a graph](/guides/model-assets-graph).)
+
+```python
+def fn(ext_id, name):
+    return datahub_sdk.Resource(external_id=ext_id, name=name, labels=["FUNCTION"])
+
+functions = [
+    fn("clean_temp_fn", "Clean temperature"),   fn("clean_vib_fn", "Clean vibration"),
+    fn("roll_mean_fn", "Rolling mean"),          fn("roc_fn", "Rate of change"),
+    fn("rms_fn", "RMS energy"),                  fn("band_fn", "Band energy"),
+    fn("assemble_fn", "Assemble features"),      fn("score_fn", "Health score"),
+]
+
+def proc(src, f): return datahub_sdk.RelForm.by_external_ids(src, f, "processed_by")
+def prod(f, out): return datahub_sdk.RelForm.by_external_ids(f, out, "produces")
+
+edges = [
+    proc("engine_temperature_raw", "clean_temp_fn"), prod("clean_temp_fn", "engine_temperature_clean"),
+    proc("engine_vibration_raw", "clean_vib_fn"),    prod("clean_vib_fn", "engine_vibration_clean"),
+    # cleaned temperature branches into two features
+    proc("engine_temperature_clean", "roll_mean_fn"), prod("roll_mean_fn", "engine_temp_roll_mean"),
+    proc("engine_temperature_clean", "roc_fn"),       prod("roc_fn", "engine_temp_roc"),
+    # cleaned vibration branches into two features
+    proc("engine_vibration_clean", "rms_fn"),  prod("rms_fn", "engine_vib_rms"),
+    proc("engine_vibration_clean", "band_fn"), prod("band_fn", "engine_vib_band"),
+    # the four features converge into the feature vector, then the score
+    proc("engine_temp_roll_mean", "assemble_fn"), proc("engine_temp_roc", "assemble_fn"),
+    proc("engine_vib_rms", "assemble_fn"),        proc("engine_vib_band", "assemble_fn"),
+    prod("assemble_fn", "engine_feature_vector"),
+    proc("engine_feature_vector", "score_fn"), prod("score_fn", "engine_health_score"),
+]
+
+client.resources.create(functions, edges)
+```
+
+That graph branches (each cleaned signal feeds two features), converges (four features
+into one vector), and runs ten nodes deep from raw sensor to health score.
+
+## 3. The payoff — trace it backward
+
+Someone questions the health score. Walk the graph back from it and the entire recipe
+appears: every function and every series between the score and the **raw sensors** it
+ultimately came from. No guessing, no stale wiki page.
+
+```python
+back = client.resources.fetch_related(external_id="engine_health_score", depth=12)
+raw_sources = [n.external_id for n in back.nodes if n.external_id.endswith("_raw")]
+print("this score derives from:", raw_sources)   # engine_temperature_raw, engine_vibration_raw
+```
+
+## 4. The payoff — trace it forward (impact analysis)
+
+Now the opposite, and the bigger win. The temperature sensor is found faulty. **What did
+it poison?** Walk *forward* from the raw sensor and every downstream series it touched
+lights up — while the vibration-only features stay clean. That's the precise list to
+recompute or quarantine.
+
+```python
+fwd = client.resources.fetch_related(external_id="engine_temperature_raw", depth=12)
+affected = [n.external_id for n in fwd.nodes
+            if n.external_id.startswith("engine_") and n.external_id != "engine_temperature_raw"]
+print("affected by the bad temperature sensor:", affected)
+# engine_temperature_clean, engine_temp_roll_mean, engine_temp_roc,
+# engine_feature_vector, engine_health_score   — but NOT the vibration features
+```
+
+This is the same [blast-radius traversal](/guides/correlate-alarms) used for asset
+failures, here applied to data: one bad input, and lineage tells you exactly how far the
+damage spreads.
+
+## Where to take it further
+
+- **Version the functions.** Bump `clean_temp_fn` to `clean_temp_fn_v2` and the old
+  outputs still point at the version that made them — reproducibility for free.
+- **Quality events.** Emit a `data_quality` [event](/guides/detect-events) per run with
+  what each step changed, for an audit trail beside the lineage.
+- **Feed the models.** Point the [forecasters](/advanced/lstm-forecasting) and
+  [detectors](/advanced/predictive-maintenance) at the cleaned/feature series — and their
+  outputs become new nodes on the same lineage graph.
+
+## Further reading
+
+- **Data lineage** — [Wikipedia](https://en.wikipedia.org/wiki/Data_lineage)
+- **Directed acyclic graph (DAG)** — [Wikipedia](https://en.wikipedia.org/wiki/Directed_acyclic_graph)
+- **Outlier removal (Hampel / MAD)** — [Median absolute deviation](https://en.wikipedia.org/wiki/Median_absolute_deviation)
+
+## See also
+
+- [Model assets as a graph](/guides/model-assets-graph) — the nodes-and-relations basics.
+- [Correlate alarms with the graph](/guides/correlate-alarms) — the traversal behind both payoffs.
+- [Generate sample data](/advanced/generate-sample-data) — raw signals to run the pipeline on.
