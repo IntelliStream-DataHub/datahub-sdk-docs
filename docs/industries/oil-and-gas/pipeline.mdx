@@ -17,6 +17,34 @@ downstream.
 What we solve here is detecting a leak from the flow balance and locating it on the
 network so the right valves close fast.
 
+## Set up demo data
+
+New workspace? Run this once (Python) to create the segment's flow series (with an
+inflow/outflow gap — a leak) and the pipeline graph the locate step walks. Safe to re-run.
+
+```python
+import datahub_sdk, pandas as pd
+
+client = datahub_sdk.DataHubClient.from_env()
+
+# flow series: inflow 1000 vs outflow 940 m³/h → a 60 m³/h imbalance (leak)
+for s, v in [("segment_pn_07_flow_in_m3h", 1000.0), ("segment_pn_07_flow_out_m3h", 940.0)]:
+    client.timeseries.create([datahub_sdk.TimeSeries(external_id=s, name=s)])
+    client.timeseries.insert_from_lists(timestamps=[pd.Timestamp.now(tz="UTC")], values=[v], ts=s)
+
+# the network: stations, the segment, and the valves that isolate it
+client.resources.create(
+    [datahub_sdk.Resource(external_id=x, name=x) for x in
+     ["station_kollsnes", "segment_pn_07", "station_mongstad", "valve_v18", "valve_v19"]],
+    [datahub_sdk.RelForm.by_external_ids("station_kollsnes", "segment_pn_07", "connects_to"),
+     datahub_sdk.RelForm.by_external_ids("segment_pn_07", "station_mongstad", "connects_to"),
+     datahub_sdk.RelForm.by_external_ids("segment_pn_07", "valve_v18", "isolated_by"),
+     datahub_sdk.RelForm.by_external_ids("segment_pn_07", "valve_v19", "isolated_by")])
+```
+
+You'll also need small `latest(id)` and `tolerance(flow)` helpers — `latest` reads the
+last value of a series, `tolerance` returns an acceptable gap (say 1% of inflow).
+
 ## 1. Detect the imbalance
 
 Each segment reports inlet and outlet flow and pressure. A sustained inlet-minus-outlet

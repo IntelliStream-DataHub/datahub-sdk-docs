@@ -18,6 +18,32 @@ it.
 What we solve here is catching a well-control event in its first seconds, while it can
 still be shut in safely.
 
+## Set up demo data
+
+New workspace? Run this once (Python) to create the rig's series, **create the
+subscription before we listen**, and feed in five minutes of flow that ends in a
+developing kick — so the loop below has something real to catch. Safe to re-run.
+
+```python
+import datahub_sdk, numpy as np, pandas as pd
+
+client = datahub_sdk.DataHubClient.from_env()
+
+channels = ["rig_dw1_flow_in_gpm", "rig_dw1_flow_out_gpm", "rig_dw1_pit_volume_bbl"]
+client.timeseries.create([datahub_sdk.TimeSeries(external_id=c, name=c) for c in channels])
+
+# the subscription — created up front, before the listen loop in step 1
+client.subscriptions.create([datahub_sdk.Subscription(
+    external_id="rig_deepwater_1", name="Rig Deepwater 1", timeseries=channels)])
+
+idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=300, freq="1s")
+flow_out = np.full(300, 600.0); flow_out[-60:] += np.linspace(0, 25, 60)   # kick: flow-out climbs
+pit      = np.full(300, 120.0); pit[-60:] += np.linspace(0, 4, 60)         # pit volume rises
+client.timeseries.insert_from_lists(timestamps=idx, values=np.full(300, 600.0), ts="rig_dw1_flow_in_gpm")
+client.timeseries.insert_from_lists(timestamps=idx, values=flow_out, ts="rig_dw1_flow_out_gpm")
+client.timeseries.insert_from_lists(timestamps=idx, values=pit, ts="rig_dw1_pit_volume_bbl")
+```
+
 ## 1. Stream the drilling signals live
 
 Weight-on-bit, standpipe pressure, and mud flow in/out stream from the rig into a
