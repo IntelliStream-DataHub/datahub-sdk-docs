@@ -1,0 +1,136 @@
+---
+sidebar_position: 3
+title: Insurance — claims & fraud
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Insurance — claims & fraud rings
+
+**The problem.** Most claims are honest and independent. Organised fraud isn't — it
+hides in the *connections* between claims that look unrelated one at a time: the same
+phone number on two policies, the same repair shop across a dozen claims, the same
+address shared by claimants who supposedly don't know each other. A flat claims table
+can't see a ring. A graph can: model claims, policies and the parties they share, and
+a single traversal lights up the cluster.
+
+This scenario centres on **graph entity resolution** — turning a suspicious claim into
+the ring it belongs to.
+
+## 1. Model claims and the parties they share
+
+Claims, policies and parties (people, phone numbers, addresses, repair shops) are all
+resources; the edges record who is connected to what. The shared parties are what make
+a ring visible.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+List<RelForm> links = List.of(
+    rel("on_policy", "claim_88421", "policy_55righ"),
+    rel("filed_by", "claim_88421", "party_jdoe"),
+    rel("repaired_at", "claim_88421", "shop_quickfix"),
+    rel("contact_phone", "party_jdoe", "phone_47120099"));
+
+client.resources().create(nodes, links);
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import datahub_sdk
+
+links = [
+    datahub_sdk.RelForm.by_external_ids("claim_88421", "policy_55righ", "on_policy"),
+    datahub_sdk.RelForm.by_external_ids("claim_88421", "party_jdoe", "filed_by"),
+    datahub_sdk.RelForm.by_external_ids("claim_88421", "shop_quickfix", "repaired_at"),
+    datahub_sdk.RelForm.by_external_ids("party_jdoe", "phone_47120099", "contact_phone"),
+]
+client.resources.create(nodes, links)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::relations::RelForm;
+
+let links = vec![
+    RelForm::by_external_ids("claim_88421", "policy_55righ", "on_policy"),
+    RelForm::by_external_ids("claim_88421", "party_jdoe", "filed_by"),
+    RelForm::by_external_ids("claim_88421", "shop_quickfix", "repaired_at"),
+    RelForm::by_external_ids("party_jdoe", "phone_47120099", "contact_phone"),
+];
+api.resources.create(nodes, links).await?;
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Expand a suspicious claim into its ring
+
+Walk out from the flagged claim. The returned sub-graph is everything connected to it
+— and any *other* claim that shares a party, phone or shop with it is part of the same
+cluster.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+ResourceNetwork ring = client.resources().fetchRelated("claim_88421", 4);
+
+// other claims reachable through shared parties/phones/shops
+ring.nodes().stream()
+    .map(Resource::getExternalId)
+    .filter(id -> id.startsWith("claim_") && !id.equals("claim_88421"))
+    .forEach(c -> System.out.println("linked claim: " + c));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+ring = client.resources.fetch_related(external_id="claim_88421", depth=4)
+
+linked = [n.external_id for n in ring.nodes
+          if n.external_id.startswith("claim_") and n.external_id != "claim_88421"]
+print("linked claims:", linked)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::resources::RelatedResourcesForm;
+
+let ring = api.resources.fetch_related(
+    &RelatedResourcesForm::from_external_id("claim_88421").with_depth(4)).await?;
+
+for node in ring.nodes() {
+    if node.external_id.starts_with("claim_") && node.external_id != "claim_88421" {
+        println!("linked claim: {}", node.external_id);
+    }
+}
+```
+
+</TabItem>
+</Tabs>
+
+The more claims a single party, phone or shop connects, the stronger the signal —
+exactly the shared-node reasoning behind
+[alarm correlation](/guides/correlate-alarms), applied to entities instead of assets.
+
+## 3. Flag and watch the trend
+
+Raise a `fraud_review` [event](/guides/detect-events) on the cluster, and track
+`claims_per_shop` or `claims_per_phone` as [series](/guides/query-and-aggregate) — a
+node whose claim count climbs unusually fast is a ring forming in real time.
+
+## See also
+
+- [Model assets as a graph](/guides/model-assets-graph) — modeling claims, policies and parties.
+- [Correlate alarms with the graph](/guides/correlate-alarms) — the shared-node ring detection.
+- [Turn readings into events](/guides/detect-events) — flagging a cluster for review.
+- **[Fraud classification (advanced)](/advanced/fraud-classification)** — turn the ring into graph features and score it with a model.

@@ -1,0 +1,134 @@
+---
+sidebar_position: 2
+title: Semiconductor — yield & defect tracing
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Semiconductor — yield & defect tracing
+
+**The problem.** In a fab, yield is everything — and a yield drop is a detective story.
+A wafer lot passes through hundreds of process steps on dozens of tools; when lots start
+failing final test, the cause could be any one tool drifting out of spec. The killer
+question is: **what do the failing lots have in common?** Find the one tool or chamber
+that every bad lot passed through and you've found the culprit; miss it and you scrap
+wafers for weeks.
+
+What we solve here is tracing a yield excursion back to its root tool before it costs a
+fortune in scrapped silicon.
+
+## 1. Record process data exactly
+
+Chamber pressure, temperature and gas flow are the process record, and they must be
+exact — use the `NUMERIC` value type so values store without floating-point drift.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+client.timeseries().create(
+    Timeseries.of("tool_etch_07_chamber_pressure_mtorr")
+        .name("Etch-07 chamber pressure")
+        .setValueType("numeric"));
+
+client.timeseries().ingest(Map.of(
+    "tool_etch_07_chamber_pressure_mtorr",
+    List.of(Datapoint.of(Instant.now(), "12.0436"))));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import datahub_sdk, pandas as pd
+
+client.timeseries.create([datahub_sdk.TimeSeries(
+    external_id="tool_etch_07_chamber_pressure_mtorr",
+    name="Etch-07 chamber pressure", value_type="numeric")])
+client.timeseries.insert_from_lists(
+    timestamps=[pd.Timestamp.now(tz="UTC")], values=[12.0436],
+    ts="tool_etch_07_chamber_pressure_mtorr")
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::timeseries::TimeSeries;
+use chrono::Utc;
+
+let mut p = TimeSeries::new("tool_etch_07_chamber_pressure_mtorr", "Etch-07 pressure");
+p.value_type = "numeric".into();
+api.time_series.create_one(&p).await?;
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Find the tool every failing lot shares
+
+Each lot is connected to the tools it ran on (`processed_on`). Walk the graph from each
+failing lot and intersect: the tool common to all of them is the prime suspect — the
+same shared-node reasoning as [alarm correlation](/guides/correlate-alarms), applied to
+process genealogy.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+ResourceNetwork lotA = client.resources().fetchRelated("lot_22841", 6);
+ResourceNetwork lotB = client.resources().fetchRelated("lot_22863", 6);
+
+Set<String> toolsA = lotA.nodes().stream()
+    .map(Resource::getExternalId).filter(id -> id.startsWith("tool_")).collect(Collectors.toSet());
+Set<String> suspect = lotB.nodes().stream()
+    .map(Resource::getExternalId).filter(toolsA::contains).collect(Collectors.toSet());
+
+// suspect contains "tool_etch_07" → the chamber to pull and check
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+lot_a = client.resources.fetch_related(external_id="lot_22841", depth=6)
+lot_b = client.resources.fetch_related(external_id="lot_22863", depth=6)
+
+tools_a = {n.external_id for n in lot_a.nodes if n.external_id.startswith("tool_")}
+suspect = tools_a & {n.external_id for n in lot_b.nodes}
+# 'tool_etch_07' in suspect → pull and check that chamber
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::resources::RelatedResourcesForm;
+use std::collections::HashSet;
+
+let lot_a = api.resources.fetch_related(
+    &RelatedResourcesForm::from_external_id("lot_22841").with_depth(6)).await?;
+let lot_b = api.resources.fetch_related(
+    &RelatedResourcesForm::from_external_id("lot_22863").with_depth(6)).await?;
+
+let tools_a: HashSet<&str> = lot_a.nodes().iter()
+    .map(|n| n.external_id.as_str()).filter(|id| id.starts_with("tool_")).collect();
+let suspect: Vec<&str> = lot_b.nodes().iter()
+    .map(|n| n.external_id.as_str()).filter(|id| tools_a.contains(id)).collect();
+// suspect contains "tool_etch_07"
+```
+
+</TabItem>
+</Tabs>
+
+## 3. Confirm against the tool's process record
+
+With the suspect tool identified, pull its exact process series around the failing lots'
+run times and compare to a known-good window — the drift that explains the excursion
+should be right there. See [Query & aggregate](/guides/query-and-aggregate).
+
+## See also
+
+- [Time-series reference](/reference/timeseries) — exact `NUMERIC` process values.
+- [Correlate alarms with the graph](/guides/correlate-alarms) — the shared-tool intersection.
+- [Query & aggregate](/guides/query-and-aggregate) — comparing tool records.

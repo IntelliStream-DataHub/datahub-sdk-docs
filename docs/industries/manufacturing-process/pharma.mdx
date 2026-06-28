@@ -1,0 +1,142 @@
+---
+sidebar_position: 3
+title: Pharma — batch genealogy
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Pharma — batch manufacturing & genealogy
+
+**The problem.** A finished drug lot fails a quality check. Before anything ships,
+the manufacturer must reconstruct its **genealogy**: which intermediate lots, raw
+material lots, and equipment produced it, and whether any deviation in the process
+record explains the failure. The process data has to be *exact* — a pH or temperature
+stored with floating-point drift isn't acceptable in a regulated batch record — and
+the lineage has to be walkable in seconds, not days.
+
+This scenario combines **exact-value time-series** with **upstream graph genealogy**.
+
+## 1. Record process data exactly
+
+A bioreactor's pH, temperature and dissolved oxygen are the batch record. Use the
+`NUMERIC` value type so values store as exact decimals, not floats.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+client.timeseries().create(
+    Timeseries.of("batch_22f_ph")
+        .name("Batch 22F — pH")
+        .setValueType("numeric"));
+
+client.timeseries().ingest(Map.of(
+    "batch_22f_ph", List.of(Datapoint.of(Instant.now(), "7.0421"))));   // exact
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import datahub_sdk, pandas as pd
+
+client.timeseries.create([datahub_sdk.TimeSeries(
+    external_id="batch_22f_ph", name="Batch 22F — pH", value_type="numeric")])
+
+client.timeseries.insert_from_lists(
+    timestamps=[pd.Timestamp.now(tz="UTC")], values=[7.0421], ts="batch_22f_ph")
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::timeseries::TimeSeries;
+use chrono::Utc;
+
+let mut ph = TimeSeries::new("batch_22f_ph", "Batch 22F — pH");
+ph.value_type = "numeric".into();
+api.time_series.create_one(&ph).await?;
+
+api.time_series
+    .insert_datapoint(None, Some("batch_22f_ph".into()), Utc::now(), "7.0421".into())
+    .await?;
+```
+
+</TabItem>
+</Tabs>
+
+:::note Exact decimals
+`NUMERIC` stores values without floating-point rounding — see the
+[Time-series reference](/reference/timeseries) for the value types. For a regulated
+batch record, prefer it over the float types.
+:::
+
+## 2. Walk the genealogy upstream
+
+The failed lot `derived_from` intermediate lots, which `derived_from` raw material
+lots; each step `produced_on` a piece of equipment. Walk *up* from the failed lot and
+the returned sub-graph is its complete genealogy — every input and every machine that
+touched it.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+ResourceNetwork lineage = client.resources().fetchRelated("lot_22f_final", 10);
+
+lineage.nodes().forEach(n -> {
+    if (n.getExternalId().startsWith("lot_raw_"))
+        System.out.println("raw material: " + n.getExternalId());
+    if (n.getExternalId().startsWith("equipment_"))
+        System.out.println("equipment: " + n.getExternalId());
+});
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+lineage = client.resources.fetch_related(external_id="lot_22f_final", depth=10)
+
+for node in lineage.nodes:
+    if node.external_id.startswith("lot_raw_"):
+        print("raw material:", node.external_id)
+    elif node.external_id.startswith("equipment_"):
+        print("equipment:", node.external_id)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::resources::RelatedResourcesForm;
+
+let lineage = api.resources.fetch_related(
+    &RelatedResourcesForm::from_external_id("lot_22f_final").with_depth(10)).await?;
+
+for node in lineage.nodes() {
+    if node.external_id.starts_with("lot_raw_") {
+        println!("raw material: {}", node.external_id);
+    }
+}
+```
+
+</TabItem>
+</Tabs>
+
+If a raw material lot turns up in the genealogy of *other* failed batches too, you've
+found a shared root cause — the same intersection trick as
+[alarm correlation](/guides/correlate-alarms).
+
+## 3. Capture deviations as events
+
+Every out-of-band reading in the batch record is a `process_deviation` event tied to
+the lot, so the review team reconstructs an exact, ordered deviation timeline. See
+[Turn readings into events](/guides/detect-events).
+
+## See also
+
+- [Time-series reference](/reference/timeseries) — exact `NUMERIC` values.
+- [Correlate alarms with the graph](/guides/correlate-alarms) — the genealogy traversal pattern.
+- [Turn readings into events](/guides/detect-events) — the deviation rule.

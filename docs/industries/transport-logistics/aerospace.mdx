@@ -1,0 +1,158 @@
+---
+sidebar_position: 7
+title: Aerospace — fleet maintenance
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Aerospace — fleet predictive maintenance
+
+**The problem.** An airline operates a fleet of aircraft, each a deep hierarchy of
+systems and components, each component streaming sensor data every second of every
+flight. When one part starts trending toward failure, two questions follow
+immediately: is this part about to fail, and **which other aircraft carry the same
+part** and are therefore at the same risk? The second question is a graph question —
+and answering it fast is the difference between scheduled maintenance and a grounding.
+
+This scenario leans on the **knowledge graph**: model the fleet down to the component,
+and when one component looks suspect, walk the graph to its whole blast radius.
+
+## 1. Model the fleet to the component
+
+A fleet *contains* aircraft, an aircraft *contains* systems, a system *contains*
+components. Components of the same part type also link to a shared `part_type` node —
+that shared node is what makes fleet-wide correlation possible.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+ResourceForm aircraft = new ResourceForm();
+aircraft.setExternalId("aircraft_ln_312");
+aircraft.setName("Aircraft LN-312");
+
+ResourceForm pump = new ResourceForm();
+pump.setExternalId("hyd_pump_ln_312_1");
+pump.setName("Hydraulic pump #1");
+
+// the component is an instance of a shared part type
+RelForm installed = new RelForm();
+installed.setName("contains");
+installed.setFromExternalId("aircraft_ln_312");
+installed.setToExternalId("hyd_pump_ln_312_1");
+
+RelForm isType = new RelForm();
+isType.setName("is_part_type");
+isType.setFromExternalId("hyd_pump_ln_312_1");
+isType.setToExternalId("part_type_hp_47");
+
+client.resources().create(List.of(aircraft, pump), List.of(installed, isType));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import datahub_sdk
+
+client.resources.create(
+    [datahub_sdk.Resource(external_id="aircraft_ln_312", name="Aircraft LN-312"),
+     datahub_sdk.Resource(external_id="hyd_pump_ln_312_1", name="Hydraulic pump #1")],
+    [datahub_sdk.RelForm.by_external_ids("aircraft_ln_312", "hyd_pump_ln_312_1", "contains"),
+     datahub_sdk.RelForm.by_external_ids("hyd_pump_ln_312_1", "part_type_hp_47", "is_part_type")])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::resources::Resource;
+use dataplatform_rust_sdk::relations::RelForm;
+
+let mut aircraft = Resource::new();
+aircraft.external_id = "aircraft_ln_312".into();
+aircraft.name = "Aircraft LN-312".into();
+
+let mut pump = Resource::new();
+pump.external_id = "hyd_pump_ln_312_1".into();
+pump.name = "Hydraulic pump #1".into();
+
+api.resources.create(
+    vec![aircraft, pump],
+    vec![
+        RelForm::by_external_ids("aircraft_ln_312", "hyd_pump_ln_312_1", "contains"),
+        RelForm::by_external_ids("hyd_pump_ln_312_1", "part_type_hp_47", "is_part_type"),
+    ],
+).await?;
+```
+
+</TabItem>
+</Tabs>
+
+Each component streams series — `hyd_pump_ln_312_1_vibration_mm_s`,
+`hyd_pump_ln_312_1_temp_c` — [ingested at fleet scale](/guides/ingest-timeseries).
+
+## 2. A part looks suspect — find the blast radius
+
+Rising vibration on one pump suggests a part-type defect. Walk the graph out from the
+shared `part_type_hp_47` node: every component `is_part_type` of it, and every
+aircraft that `contains` one, is the blast radius — the list maintenance needs to
+inspect.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+ResourceNetwork affected = client.resources().fetchRelated("part_type_hp_47", 3);
+
+// every aircraft in the returned sub-graph carries this part type
+affected.nodes().stream()
+    .filter(n -> n.getExternalId().startsWith("aircraft_"))
+    .forEach(a -> System.out.println("inspect: " + a.getExternalId()));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+affected = client.resources.fetch_related(external_id="part_type_hp_47", depth=3)
+
+for node in affected.nodes:
+    if node.external_id.startswith("aircraft_"):
+        print("inspect:", node.external_id)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::resources::RelatedResourcesForm;
+
+let affected = api.resources.fetch_related(
+    &RelatedResourcesForm::from_external_id("part_type_hp_47").with_depth(3)).await?;
+
+for node in affected.nodes() {
+    if node.external_id.starts_with("aircraft_") {
+        println!("inspect: {}", node.external_id);
+    }
+}
+```
+
+</TabItem>
+</Tabs>
+
+One traversal turns a single suspect reading into a precise, fleet-wide inspection
+list. See [Correlate alarms with the graph](/guides/correlate-alarms) for the pattern.
+
+## 3. Record the finding
+
+Raise a `component_anomaly` event per affected component so the maintenance system
+schedules the work and keeps an auditable trail.
+
+## See also
+
+- [Model assets as a graph](/guides/model-assets-graph) — the fleet/aircraft/component hierarchy.
+- [Correlate alarms with the graph](/guides/correlate-alarms) — blast-radius traversal in detail.
+- [High-throughput ingestion](/guides/ingest-timeseries) — per-flight sensor volume.
+- [Turn readings into events](/guides/detect-events) — the anomaly rule.
+- **[Predictive maintenance (advanced)](/advanced/predictive-maintenance)** — learn a component's healthy vibration signature and flag the drift.

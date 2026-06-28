@@ -1,0 +1,147 @@
+---
+sidebar_position: 1
+title: Mining — equipment & throughput
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Mining — equipment uptime & throughput
+
+**The problem.** A mine's economics live and die on its haul fleet and processing
+plant. A haul truck stopped on the ramp is tonnes-per-hour evaporating; a crusher that
+fails unexpectedly idles everything behind it. The site needs to **catch equipment
+trending toward failure before it stops the line**, and to see true throughput against
+plan so it can act on the bottleneck rather than the loudest radio call.
+
+What we solve here is unplanned downtime and hidden bottlenecks across a fleet of
+expensive, hard-worked machines.
+
+## 1. Spot a machine trending to failure
+
+Haul-truck engine temperature, oil pressure and payload stream in. A drifting reading
+raises an `equipment_warning` before the breakdown, so maintenance is scheduled, not
+scrambled. See [Turn readings into events](/guides/detect-events).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+var series = client.timeseries().retrieve(lastHourOf("truck_785_oil_pressure_kpa"))
+    .getItems().get(0);
+
+if (series.getDatapoints().stream().anyMatch(p -> Double.parseDouble(p.getValue()) < 250.0)) {
+    EventModel warning = new EventModel();
+    warning.setExternalId("equipment_warning_785_" + System.currentTimeMillis());
+    warning.setType("equipment_warning");
+    warning.setStatus("open");
+    warning.setEventTime(ZonedDateTime.now());
+    warning.setMetadata(Map.of("unit", "truck_785", "signal", "oil_pressure"));
+    client.events().create(List.of(warning));
+}
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+points = client.timeseries.retrieve_datapoints(last_hour("truck_785_oil_pressure_kpa"))[0]
+if any(float(dp.value) < 250.0 for dp in points.get_datapoints()):
+    client.events.create([datahub_sdk.Event(
+        external_id=f"equipment_warning_785_{int(pd.Timestamp.now().timestamp())}",
+        type="equipment_warning", status="open",
+        metadata={"unit": "truck_785", "signal": "oil_pressure"})])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::events::Event;
+
+let points = api.time_series.retrieve_datapoints(&last_hour("truck_785_oil_pressure_kpa")).await?
+    .get_items().remove(0);
+let low = points.datapoints.iter()
+    .any(|p| p.value.as_deref().and_then(|v| v.parse::<f64>().ok()).unwrap_or(999.0) < 250.0);
+if low {
+    let mut warning = Event::new("equipment_warning_785".into());
+    warning.r#type = Some("equipment_warning".into());
+    api.events.create(&vec![warning]).await?;
+}
+```
+
+</TabItem>
+</Tabs>
+
+## 2. See throughput against plan
+
+Payload-per-cycle and cycle counts are series per truck; roll them up to tonnes-per-
+hour by hour and shift to find where the real bottleneck is — the loader, the haul, or
+the crusher. See [Query & aggregate](/guides/query-and-aggregate).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+var filter = new RetrieveFilter();
+filter.setExternalId("crusher_01_throughput_tph");
+filter.setStart(ZonedDateTime.now().minusHours(12));
+filter.setEnd(ZonedDateTime.now());
+filter.setAggregates(List.of("average"));
+filter.setGranularity("1h");
+
+var request = new DataRetriever<RetrieveFilter>();
+request.setItems(List.of(filter));
+
+client.timeseries().retrieve(request).getItems().get(0).getDatapoints()
+    .forEach(p -> compareToPlan(p.getTimestamp(), p.getValue()));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import pandas as pd
+
+rf = datahub_sdk.RetrieveFilter(
+    ts="crusher_01_throughput_tph",
+    start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=12),
+    end=pd.Timestamp.now(tz="UTC"),
+    aggregates=["average"], granularity="1h")
+
+for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
+    compare_to_plan(dp.timestamp, dp.average)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+
+let filter = RetrieveFilter {
+    external_id: Some("crusher_01_throughput_tph".into()),
+    aggregates: vec!["average".into()],
+    granularity: Some("1h".into()),
+    ..Default::default()
+};
+let series = api.time_series
+    .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?
+    .get_items().remove(0);
+for p in &series.datapoints { compare_to_plan(&p.timestamp, p.average); }
+```
+
+</TabItem>
+</Tabs>
+
+## 3. Tie equipment to its place in the flow
+
+Model pit → loader → truck → crusher as a [graph](/guides/model-assets-graph) so a
+crusher fault's [blast radius](/guides/correlate-alarms) — every truck that feeds it —
+is one traversal away when you plan the workaround.
+
+## See also
+
+- [Turn readings into events](/guides/detect-events) — the predictive-maintenance rule.
+- [Query & aggregate](/guides/query-and-aggregate) — tonnes-per-hour roll-ups.
+- [Correlate alarms with the graph](/guides/correlate-alarms) — a fault's downstream impact.
+- **[Predictive maintenance (advanced)](/advanced/predictive-maintenance)** — anomaly detection on haul-truck vibration.

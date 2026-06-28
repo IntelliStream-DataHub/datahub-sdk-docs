@@ -1,0 +1,96 @@
+---
+sidebar_position: 3
+title: EV charging — network uptime
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# EV charging — network uptime & load
+
+**The problem.** A charging network's reputation is its **availability**: a driver who
+rolls up to a dead charger doesn't come back. At the same time, a bank of fast chargers
+all drawing at once can exceed a site's grid connection and trip it — taking every
+charger down. The operator needs to **know a charger has failed the moment it does**,
+and to keep total site draw inside its limit.
+
+What we solve here is uptime drivers can trust and grid limits the site never breaches.
+
+## 1. Detect a dead charger immediately
+
+Each charge point reports status and power. A connector that stops responding or faults
+raises a `charger_down` event straight into the dispatch queue. See
+[Consume live data](/guides/realtime-subscriptions).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+import ai.intellistream.datahub.sdk.subscriptions.SubscriptionListener;
+import ai.intellistream.datahub.sdk.subscriptions.SubscriptionMessage;
+import java.time.Duration;
+
+try (SubscriptionListener listener =
+         client.subscriptions().listen(List.of("network_status"))) {
+    while (running) {
+        SubscriptionMessage msg = listener.poll(Duration.ofSeconds(5));
+        if (msg == null) continue;
+        if (faulted(msg.payload())) {
+            EventModel down = new EventModel();
+            down.setExternalId("charger_down_oslo_14_" + System.currentTimeMillis());
+            down.setType("charger_down");
+            down.setStatus("open");
+            down.setEventTime(ZonedDateTime.now());
+            down.setMetadata(Map.of("charger", "charger_oslo_14", "connector", "2"));
+            client.events().create(List.of(down));
+        }
+        listener.ack(msg.messageId());
+    }
+}
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+with client.subscriptions.listen(["network_status"]) as listener:
+    for msg in listener:
+        if faulted(msg.payload):
+            client.events.create([datahub_sdk.Event(
+                external_id=f"charger_down_oslo_14_{int(pd.Timestamp.now().timestamp())}",
+                type="charger_down", status="open",
+                metadata={"charger": "charger_oslo_14", "connector": "2"})])
+        listener.ack([msg.message_id])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::events::Event;
+
+let mut listener = api.subscriptions.listen(&["network_status"]).await?;
+while let Some(Ok(msg)) = listener.next().await {
+    if faulted(&msg.payload) {
+        let mut down = Event::new("charger_down_oslo_14".into());
+        down.r#type = Some("charger_down".into());
+        api.events.create(&vec![down]).await?;
+    }
+    listener.ack(&[msg.message_id.as_str()]).await?;
+}
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Report uptime and watch site load
+
+Availability and per-site power are series. Daily uptime per charger gives the
+network-quality number; the site's summed draw, aggregated to the minute, shows how
+close it runs to its grid limit — the input to load-balancing. See
+[Query & aggregate](/guides/query-and-aggregate).
+
+## See also
+
+- [Consume live data](/guides/realtime-subscriptions) — live charger status.
+- [Turn readings into events](/guides/detect-events) — the fault rule.
+- [Query & aggregate](/guides/query-and-aggregate) — uptime and site-load reporting.

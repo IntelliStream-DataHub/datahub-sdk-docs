@@ -1,0 +1,92 @@
+---
+sidebar_position: 5
+title: Waste management — smart collection
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Waste management — smart collection
+
+**The problem.** Fixed collection schedules get it wrong in both directions: bins in
+busy spots overflow between visits — a health and litter problem — while trucks burn
+fuel and hours emptying half-full bins on quiet streets. The operator needs collection
+**driven by how full bins actually are**, so crews go where the waste is and skip where
+it isn't.
+
+What we solve here is collecting on demand instead of on a calendar — fewer overflows,
+fewer wasted trips.
+
+## 1. Act on fill level, not the calendar
+
+Each bin reports its fill level. When a bin crosses its collection threshold, raise a
+`collection_due` event that drops it onto the next route. See
+[Turn readings into events](/guides/detect-events).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+var series = client.timeseries().retrieve(lastReadingOf("bin_grunerlokka_114_fill_pct"))
+    .getItems().get(0);
+
+double fill = Double.parseDouble(series.getDatapoints().get(0).getValue());
+if (fill >= 80.0) {
+    EventModel due = new EventModel();
+    due.setExternalId("collection_due_114_" + System.currentTimeMillis());
+    due.setType("collection_due");
+    due.setStatus("open");
+    due.setEventTime(ZonedDateTime.now());
+    due.setMetadata(Map.of("bin", "bin_grunerlokka_114", "fill_pct", String.valueOf(fill)));
+    client.events().create(List.of(due));
+}
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+points = client.timeseries.retrieve_datapoints(last_reading("bin_grunerlokka_114_fill_pct"))[0]
+fill = float(points.get_datapoints()[0].value)
+if fill >= 80.0:
+    client.events.create([datahub_sdk.Event(
+        external_id=f"collection_due_114_{int(pd.Timestamp.now().timestamp())}",
+        type="collection_due", status="open",
+        metadata={"bin": "bin_grunerlokka_114", "fill_pct": str(fill)})])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::events::Event;
+
+let points = api.time_series.retrieve_datapoints(&last_reading("bin_grunerlokka_114_fill_pct")).await?
+    .get_items().remove(0);
+let fill: f64 = points.datapoints[0].value.as_deref().unwrap_or("0").parse().unwrap_or(0.0);
+if fill >= 80.0 {
+    let mut due = Event::new("collection_due_114".into());
+    due.r#type = Some("collection_due".into());
+    api.events.create(&vec![due]).await?;
+}
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Plan routes from real demand
+
+Fill levels across a district, rolled up over the week, show the fill-rate pattern —
+which areas fill fast and need frequent visits, which can be left longer. That pattern
+sizes routes and frequencies far better than a flat schedule. See
+[Query & aggregate](/guides/query-and-aggregate).
+
+## 3. Flag contamination
+
+A bin reading the wrong weight or material for its stream becomes a `contamination`
+event for the education and enforcement team.
+
+## See also
+
+- [Turn readings into events](/guides/detect-events) — the collection-due rule.
+- [Query & aggregate](/guides/query-and-aggregate) — fill-rate patterns for routing.
+- [High-throughput ingestion](/guides/ingest-timeseries) — city-wide sensor volume.

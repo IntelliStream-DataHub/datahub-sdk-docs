@@ -14,7 +14,7 @@ classifier that fires *ahead* of the event · **Stack:** the SDK for data in/out
 :::
 
 A threshold alarm tells you the bad thing is *already happening*. For some problems
-that's too late — by the time dissolved oxygen in a [salmon pen](/industries/aquaculture)
+that's too late — by the time dissolved oxygen in a [salmon pen](/industries/agriculture-food/salmon-farming)
 hits the danger line, fish are already stressed. The goal here is to fire **before** the
 crash: learn the early signature of a developing crash and predict it 45 minutes out,
 while aeration can still prevent it.
@@ -96,7 +96,7 @@ print(classification_report(test["will_crash"], clf.predict(test[FEATURES])))
 
 Take the latest reading, predict the crash probability, and when it's high raise an
 `oxygen_crash_predicted` event — minutes before the [reactive low-oxygen
-alarm](/industries/aquaculture) would ever fire — so aeration starts in time.
+alarm](/industries/agriculture-food/salmon-farming) would ever fire — so aeration starts in time.
 
 ```python
 latest = frame.iloc[[-1]]
@@ -129,6 +129,6 @@ start — the difference between a near-miss and a lost pen.
 
 ## See also
 
-- [Aquaculture — salmon farming](/industries/aquaculture) — the reactive version this upgrades.
+- [Aquaculture — salmon farming](/industries/agriculture-food/salmon-farming) — the reactive version this upgrades.
 - [Turn readings into events](/guides/detect-events) — emitting the predictive warning.
 - [Query & aggregate](/guides/query-and-aggregate) — assembling the training history.

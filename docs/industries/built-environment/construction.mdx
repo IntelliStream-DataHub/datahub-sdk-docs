@@ -1,0 +1,154 @@
+---
+sidebar_position: 1
+title: Construction — site & safety
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Construction — site operations, safety & documents
+
+**The problem.** A construction site runs on documents as much as data: drawings,
+permits, method statements, inspection sign-offs — each belonging to a specific zone of
+the site, each needing to be on hand the moment an inspector or crew lead asks. On top
+of that, equipment utilisation and safety incidents need tracking. The challenge is
+keeping the paperwork, the machines, and the incidents all tied to the right part of
+the site.
+
+This scenario pairs **document management** with safety events on a modelled site.
+
+## 1. Model the site and attach its documents
+
+A site *contains* zones. Each zone's drawings and permits live in its folder, tagged so
+a crew can find the current revision instantly. See [Attach files](/guides/attach-files).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+ResourceForm site = new ResourceForm();
+site.setExternalId("site_harbour_tower");
+site.setName("Harbour Tower");
+
+ResourceForm zone = new ResourceForm();
+zone.setExternalId("zone_level_12");
+zone.setName("Level 12");
+
+RelForm contains = new RelForm();
+contains.setName("contains");
+contains.setFromExternalId("site_harbour_tower");
+contains.setToExternalId("zone_level_12");
+
+client.resources().create(List.of(site, zone), List.of(contains));
+
+byte[] drawing = Files.readAllBytes(Path.of("level_12_rev_c.pdf"));
+client.files().upload(
+    FileUploadRequest.builder()
+        .path("harbour_tower/level_12/drawings/structural_rev_c.pdf")
+        .content(drawing)
+        .contentType("application/pdf")
+        .externalId("drawing_level_12_structural_rev_c")
+        .description("Level 12 structural — revision C")
+        .build());
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import datahub_sdk
+
+client.resources.create(
+    [datahub_sdk.Resource(external_id="site_harbour_tower", name="Harbour Tower"),
+     datahub_sdk.Resource(external_id="zone_level_12", name="Level 12")],
+    [datahub_sdk.RelForm.by_external_ids("site_harbour_tower", "zone_level_12", "contains")])
+
+client.files.upload_file(datahub_sdk.FileUpload(
+    path="level_12_rev_c.pdf",
+    destination_path="/harbour_tower/level_12/drawings/",
+    external_id="drawing_level_12_structural_rev_c",
+    name="structural_rev_c.pdf"))
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::resources::Resource;
+use dataplatform_rust_sdk::relations::RelForm;
+use dataplatform_rust_sdk::files::FileUpload;
+
+let mut site = Resource::new();
+site.external_id = "site_harbour_tower".into();
+site.name = "Harbour Tower".into();
+let mut zone = Resource::new();
+zone.external_id = "zone_level_12".into();
+zone.name = "Level 12".into();
+
+api.resources.create(
+    vec![site, zone],
+    vec![RelForm::by_external_ids("site_harbour_tower", "zone_level_12", "contains")]).await?;
+
+let upload = FileUpload::new_with_destination_path(
+    "level_12_rev_c.pdf", "/harbour_tower/level_12/drawings/");
+api.files.upload_file(upload).await?;
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Record a safety incident against its zone
+
+A near-miss or incident becomes a `safety_incident` event, tied to the zone via
+metadata so the HSE team can see a zone's full history and trend.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+EventModel incident = new EventModel();
+incident.setExternalId("safety_incident_l12_" + System.currentTimeMillis());
+incident.setType("safety_incident");
+incident.setSubType("near_miss");
+incident.setStatus("open");
+incident.setEventTime(ZonedDateTime.now());
+incident.setMetadata(Map.of("zone", "zone_level_12", "category", "dropped_object"));
+client.events().create(List.of(incident));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+client.events.create([datahub_sdk.Event(
+    external_id=f"safety_incident_l12_{int(pd.Timestamp.now().timestamp())}",
+    type="safety_incident", sub_type="near_miss", status="open",
+    metadata={"zone": "zone_level_12", "category": "dropped_object"})])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::events::Event;
+
+let mut incident = Event::new("safety_incident_l12".into());
+incident.r#type = Some("safety_incident".into());
+incident.sub_type = Some("near_miss".into());
+incident.status = Some("open".into());
+api.events.create(&vec![incident]).await?;
+```
+
+</TabItem>
+</Tabs>
+
+## 3. Track equipment use
+
+Crane and hoist utilisation are series (`crane_02_hours`,
+`hoist_north_cycles`); roll them up to see idle plant and plan hire returns with
+[Query & aggregate](/guides/query-and-aggregate).
+
+## See also
+
+- [Attach files to assets](/guides/attach-files) — drawings, permits, sign-offs.
+- [Turn readings into events](/guides/detect-events) — recording incidents.
+- [Model assets as a graph](/guides/model-assets-graph) — site/zone/equipment structure.

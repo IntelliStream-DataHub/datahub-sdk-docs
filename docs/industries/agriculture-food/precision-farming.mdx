@@ -1,0 +1,148 @@
+---
+sidebar_position: 1
+title: Agriculture — precision farming
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Agriculture — precision farming
+
+**The problem.** A farm is a patchwork of fields, each with soil sensors streaming
+moisture and temperature, and each periodically photographed from a drone or satellite
+to spot disease and growth variation. The agronomist needs the sensor trends *and* the
+imagery in one place, tied to the field they belong to, so a dry-soil reading and a
+stressed-crop image line up.
+
+This scenario is the one where **files** matter as much as numbers: attach imagery and
+scouting reports to the field, alongside its sensor series.
+
+## 1. Model fields and stream soil sensors
+
+A farm *contains* fields; each field's sensors are series.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+client.timeseries().create(
+    Timeseries.of("field_north_40_soil_moisture").name("North 40 soil moisture").unit("pct"),
+    Timeseries.of("field_north_40_soil_temp_c").name("North 40 soil temperature").unit("deg_c"));
+
+client.timeseries().ingest(Map.of(
+    "field_north_40_soil_moisture", moistureReadings));   // List<Datapoint>
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import datahub_sdk
+
+client.timeseries.create([datahub_sdk.TimeSeries(
+    external_id="field_north_40_soil_moisture",
+    name="North 40 soil moisture", unit="pct")])
+client.timeseries.insert_from_lists(
+    timestamps=timestamps, values=moisture, ts="field_north_40_soil_moisture")
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::timeseries::TimeSeries;
+
+let mut moisture = TimeSeries::new("field_north_40_soil_moisture", "North 40 soil moisture");
+moisture.unit = Some("pct".into());
+api.time_series.create_one(&moisture).await?;
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Attach the drone imagery to the field
+
+Upload each scan into the field's folder, tagged so it's discoverable next to the
+field's sensor data. See [Attach files to assets](/guides/attach-files) for the upload
+details.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+byte[] scan = Files.readAllBytes(Path.of("north_40_2026_06_28.tif"));
+
+client.files().upload(
+    FileUploadRequest.builder()
+        .path("fields/north_40/scans/2026_06_28.tif")
+        .content(scan)
+        .contentType("image/tiff")
+        .externalId("scan_north_40_2026_06_28")
+        .description("Drone NDVI scan — North 40")
+        .source("drone_survey")
+        .build());
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+client.files.upload_file(datahub_sdk.FileUpload(
+    path="north_40_2026_06_28.tif",                # local file
+    destination_path="/fields/north_40/scans/",
+    external_id="scan_north_40_2026_06_28",
+    name="2026_06_28.tif"))
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::files::FileUpload;
+
+let upload = FileUpload::new_with_destination_path(
+    "north_40_2026_06_28.tif", "/fields/north_40/scans/");
+api.files.upload_file(upload).await?;
+```
+
+</TabItem>
+</Tabs>
+
+Later, list a field's folder to pull up its scan history alongside the soil trend:
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+client.files().list("/fields/north_40/scans")
+    .getItems().forEach(node -> System.out.println(node.getName()));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+for node in client.files.list_directory_by_path("/fields/north_40/scans"):
+    print(node.name)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+let scans = api.files.list_directory_by_path("/fields/north_40/scans").await?;
+for node in scans.get_items() { println!("{}", node.name); }
+```
+
+</TabItem>
+</Tabs>
+
+## 3. Trigger irrigation on a dry trend
+
+When soil moisture stays below target through the heat of the day, raise an
+`irrigation_needed` [event](/guides/detect-events) the irrigation controller acts on.
+
+## See also
+
+- [Attach files to assets](/guides/attach-files) — uploading and listing imagery.
+- [High-throughput ingestion](/guides/ingest-timeseries) — soil-sensor data.
+- [Turn readings into events](/guides/detect-events) — the irrigation rule.

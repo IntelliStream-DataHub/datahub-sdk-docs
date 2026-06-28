@@ -1,0 +1,96 @@
+---
+sidebar_position: 5
+title: Logistics — last-mile delivery
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Logistics — last-mile delivery
+
+**The problem.** The last mile is where delivery promises are kept or broken. A van
+running behind quietly turns a two-hour window into a missed slot; a failed delivery
+means a costly re-attempt and a customer who stops trusting the estimate. Dispatch
+needs to **see a route slipping while there's still time to re-sequence or reassign**,
+not when the angry message arrives.
+
+What we solve here is hitting delivery windows and cutting failed first attempts.
+
+## 1. Catch a slipping route live
+
+Each van streams progress against its plan — stops completed, running ETA. When the
+projected arrival for the next stop slips past its window, raise a `delivery_at_risk`
+event so dispatch can act. See [Consume live data](/guides/realtime-subscriptions).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+import ai.intellistream.datahub.sdk.subscriptions.SubscriptionListener;
+import ai.intellistream.datahub.sdk.subscriptions.SubscriptionMessage;
+import java.time.Duration;
+
+try (SubscriptionListener listener =
+         client.subscriptions().listen(List.of("fleet_eta"))) {
+    while (running) {
+        SubscriptionMessage msg = listener.poll(Duration.ofSeconds(10));
+        if (msg == null) continue;
+        if (etaPastWindow(msg.payload())) {
+            EventModel risk = new EventModel();
+            risk.setExternalId("delivery_at_risk_v22_" + System.currentTimeMillis());
+            risk.setType("delivery_at_risk");
+            risk.setStatus("open");
+            risk.setEventTime(ZonedDateTime.now());
+            risk.setMetadata(Map.of("van", "van_22", "route", "route_oslo_e", "stops_left", "9"));
+            client.events().create(List.of(risk));
+        }
+        listener.ack(msg.messageId());
+    }
+}
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+with client.subscriptions.listen(["fleet_eta"]) as listener:
+    for msg in listener:
+        if eta_past_window(msg.payload):
+            client.events.create([datahub_sdk.Event(
+                external_id=f"delivery_at_risk_v22_{int(pd.Timestamp.now().timestamp())}",
+                type="delivery_at_risk", status="open",
+                metadata={"van": "van_22", "route": "route_oslo_e", "stops_left": "9"})])
+        listener.ack([msg.message_id])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::events::Event;
+
+let mut listener = api.subscriptions.listen(&["fleet_eta"]).await?;
+while let Some(Ok(msg)) = listener.next().await {
+    if eta_past_window(&msg.payload) {
+        let mut risk = Event::new("delivery_at_risk_v22".into());
+        risk.r#type = Some("delivery_at_risk".into());
+        api.events.create(&vec![risk]).await?;
+    }
+    listener.ack(&[msg.message_id.as_str()]).await?;
+}
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Improve tomorrow's routes
+
+On-time rate, stops-per-hour and failed-delivery counts are series per route and
+driver. Daily roll-ups show which routes chronically run long and where first-attempt
+failures cluster — the input to better planning. See
+[Query & aggregate](/guides/query-and-aggregate).
+
+## See also
+
+- [Consume live data](/guides/realtime-subscriptions) — live route tracking.
+- [Turn readings into events](/guides/detect-events) — the at-risk rule.
+- [Query & aggregate](/guides/query-and-aggregate) — on-time and failure reporting.

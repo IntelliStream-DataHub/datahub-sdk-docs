@@ -1,0 +1,136 @@
+---
+sidebar_position: 2
+title: Telecom — network performance
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Telecom — network performance & capacity
+
+**The problem.** Subscribers notice a degraded cell long before a threshold report
+does — dropped calls, stalling video, dead zones at rush hour. The network operations
+centre needs to **spot a degrading or congesting cell and localize the cause**, then
+see far enough ahead to add capacity before the busy hour turns into an outage. The
+catch: a cell's problem is often not in the cell at all, but in a backhaul link it
+shares with others.
+
+What we solve here is finding and localizing degradation fast, and planning capacity
+before congestion bites.
+
+## 1. Find the busy-hour congestion
+
+Per-cell throughput, drop rate and active users are series. Aggregating to hourly peaks
+reveals which cells run hot at the busy hour — the capacity-planning shortlist. See
+[Query & aggregate](/guides/query-and-aggregate).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+var filter = new RetrieveFilter();
+filter.setExternalId("cell_oslo_4412_prb_util");
+filter.setStart(ZonedDateTime.now().minusDays(7));
+filter.setEnd(ZonedDateTime.now());
+filter.setAggregates(List.of("max"));
+filter.setGranularity("1h");
+
+var request = new DataRetriever<RetrieveFilter>();
+request.setItems(List.of(filter));
+
+client.timeseries().retrieve(request).getItems().get(0).getDatapoints()
+    .forEach(p -> flagIfSaturated(p.getTimestamp(), p.getValue()));   // PRB utilisation %
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import pandas as pd
+
+rf = datahub_sdk.RetrieveFilter(
+    ts="cell_oslo_4412_prb_util",
+    start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=7),
+    end=pd.Timestamp.now(tz="UTC"),
+    aggregates=["max"], granularity="1h")
+
+for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
+    flag_if_saturated(dp.timestamp, dp.max)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+
+let filter = RetrieveFilter {
+    external_id: Some("cell_oslo_4412_prb_util".into()),
+    aggregates: vec!["max".into()],
+    granularity: Some("1h".into()),
+    ..Default::default()
+};
+let series = api.time_series
+    .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?
+    .get_items().remove(0);
+for p in &series.datapoints { flag_if_saturated(&p.timestamp, p.max); }
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Localize a fault to shared backhaul
+
+When several cells degrade together, the common cause is usually a backhaul link or
+controller they share. Model cells → backhaul → controller as a
+[graph](/guides/model-assets-graph) and walk from each degraded cell to the element they
+have in common — the [shared-dependency](/guides/correlate-alarms) pattern, pointing the
+field team at the one link to fix instead of a dozen cells to chase.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+ResourceNetwork c1 = client.resources().fetchRelated("cell_oslo_4412", 4);
+ResourceNetwork c2 = client.resources().fetchRelated("cell_oslo_4418", 4);
+
+Set<String> n1 = c1.nodes().stream().map(Resource::getExternalId).collect(Collectors.toSet());
+Set<String> shared = c2.nodes().stream().map(Resource::getExternalId)
+    .filter(n1::contains).collect(Collectors.toSet());
+// shared contains "backhaul_link_88" → fix the link, not the cells
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+c1 = client.resources.fetch_related(external_id="cell_oslo_4412", depth=4)
+c2 = client.resources.fetch_related(external_id="cell_oslo_4418", depth=4)
+shared = {n.external_id for n in c1.nodes} & {n.external_id for n in c2.nodes}
+# 'backhaul_link_88' in shared
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::resources::RelatedResourcesForm;
+use std::collections::HashSet;
+
+let c1 = api.resources.fetch_related(
+    &RelatedResourcesForm::from_external_id("cell_oslo_4412").with_depth(4)).await?;
+let c2 = api.resources.fetch_related(
+    &RelatedResourcesForm::from_external_id("cell_oslo_4418").with_depth(4)).await?;
+let n1: HashSet<&str> = c1.nodes().iter().map(|n| n.external_id.as_str()).collect();
+let shared: Vec<&str> = c2.nodes().iter()
+    .map(|n| n.external_id.as_str()).filter(|id| n1.contains(id)).collect();
+// shared contains "backhaul_link_88"
+```
+
+</TabItem>
+</Tabs>
+
+## See also
+
+- [Query & aggregate](/guides/query-and-aggregate) — busy-hour capacity planning.
+- [Correlate alarms with the graph](/guides/correlate-alarms) — localize to shared backhaul.
+- [Turn readings into events](/guides/detect-events) — degradation alerts.

@@ -1,0 +1,138 @@
+---
+sidebar_position: 3
+title: Oil & gas — pipeline integrity
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Oil & gas — pipeline integrity
+
+**The problem.** A pipeline leak is an environmental and financial emergency, and the
+two questions that follow are both urgent: *is* there a leak, and *where*. The signal
+for the first is a mass imbalance — what flows into a segment should equal what flows
+out, and a sustained gap with a pressure drop means product is escaping. The second is
+a graph question: given the leaking segment, which valves isolate it and what's
+downstream.
+
+What we solve here is detecting a leak from the flow balance and locating it on the
+network so the right valves close fast.
+
+## 1. Detect the imbalance
+
+Each segment reports inlet and outlet flow and pressure. A sustained inlet-minus-outlet
+gap raises a `leak_suspected` event scoped to the segment. See
+[Turn readings into events](/guides/detect-events).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+double inflow  = latest("segment_pn_07_flow_in_m3h");
+double outflow = latest("segment_pn_07_flow_out_m3h");
+
+if (inflow - outflow > tolerance(inflow)) {
+    EventModel leak = new EventModel();
+    leak.setExternalId("leak_suspected_pn07_" + System.currentTimeMillis());
+    leak.setType("leak_suspected");
+    leak.setStatus("critical");
+    leak.setEventTime(ZonedDateTime.now());
+    leak.setMetadata(Map.of("segment", "segment_pn_07",
+                            "imbalance_m3h", String.valueOf(inflow - outflow)));
+    client.events().create(List.of(leak));
+}
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+inflow  = latest("segment_pn_07_flow_in_m3h")
+outflow = latest("segment_pn_07_flow_out_m3h")
+
+if inflow - outflow > tolerance(inflow):
+    client.events.create([datahub_sdk.Event(
+        external_id=f"leak_suspected_pn07_{int(pd.Timestamp.now().timestamp())}",
+        type="leak_suspected", status="critical",
+        metadata={"segment": "segment_pn_07", "imbalance_m3h": str(inflow - outflow)})])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::events::Event;
+
+let inflow  = latest("segment_pn_07_flow_in_m3h").await?;
+let outflow = latest("segment_pn_07_flow_out_m3h").await?;
+
+if inflow - outflow > tolerance(inflow) {
+    let mut leak = Event::new("leak_suspected_pn07".into());
+    leak.r#type = Some("leak_suspected".into());
+    leak.status = Some("critical".into());
+    api.events.create(&vec![leak]).await?;
+}
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Locate it and find the isolation valves
+
+Model the pipeline as a graph — stations joined by segments, valves on the segments.
+Walk out from the leaking segment to find the valves that bound it and everything
+downstream that must be isolated. This is the
+[connectivity traversal](/guides/correlate-alarms) applied to a flow network.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+RelatedResourcesForm form = new RelatedResourcesForm();
+form.setExternalId("segment_pn_07");
+form.setDepth(3);
+form.setRelationshipTypes(List.of("connects_to", "isolated_by"));
+
+ResourceNetwork around = client.resources().fetchRelated(form);
+around.nodes().stream()
+    .filter(n -> n.getExternalId().startsWith("valve_"))
+    .forEach(v -> System.out.println("close: " + v.getExternalId()));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+around = client.resources.fetch_related(
+    external_id="segment_pn_07", depth=3, relationship_types=["connects_to", "isolated_by"])
+
+for node in around.nodes:
+    if node.external_id.startswith("valve_"):
+        print("close:", node.external_id)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::resources::RelatedResourcesForm;
+
+let around = api.resources.fetch_related(
+    &RelatedResourcesForm::from_external_id("segment_pn_07")
+        .with_depth(3)
+        .with_relationship_types(vec!["connects_to".into(), "isolated_by".into()])).await?;
+
+for node in around.nodes() {
+    if node.external_id.starts_with("valve_") {
+        println!("close: {}", node.external_id);
+    }
+}
+```
+
+</TabItem>
+</Tabs>
+
+## See also
+
+- [Turn readings into events](/guides/detect-events) — the mass-balance rule.
+- [Correlate alarms with the graph](/guides/correlate-alarms) — locating on the network.
+- [Water utilities](/industries/energy-utilities/water) — the same flow-graph reasoning.

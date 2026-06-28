@@ -1,0 +1,128 @@
+---
+sidebar_position: 6
+title: Oil & gas — emissions & flaring
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Oil & gas — emissions & flaring (ESG)
+
+**The problem.** Methane and routine flaring are now under hard scrutiny — from
+regulators with reporting mandates and penalties, and from investors tracking ESG
+performance. An operator has to **measure flare volumes and methane, report them
+accurately, and catch excess flaring** before it becomes a violation or a headline.
+The data exists across every platform; the job is turning it into auditable monthly
+numbers and timely alerts.
+
+What we solve here is verifiable emissions reporting and early detection of excess
+flaring.
+
+## 1. Roll emissions up for reporting
+
+Flare volume and methane rate are series per site. Monthly totals — and a CO₂-equivalent
+from them — are the numbers the regulatory submission and the ESG dashboard are built on.
+See [Query & aggregate](/guides/query-and-aggregate).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+var filter = new RetrieveFilter();
+filter.setExternalId("platform_north_flare_volume_m3");
+filter.setStart(ZonedDateTime.now().minusDays(30));
+filter.setEnd(ZonedDateTime.now());
+filter.setAggregates(List.of("sum"));
+filter.setGranularity("1d");
+
+var request = new DataRetriever<RetrieveFilter>();
+request.setItems(List.of(filter));
+
+double monthly = client.timeseries().retrieve(request).getItems().get(0)
+    .getDatapoints().stream().mapToDouble(p -> Double.parseDouble(p.getValue())).sum();
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import pandas as pd
+
+rf = datahub_sdk.RetrieveFilter(
+    ts="platform_north_flare_volume_m3",
+    start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=30),
+    end=pd.Timestamp.now(tz="UTC"),
+    aggregates=["sum"], granularity="1d")
+
+monthly = sum(dp.sum for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints())
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+
+let filter = RetrieveFilter {
+    external_id: Some("platform_north_flare_volume_m3".into()),
+    aggregates: vec!["sum".into()],
+    granularity: Some("1d".into()),
+    ..Default::default()
+};
+let series = api.time_series
+    .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?
+    .get_items().remove(0);
+let monthly: f64 = series.datapoints.iter()
+    .filter_map(|p| p.sum).sum();
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Catch excess flaring early
+
+When a site's daily flaring crosses its permitted rate, raise a `flaring_exceedance`
+event — with the volume and limit in metadata — so the operator corrects and the
+compliance team has a dated record. See [Turn readings into events](/guides/detect-events).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+EventModel exceedance = new EventModel();
+exceedance.setExternalId("flaring_exceedance_north_" + System.currentTimeMillis());
+exceedance.setType("flaring_exceedance");
+exceedance.setStatus("open");
+exceedance.setEventTime(ZonedDateTime.now());
+exceedance.setMetadata(Map.of("site", "platform_north", "flared_m3", "142000", "permit_m3", "120000"));
+client.events().create(List.of(exceedance));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+client.events.create([datahub_sdk.Event(
+    external_id=f"flaring_exceedance_north_{int(pd.Timestamp.now().timestamp())}",
+    type="flaring_exceedance", status="open",
+    metadata={"site": "platform_north", "flared_m3": "142000", "permit_m3": "120000"})])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::events::Event;
+
+let mut exceedance = Event::new("flaring_exceedance_north".into());
+exceedance.r#type = Some("flaring_exceedance".into());
+api.events.create(&vec![exceedance]).await?;
+```
+
+</TabItem>
+</Tabs>
+
+## See also
+
+- [Query & aggregate](/guides/query-and-aggregate) — monthly emissions totals.
+- [Turn readings into events](/guides/detect-events) — the exceedance rule.
+- [Environmental — air quality](/industries/energy-utilities/air-quality) — the same monitoring-and-report pattern.

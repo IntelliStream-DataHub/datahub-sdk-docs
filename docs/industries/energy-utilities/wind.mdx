@@ -1,0 +1,141 @@
+---
+sidebar_position: 2
+title: Renewable energy — wind farm
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Renewable energy — wind farm generation
+
+**The problem.** A wind farm's output swings with the weather minute to minute. The
+operations desk needs to know how much each turbine and the farm as a whole is
+generating against its rated capacity, spot under-performers, and feed a generation
+forecast to the grid operator. Raw per-second power is far too dense — what matters is
+the **rolled-up capacity factor** over useful windows.
+
+This scenario centres on **aggregation** of generation data into the hourly and daily
+figures a forecasting model and a performance dashboard consume.
+
+## 1. Ingest per-turbine output
+
+Each turbine reports power and wind speed continuously. Hand the readings off in bulk.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+client.timeseries().create(
+    Timeseries.of("turbine_t14_power_kw").name("Turbine T14 power").unit("kw"),
+    Timeseries.of("turbine_t14_wind_ms").name("Turbine T14 wind speed").unit("m_s"));
+
+client.timeseries().ingest(Map.of(
+    "turbine_t14_power_kw", powerReadings,    // List<Datapoint>
+    "turbine_t14_wind_ms", windReadings));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import datahub_sdk
+
+client.timeseries.create([
+    datahub_sdk.TimeSeries(external_id="turbine_t14_power_kw",
+                           name="Turbine T14 power", unit="kw")])
+client.timeseries.insert_from_lists(
+    timestamps=timestamps, values=power_kw, ts="turbine_t14_power_kw")
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::timeseries::TimeSeries;
+
+let mut power = TimeSeries::new("turbine_t14_power_kw", "Turbine T14 power");
+power.unit = Some("kw".into());
+api.time_series.create_one(&power).await?;
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Roll up to a capacity factor
+
+Capacity factor is average output over rated capacity. Ask for hourly averages, divide
+by the turbine's rating, and you have the curve the forecast and the dashboard need.
+Full mechanics in [Query & aggregate](/guides/query-and-aggregate).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+var filter = new RetrieveFilter();
+filter.setExternalId("turbine_t14_power_kw");
+filter.setStart(ZonedDateTime.now().minusDays(7));
+filter.setEnd(ZonedDateTime.now());
+filter.setAggregates(List.of("average"));
+filter.setGranularity("1h");
+
+var request = new DataRetriever<RetrieveFilter>();
+request.setItems(List.of(filter));
+
+double rated = 3500.0;   // kW
+client.timeseries().retrieve(request).getItems().get(0).getDatapoints()
+    .forEach(p -> recordCapacityFactor(
+        p.getTimestamp(), Double.parseDouble(p.getValue()) / rated));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import pandas as pd
+
+rf = datahub_sdk.RetrieveFilter(
+    ts="turbine_t14_power_kw",
+    start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=7),
+    end=pd.Timestamp.now(tz="UTC"),
+    aggregates=["average"], granularity="1h")
+
+rated = 3500.0
+for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
+    record_capacity_factor(dp.timestamp, dp.average / rated)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+
+let filter = RetrieveFilter {
+    external_id: Some("turbine_t14_power_kw".into()),
+    aggregates: vec!["average".into()],
+    granularity: Some("1h".into()),
+    ..Default::default()
+};
+let series = api.time_series
+    .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?
+    .get_items().remove(0);
+let rated = 3500.0;
+for p in &series.datapoints {
+    if let Some(avg) = p.average { record_capacity_factor(&p.timestamp, avg / rated); }
+}
+```
+
+</TabItem>
+</Tabs>
+
+## 3. Flag an under-performer
+
+When a turbine's capacity factor stays well below the farm average in good wind, raise
+a `turbine_underperformance` [event](/guides/detect-events) for the maintenance team —
+a sign of a pitch or gearbox problem worth a closer look.
+
+## See also
+
+- [Query & aggregate](/guides/query-and-aggregate) — windows and aggregates for the capacity factor.
+- [High-throughput ingestion](/guides/ingest-timeseries) — per-turbine data volume.
+- [Turn readings into events](/guides/detect-events) — the under-performance rule.
+- **[Demand forecasting (advanced)](/advanced/demand-forecasting)** — forecast generation the same way you'd forecast load.

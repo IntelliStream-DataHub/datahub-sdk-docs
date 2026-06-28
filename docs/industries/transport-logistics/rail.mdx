@@ -1,0 +1,133 @@
+---
+sidebar_position: 1
+title: Rail — network operations
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Rail — network operations & connectivity
+
+**The problem.** A rail network is a web of stations joined by track segments. When a
+segment is closed — a fault, flooding, maintenance — the controller's first question
+is sharp and time-critical: **is the line between two points still connected, or is it
+severed?** If severed, trains must reroute or terminate now. That's a reachability
+question, and on a graph it's a single traversal.
+
+This scenario introduces a graph pattern the others don't: **connectivity** — walk the
+network to see what's still reachable after a link goes down.
+
+## 1. Model the network
+
+Stations are resources; track segments are `connects_to` edges between them.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+List<RelForm> track = List.of(
+    rel("connects_to", "station_oslo_s", "junction_lierstranda"),
+    rel("connects_to", "junction_lierstranda", "station_drammen"),
+    rel("connects_to", "station_drammen", "station_bergen_n"));
+
+client.resources().create(stations, track);
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import datahub_sdk
+
+track = [
+    datahub_sdk.RelForm.by_external_ids("station_oslo_s", "junction_lierstranda", "connects_to"),
+    datahub_sdk.RelForm.by_external_ids("junction_lierstranda", "station_drammen", "connects_to"),
+    datahub_sdk.RelForm.by_external_ids("station_drammen", "station_bergen_n", "connects_to"),
+]
+client.resources.create(stations, track)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::relations::RelForm;
+
+let track = vec![
+    RelForm::by_external_ids("station_oslo_s", "junction_lierstranda", "connects_to"),
+    RelForm::by_external_ids("junction_lierstranda", "station_drammen", "connects_to"),
+    RelForm::by_external_ids("station_drammen", "station_bergen_n", "connects_to"),
+];
+api.resources.create(stations, track).await?;
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Is the line still connected?
+
+A segment is closed — remove it (or exclude it), then ask: starting from one terminal,
+is the other terminal still in the reachable set? Walk `connects_to` from the origin
+and check whether the destination is among the returned nodes.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+RelatedResourcesForm reach = new RelatedResourcesForm();
+reach.setExternalId("station_oslo_s");
+reach.setDepth(100);
+reach.setRelationshipTypes(List.of("connects_to"));
+
+ResourceNetwork reachable = client.resources().fetchRelated(reach);
+
+boolean stillConnected = reachable.nodes().stream()
+    .anyMatch(n -> n.getExternalId().equals("station_bergen_n"));
+
+System.out.println(stillConnected ? "route open" : "SEVERED — reroute required");
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+reachable = client.resources.fetch_related(
+    external_id="station_oslo_s", depth=100, relationship_types=["connects_to"])
+
+still_connected = any(n.external_id == "station_bergen_n" for n in reachable.nodes)
+print("route open" if still_connected else "SEVERED — reroute required")
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::resources::RelatedResourcesForm;
+
+let reachable = api.resources.fetch_related(
+    &RelatedResourcesForm::from_external_id("station_oslo_s")
+        .with_depth(100)
+        .with_relationship_types(vec!["connects_to".into()])).await?;
+
+let still_connected = reachable.nodes().iter()
+    .any(|n| n.external_id == "station_bergen_n");
+println!("{}", if still_connected { "route open" } else { "SEVERED — reroute required" });
+```
+
+</TabItem>
+</Tabs>
+
+The returned node set *is* the connected component reachable from the origin. Membership
+answers connectivity directly — see [Correlate alarms with the graph](/guides/correlate-alarms)
+for the traversal mechanics.
+
+## 3. Track punctuality
+
+Dwell times and delays are series (`station_drammen_dwell_s`, `service_r10_delay_min`);
+roll them up for the punctuality report and raise a `delay_threshold` event when a
+service slips past its allowance.
+
+## See also
+
+- [Model assets as a graph](/guides/model-assets-graph) — modeling the network topology.
+- [Correlate alarms with the graph](/guides/correlate-alarms) — reachability via traversal.
+- [Turn readings into events](/guides/detect-events) — punctuality alerts.

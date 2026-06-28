@@ -28,5 +28,5 @@ datapoint, or jump to [high-throughput ingestion](/guides/ingest-timeseries) to 
 ## Where to go next
 
 - **[Examples](/guides/ingest-timeseries)** — task recipes: ingestion, graph modeling, querying & aggregation, live consumption, and event detection.
-- **[Industry scenarios](/industries/oil-and-gas)** — end-to-end walkthroughs for oil & gas, energy grids, finance, and IT operations.
+- **[Industry scenarios](/industries/oil-and-gas/production)** — end-to-end walkthroughs for oil & gas, energy grids, finance, and IT operations.
 - **[API reference](/reference/client)** — every service, method and option, in Java, Python and Rust.

@@ -1,88 +1,86 @@
 ---
-title: Browse scenarios by theme
+title: Browse scenarios by sector
 ---
 
 # Industry scenarios
 
 Worked examples, each starting from a real problem an industry needs solved and showing
-how to solve it with the SDK. They're grouped below by the **kind** of problem, so you
-can jump to the closest match to yours.
+how to solve it with the SDK. They're organised by **sector** — pick yours and work
+through its scenarios, which build on each other across the value chain.
 
 :::tip Two depths
-The scenarios on this page are **quick starts (~5 min)** — read one, copy the shape,
-adapt the ids. When you're ready to go past CRUD into prediction, see
+These are **quick starts (~5 min)** — read one, copy the shape, adapt the ids. When
+you're ready to go past CRUD into prediction, see
 **[Advanced scenarios](/advanced/machine-learning-gently)** — no data-science background
 needed; they start gently (~20 min to 2 hours each).
 :::
 
-:::note Sector spotlight — oil & gas
-Oil & gas is covered end to end, upstream to downstream:
-[drilling](/industries/oil-and-gas-drilling) ·
-[production](/industries/oil-and-gas) ·
-[pipelines](/industries/oil-and-gas-pipeline) ·
-[refining](/industries/oil-and-gas-refining) ·
-[storage & custody](/industries/oil-and-gas-storage) ·
-[emissions & flaring](/industries/oil-and-gas-emissions).
-The advanced builds use oil & gas examples too —
-[LSTM production forecasting](/advanced/lstm-forecasting),
-[kick detection](/advanced/lstm-anomaly-detection) and
-[ESP failure prediction](/advanced/xgboost-failure-prediction).
-:::
+## Oil & gas
 
-## Live monitoring & alerting
+Upstream to downstream — the full value chain.
 
-React to data as it lands — a push connection, a rule, an alert in time to act.
+- [Drilling operations](/industries/oil-and-gas/drilling) — catch a well-control kick in its first seconds
+- [Production monitoring](/industries/oil-and-gas/production) — ESP anomaly detection on a field graph
+- [Pipeline integrity](/industries/oil-and-gas/pipeline) — detect and locate a leak on the network
+- [Refinery operations](/industries/oil-and-gas/refining) — keep units on-spec and energy-efficient
+- [Tank storage & custody](/industries/oil-and-gas/storage) — reconcile inventory, catch unexplained loss
+- [Emissions & flaring](/industries/oil-and-gas/emissions) — methane & flaring compliance reporting
 
-- [IT operations](/industries/it-operations) — alert on an SLO breach the instant it happens
-- [Healthcare](/industries/healthcare) — a live capacity wall-board before a ward overflows
-- [Aquaculture (salmon)](/industries/aquaculture) — catch an oxygen crash in time to aerate
-- [Maritime](/industries/maritime) — a reefer cold-chain alarm mid-ocean
-- [Smart buildings](/industries/smart-buildings) — flag a stuffy zone before the complaints
-- [Data centers](/industries/data-centers) — catch a thermal problem before racks throttle
-- [EV charging](/industries/ev-charging) — know a charger is dead the moment it fails
-- [Airports](/industries/airports) — catch a turnaround slipping before the slot is lost
-- [Logistics](/industries/logistics) — spot a delivery route falling behind
-- [Banking (AML)](/industries/banking) — react to a flagged payment in real time
-- [Oil & gas — drilling](/industries/oil-and-gas-drilling) — catch a well-control kick in its first seconds
+## Energy & utilities
 
-## Throughput, efficiency & aggregation
+- [Grid telemetry](/industries/energy-utilities/grid) — SCADA roll-ups and overload events
+- [Wind generation](/industries/energy-utilities/wind) — capacity factor for a wind farm
+- [EV charging network](/industries/energy-utilities/ev-charging) — uptime and grid load
+- [Water distribution](/industries/energy-utilities/water) — trace a contamination source upstream
+- [Waste collection](/industries/energy-utilities/waste) — collect on fill level, not a calendar
+- [Air quality](/industries/energy-utilities/air-quality) — heterogeneous sensors, correct units
 
-Turn a firehose of readings into the roll-ups a dashboard or plan is built on.
+## Manufacturing & process
 
-- [Energy grid](/industries/energy-grid) — SCADA roll-ups and overload events
-- [Manufacturing](/industries/manufacturing) — OEE from station telemetry
-- [Renewable energy](/industries/renewable-energy) — capacity factor for a wind farm
-- [Mining](/industries/mining) — true throughput against plan
-- [Ports](/industries/ports) — crane productivity and yard congestion
-- [Telecom](/industries/telecom) — busy-hour capacity planning
-- [Retail](/industries/retail) — per-region demand, segmented by dataset
-- [Waste management](/industries/waste-management) — collect on fill level, not a calendar
-- [Oil & gas — refining](/industries/oil-and-gas-refining) — keep refinery units on-spec and energy-efficient
+- [Discrete manufacturing](/industries/manufacturing-process/discrete) — OEE from station telemetry
+- [Semiconductor](/industries/manufacturing-process/semiconductor) — trace a yield excursion to one tool
+- [Pharma](/industries/manufacturing-process/pharma) — exact batch records and upstream genealogy
 
-## Knowledge graph — root cause & traceability
+## Transport & logistics
 
-Model the connections, then traverse them to answer questions a flat lookup can't.
+- [Rail](/industries/transport-logistics/rail) — is the line still connected after a closure?
+- [Maritime](/industries/transport-logistics/maritime) — a reefer cold-chain alarm mid-ocean
+- [Airports](/industries/transport-logistics/airports) — catch a turnaround slipping before the slot is lost
+- [Ports](/industries/transport-logistics/ports) — crane productivity and yard congestion
+- [Last-mile delivery](/industries/transport-logistics/last-mile) — hit delivery windows
+- [Retail replenishment](/industries/transport-logistics/retail) — per-region demand, segmented by dataset
+- [Aerospace fleet](/industries/transport-logistics/aerospace) — a suspect part's blast radius across the fleet
+- [Supply chain](/industries/transport-logistics/supply-chain) — trace a recall downstream from a bad lot
 
-- [Oil & gas](/industries/oil-and-gas) — are two alarms one cooling fault?
-- [Aerospace](/industries/aerospace) — a suspect part's blast radius across the fleet
-- [Supply chain](/industries/supply-chain) — trace a recall downstream from a bad lot
-- [Pharma](/industries/pharma) — a failed lot's upstream genealogy
-- [Semiconductor](/industries/semiconductor) — the one tool every failing lot shared
-- [Insurance](/industries/insurance) — expand a claim into its fraud ring
-- [Rail](/industries/rail) — is the line still connected after a closure?
-- [Water utilities](/industries/water-utilities) — where two quality alerts' flows converge
-- [Oil & gas — pipeline](/industries/oil-and-gas-pipeline) — find and locate a leak on the network
+## Financial services
 
-## Data quality, documents & risk
+- [Portfolio & risk](/industries/financial-services/portfolio-risk) — exact-decimal metrics and risk-limit events
+- [AML & payments](/industries/financial-services/aml) — expand a flagged payment into its ring
+- [Insurance fraud](/industries/financial-services/insurance-fraud) — expand a claim into its fraud ring
 
-Get the foundations right — exact values, units, attached documents, segmentation.
+## Healthcare
 
-- [Finance](/industries/finance) — exact-decimal metrics and risk-limit events
-- [Construction](/industries/construction) — drawings and permits tied to the site
-- [Agriculture](/industries/agriculture) — drone imagery alongside soil sensors
-- [Environmental](/industries/environmental) — heterogeneous sensors, correct units
-- [Oil & gas — tank storage](/industries/oil-and-gas-storage) — reconcile inventory, catch unexplained loss
-- [Oil & gas — emissions](/industries/oil-and-gas-emissions) — methane & flaring compliance reporting
+- [Hospital operations](/industries/healthcare/hospital-operations) — a live capacity wall-board before a ward overflows
+
+## Mining & metals
+
+- [Mining operations](/industries/mining-metals/operations) — equipment uptime and true throughput against plan
+
+## Agriculture & food
+
+- [Precision farming](/industries/agriculture-food/precision-farming) — drone imagery alongside soil sensors
+- [Salmon farming](/industries/agriculture-food/salmon-farming) — catch an oxygen crash in time to aerate
+
+## Technology & operations
+
+- [Observability (IT ops)](/industries/technology-operations/observability) — alert on an SLO breach the instant it happens
+- [Network performance](/industries/technology-operations/network) — localize degradation to shared backhaul
+- [Data centers](/industries/technology-operations/data-centers) — catch a thermal problem before racks throttle
+
+## Built environment
+
+- [Construction](/industries/built-environment/construction) — drawings and permits tied to the site
+- [Smart buildings](/industries/built-environment/smart-buildings) — flag a stuffy zone before the complaints
 
 ## Going deeper
 
