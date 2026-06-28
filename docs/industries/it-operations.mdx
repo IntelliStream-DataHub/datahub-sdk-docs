@@ -180,8 +180,69 @@ let breaches = api.events.filter(&EventFilter::default()).await?;
 </TabItem>
 </Tabs>
 
+## 4. Which services share a failing dependency?
+
+When `service_checkout` and `service_payments` breach their SLOs at the same moment,
+the on-call question is whether they're independent incidents or both downstream of
+one failing component. Model dependencies as edges — a service `depends_on` the
+datastores and caches it calls — and the graph answers it: walk out from each
+breaching service and intersect to find the component they have in common.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+ResourceNetwork checkout = client.resources().fetchRelated("service_checkout", 4);
+ResourceNetwork payments = client.resources().fetchRelated("service_payments", 4);
+
+Set<String> checkoutDeps = checkout.nodes().stream()
+    .map(Resource::getExternalId).collect(Collectors.toSet());
+Set<String> shared = payments.nodes().stream()
+    .map(Resource::getExternalId).filter(checkoutDeps::contains).collect(Collectors.toSet());
+
+// shared contains "order_db" → one failing dependency, not two outages
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+checkout = client.resources.fetch_related(external_id="service_checkout", depth=4)
+payments = client.resources.fetch_related(external_id="service_payments", depth=4)
+
+shared = ({n.external_id for n in checkout.nodes}
+          & {n.external_id for n in payments.nodes})
+# 'order_db' in shared → one failing dependency, not two outages
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::resources::RelatedResourcesForm;
+use std::collections::HashSet;
+
+let checkout = api.resources.fetch_related(
+    &RelatedResourcesForm::from_external_id("service_checkout").with_depth(4)).await?;
+let payments = api.resources.fetch_related(
+    &RelatedResourcesForm::from_external_id("service_payments").with_depth(4)).await?;
+
+let deps: HashSet<&str> = checkout.nodes().iter().map(|n| n.external_id.as_str()).collect();
+let shared: Vec<&str> = payments.nodes().iter()
+    .map(|n| n.external_id.as_str()).filter(|id| deps.contains(id)).collect();
+// shared contains "order_db" → one failing dependency, not two outages
+```
+
+</TabItem>
+</Tabs>
+
+The reverse is just as useful for change management: `fetchRelated` from a component
+you're about to restart returns its **blast radius** — every service that depends on
+it. See [Correlate alarms with the graph](/guides/correlate-alarms) for the pattern.
+
 ## See also
 
 - [Consume live data](/guides/realtime-subscriptions) — the subscription + ack lifecycle.
 - [Turn readings into events](/guides/detect-events) — detection rules, on a timer or live.
 - [Model assets as a graph](/guides/model-assets-graph) — service/host topology.
+- [Correlate alarms with the graph](/guides/correlate-alarms) — find the shared dependency behind two alerts.
