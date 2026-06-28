@@ -1,0 +1,172 @@
+---
+sidebar_position: 2
+title: Demand forecasting
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Demand forecasting
+
+:::info At a glance
+**Effort:** ~1 hour · **You'll build:** a lag + calendar feature set and a gradient-
+boosted forecaster · **Stack:** the SDK for data in/out, plus `pandas`, `numpy`,
+`scikit-learn`.
+:::
+
+Forecasting turns history into a plan: how much power a feeder will draw tomorrow, how
+many units a store will sell next week, how much load a network will carry at the busy
+hour. The pattern is the same regardless of domain — past values plus calendar effects
+predict the next ones — and the forecast becomes a **new series** you can chart against
+actuals and alert on.
+
+## 1. Load the history
+
+Pull a long, regularly-sampled history of the quantity you want to forecast.
+
+<Tabs groupId="lang">
+<TabItem value="python" label="Python">
+
+```python
+import datahub_sdk, numpy as np, pandas as pd
+
+client = datahub_sdk.DataHubClient.from_env()
+
+rf = datahub_sdk.RetrieveFilter(
+    ts="feeder_f12_load_mw",
+    start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=120),
+    end=pd.Timestamp.now(tz="UTC"),
+    aggregates=["average"], granularity="1h")    # hourly history
+
+points = client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()
+demand = pd.Series([float(p.value) for p in points],
+                   index=pd.to_datetime([p.timestamp for p in points])).sort_index()
+demand = demand.asfreq("1h").interpolate()        # regular hourly grid
+```
+
+</TabItem>
+<TabItem value="java" label="Java">
+
+```java
+// Java pulls the same hourly history; the modelling below is Python.
+var filter = new RetrieveFilter();
+filter.setExternalId("feeder_f12_load_mw");
+filter.setStart(ZonedDateTime.now().minusDays(120));
+filter.setEnd(ZonedDateTime.now());
+filter.setAggregates(List.of("average"));
+filter.setGranularity("1h");
+
+var request = new DataRetriever<RetrieveFilter>();
+request.setItems(List.of(filter));
+var history = client.timeseries().retrieve(request).getItems().get(0).getDatapoints();
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+// Rust pulls the same hourly history; the modelling below is Python.
+use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+
+let filter = RetrieveFilter {
+    external_id: Some("feeder_f12_load_mw".into()),
+    aggregates: vec!["average".into()],
+    granularity: Some("1h".into()),
+    ..Default::default()
+};
+let history = api.time_series
+    .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?
+    .get_items().remove(0);
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Build lag + calendar features
+
+Demand depends on its recent past (an hour ago, a day ago, a week ago) and on the
+calendar (hour of day, day of week, season). Encode both into a supervised frame whose
+target is the value to predict.
+
+```python
+def build_frame(series):
+    df = pd.DataFrame({"y": series})
+    for lag in (1, 24, 168):                 # 1h, 1 day, 1 week
+        df[f"lag_{lag}"] = series.shift(lag)
+    df["roll_24"] = series.shift(1).rolling(24).mean()
+    df["hour"] = df.index.hour
+    df["dow"] = df.index.dayofweek
+    df["month"] = df.index.month
+    return df.dropna()
+
+frame = build_frame(demand)
+FEATURES = [c for c in frame.columns if c != "y"]
+```
+
+## 3. Train the forecaster
+
+A gradient-boosted regressor handles the non-linear calendar interactions well and
+needs little tuning. Hold out the most recent slice to check it honestly.
+
+```python
+from sklearn.ensemble import HistGradientBoostingRegressor
+from sklearn.metrics import mean_absolute_error
+
+split = int(len(frame) * 0.85)
+train, test = frame.iloc[:split], frame.iloc[split:]
+
+model = HistGradientBoostingRegressor(max_iter=400, learning_rate=0.05)
+model.fit(train[FEATURES], train["y"])
+
+mae = mean_absolute_error(test["y"], model.predict(test[FEATURES]))
+print(f"holdout MAE: {mae:.2f} MW")
+```
+
+## 4. Forecast the horizon and write it back
+
+Future lags aren't known, so forecast **recursively** — predict one hour, feed it back
+in as the next hour's lag, and step forward. Then publish the forecast as its own
+series alongside the actuals.
+
+```python
+HORIZON = 48      # hours ahead
+history = demand.copy()
+preds = {}
+
+for step in range(HORIZON):
+    t = history.index[-1] + pd.Timedelta(hours=1)
+    row = {
+        "lag_1":   history.iloc[-1],
+        "lag_24":  history.iloc[-24],
+        "lag_168": history.iloc[-168],
+        "roll_24": history.iloc[-24:].mean(),
+        "hour": t.hour, "dow": t.dayofweek, "month": t.month,
+    }
+    yhat = model.predict(pd.DataFrame([row])[FEATURES])[0]
+    preds[t] = yhat
+    history.loc[t] = yhat        # feed the prediction forward
+
+forecast = pd.Series(preds)
+client.timeseries.create([datahub_sdk.TimeSeries(
+    external_id="feeder_f12_load_mw_forecast", name="Feeder F12 load — 48h forecast", unit="mw")])
+client.timeseries.insert_from_lists(
+    timestamps=forecast.index, values=forecast.to_numpy(), ts="feeder_f12_load_mw_forecast")
+```
+
+With the forecast stored as a series, a [threshold rule](/guides/detect-events) on it
+becomes a *predictive* alert — raise a `capacity_risk` event when the forecast, not the
+actual, is set to exceed a limit, hours before it happens.
+
+## Where to take it further
+
+- **Exogenous drivers.** Add weather, price, or a promotions flag as features — usually
+  the biggest accuracy win.
+- **Prediction intervals.** Train quantile models (`loss="quantile"`) for a P10/P90 band
+  instead of a single line.
+- **Backtest rolling.** Re-fit on a sliding window and score each step to track drift
+  over time.
+
+## See also
+
+- [Query & aggregate](/guides/query-and-aggregate) — building the hourly history.
+- [Turn readings into events](/guides/detect-events) — turning the forecast into a predictive alert.
+- [Renewable energy](/industries/renewable-energy) · [Retail](/industries/retail) — domains this fits.

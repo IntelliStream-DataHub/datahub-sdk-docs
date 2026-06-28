@@ -1,0 +1,160 @@
+---
+sidebar_position: 4
+title: Asset health scoring
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Asset health scoring
+
+:::info At a glance
+**Effort:** ~20–30 minutes · **You'll build:** a composite 0–100 health index from
+several signals, with a healthy/watch/critical classification · **Stack:** the SDK plus
+a little arithmetic — no model training.
+:::
+
+A machine rarely fails on one signal. Vibration is creeping up, the bearing runs a
+little hot, oil pressure sags at load — each is fine alone, but together they tell a
+story. A **health score** rolls those signals into one comparable number so an operator
+can rank a whole fleet at a glance and a dashboard can show green/amber/red. It's the
+lightweight cousin of [predictive maintenance](/advanced/predictive-maintenance): no
+model to train, just a transparent, tunable index.
+
+## 1. Pull the latest value of each signal
+
+Take the most recent reading (or short average) of each contributing series for the
+asset.
+
+<Tabs groupId="lang">
+<TabItem value="python" label="Python">
+
+```python
+import datahub_sdk, pandas as pd
+
+client = datahub_sdk.DataHubClient.from_env()
+
+def latest(external_id):
+    rf = datahub_sdk.RetrieveFilter(
+        ts=external_id,
+        start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(minutes=15),
+        end=pd.Timestamp.now(tz="UTC"),
+        aggregates=["average"], granularity="15m")
+    pts = client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()
+    return float(pts[-1].value)
+
+signals = {
+    "vibration": latest("pump_07_vibration_anomaly"),   # 0..~1, from the anomaly model
+    "bearing_temp": latest("pump_07_bearing_temp_c"),
+    "oil_pressure": latest("pump_07_oil_pressure_kpa"),
+}
+```
+
+</TabItem>
+<TabItem value="java" label="Java">
+
+```java
+// The same retrieve, per signal; the scoring arithmetic below is shown in Python.
+var filter = new RetrieveFilter();
+filter.setExternalId("pump_07_bearing_temp_c");
+filter.setStart(ZonedDateTime.now().minusMinutes(15));
+filter.setEnd(ZonedDateTime.now());
+filter.setAggregates(List.of("average"));
+filter.setGranularity("15m");
+
+var request = new DataRetriever<RetrieveFilter>();
+request.setItems(List.of(filter));
+var pts = client.timeseries().retrieve(request).getItems().get(0).getDatapoints();
+double bearingTemp = Double.parseDouble(pts.get(pts.size() - 1).getValue());
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+// The same retrieve, per signal; the scoring arithmetic below is shown in Python.
+use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+
+let filter = RetrieveFilter {
+    external_id: Some("pump_07_bearing_temp_c".into()),
+    aggregates: vec!["average".into()],
+    granularity: Some("15m".into()),
+    ..Default::default()
+};
+let s = api.time_series
+    .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?
+    .get_items().remove(0);
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Normalise each signal to a "badness" in 0–1
+
+Every signal lives on its own scale, so map each to a common 0 (fine) → 1 (alarm) range
+against its healthy and limit values. A reading at or below healthy scores 0; at or
+above the limit scores 1; in between, it ramps linearly.
+
+```python
+def badness(value, healthy, limit):
+    if limit == healthy:
+        return 0.0
+    return max(0.0, min(1.0, (value - healthy) / (limit - healthy)))
+
+LIMITS = {                       # (healthy, limit) per signal
+    "vibration":    (0.05, 0.30),
+    "bearing_temp": (60.0, 90.0),
+    "oil_pressure": (350.0, 250.0),   # inverted: lower is worse
+}
+parts = {k: badness(v, *LIMITS[k]) for k, v in signals.items()}
+```
+
+## 3. Weight, combine, and classify
+
+Weight the signals by how much each matters for this asset class, combine into a 0–100
+score (100 = perfect health), and bucket it.
+
+```python
+WEIGHTS = {"vibration": 0.5, "bearing_temp": 0.3, "oil_pressure": 0.2}
+
+badness_total = sum(parts[k] * WEIGHTS[k] for k in parts)
+score = round(100 * (1 - badness_total), 1)
+
+band = "healthy" if score >= 80 else "watch" if score >= 60 else "critical"
+```
+
+## 4. Publish the score and flag the bad ones
+
+Write the score back as its own series — now you can chart, rank and subscribe to asset
+health like any other signal — and raise an event when an asset drops to `critical`.
+
+```python
+client.timeseries.create([datahub_sdk.TimeSeries(
+    external_id="pump_07_health_score", name="Pump 07 health score")])
+client.timeseries.insert_from_lists(
+    timestamps=[pd.Timestamp.now(tz="UTC")], values=[score], ts="pump_07_health_score")
+
+if band == "critical":
+    client.events.create([datahub_sdk.Event(
+        external_id=f"health_critical_pump_07_{int(pd.Timestamp.now().timestamp())}",
+        type="health_critical", status="open",
+        metadata={"asset": "pump_07", "score": str(score),
+                  "worst_signal": max(parts, key=parts.get)})])
+```
+
+Run it across the fleet on a schedule and you have a single ranked health view —
+`worst_signal` in the metadata tells maintenance *why* each asset is red.
+
+## Where to take it further
+
+- **Feed it the model.** Swap the hand-set vibration limits for the
+  [anomaly score](/advanced/predictive-maintenance) as a direct input.
+- **Trend the score.** A falling health score over days is itself a predictor — forecast
+  it like any [other series](/advanced/demand-forecasting).
+- **Roll up the graph.** Average child scores up a [site graph](/guides/model-assets-graph)
+  for a line- or plant-level health number.
+
+## See also
+
+- [Query & aggregate](/guides/query-and-aggregate) — pulling the contributing signals.
+- [Predictive maintenance](/advanced/predictive-maintenance) — a learned input to the score.
+- [Turn readings into events](/guides/detect-events) — flagging critical assets.

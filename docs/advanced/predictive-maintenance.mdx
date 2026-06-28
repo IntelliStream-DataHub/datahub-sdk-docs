@@ -1,0 +1,193 @@
+---
+sidebar_position: 1
+title: Predictive maintenance (anomaly detection)
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Predictive maintenance — vibration anomaly detection
+
+:::info At a glance
+**Effort:** ~1–2 hours · **You'll build:** a feature pipeline + an unsupervised anomaly
+detector · **Stack:** the SDK for data in/out, plus `numpy`, `scipy`, `scikit-learn`
+for the modelling.
+:::
+
+A failing bearing or gearbox announces itself in its **vibration signature** long
+before it stops — but not in the raw amplitude, which barely moves. The signal lives in
+the *shape* of the vibration: its energy distribution, its impulsiveness, the rise of
+specific defect frequencies. This walkthrough builds a model that learns a machine's
+healthy signature, then flags it when it drifts — writing a continuous anomaly score
+back as a new series and raising an event when degradation is predicted.
+
+The [quick predictive-maintenance examples](/industries/aerospace) raise an event on a
+raw threshold; this is the real version that learns what "normal" looks like.
+
+## 1. Pull a window of healthy vibration
+
+Retrieve a stretch of vibration data the machine was known to be healthy during, and
+turn it into a NumPy array. This data-access step is the same in every language:
+
+<Tabs groupId="lang">
+<TabItem value="python" label="Python">
+
+```python
+import datahub_sdk, numpy as np, pandas as pd
+
+client = datahub_sdk.DataHubClient.from_env()
+
+def load_series(external_id, start, end):
+    rf = datahub_sdk.RetrieveFilter(ts=external_id, start=start, end=end, limit=100_000)
+    points = client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()
+    idx = pd.to_datetime([p.timestamp for p in points])
+    return pd.Series([float(p.value) for p in points], index=idx).sort_index()
+
+healthy = load_series(
+    "pump_07_vibration_mm_s",
+    pd.Timestamp("2026-05-01", tz="UTC"), pd.Timestamp("2026-05-08", tz="UTC"))
+```
+
+</TabItem>
+<TabItem value="java" label="Java">
+
+```java
+// Java extracts the same data; the modelling below is Python.
+var filter = new RetrieveFilter();
+filter.setExternalId("pump_07_vibration_mm_s");
+filter.setStart(ZonedDateTime.parse("2026-05-01T00:00:00Z"));
+filter.setEnd(ZonedDateTime.parse("2026-05-08T00:00:00Z"));
+
+var request = new DataRetriever<RetrieveFilter>();
+request.setItems(List.of(filter));
+var points = client.timeseries().retrieve(request).getItems().get(0).getDatapoints();
+// points: each getTimestamp()/getValue() — feed your model service
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+// Rust extracts the same data; the modelling below is Python.
+use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+
+let filter = RetrieveFilter {
+    external_id: Some("pump_07_vibration_mm_s".into()),
+    limit: Some(100_000),
+    ..Default::default()
+};
+let series = api.time_series
+    .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?
+    .get_items().remove(0);
+// series.datapoints — feed your model service
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Turn the raw signal into features
+
+A single vibration value says little; a *window* of values has a shape. Slice the
+signal into fixed windows and, for each, compute a handful of features that capture
+how a healthy machine differs from a sick one:
+
+- **RMS** — overall energy.
+- **Kurtosis** — impulsiveness; bearing faults add sharp spikes that push it up.
+- **Crest factor** — peak relative to RMS; another impulsiveness measure.
+- **Band energy** — energy in the frequency band where this machine's defects show up,
+  via an FFT.
+
+```python
+from scipy.stats import kurtosis
+from scipy.fft import rfft, rfftfreq
+
+SAMPLE_HZ = 1000        # vibration sampled at 1 kHz
+WINDOW = SAMPLE_HZ * 2  # 2-second windows
+
+def features(window, fs=SAMPLE_HZ):
+    x = window - window.mean()
+    rms = np.sqrt(np.mean(x**2))
+    crest = np.max(np.abs(x)) / rms if rms else 0.0
+    # FFT energy in the 120–180 Hz band (this machine's bearing defect range)
+    spectrum = np.abs(rfft(x))
+    freqs = rfftfreq(len(x), 1 / fs)
+    band = spectrum[(freqs >= 120) & (freqs <= 180)]
+    band_energy = float(np.sum(band**2))
+    return [rms, kurtosis(x), crest, band_energy]
+
+def feature_matrix(series):
+    vals = series.to_numpy()
+    rows = [features(vals[i:i+WINDOW])
+            for i in range(0, len(vals) - WINDOW, WINDOW)]
+    return np.array(rows)
+
+X_healthy = feature_matrix(healthy)
+```
+
+## 3. Learn the healthy signature
+
+An **Isolation Forest** learns the shape of the healthy feature cloud without needing
+any examples of failure (which you rarely have). Anything that doesn't look like
+training data scores as anomalous.
+
+```python
+from sklearn.ensemble import IsolationForest
+from sklearn.preprocessing import StandardScaler
+
+scaler = StandardScaler().fit(X_healthy)
+model = IsolationForest(contamination=0.01, random_state=0).fit(scaler.transform(X_healthy))
+
+def anomaly_score(X):
+    # higher = more anomalous (decision_function is the opposite, so negate)
+    return -model.decision_function(scaler.transform(X))
+```
+
+## 4. Score live data and write the result back
+
+Pull the most recent window, score it, and **write the anomaly score back as its own
+series** so it's chartable and alertable like any other signal. When the score crosses
+a learned alarm level, raise a `degradation_predicted` event.
+
+```python
+recent = load_series("pump_07_vibration_mm_s",
+                     pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=1),
+                     pd.Timestamp.now(tz="UTC"))
+X_recent = feature_matrix(recent)
+scores = anomaly_score(X_recent)
+
+# one score per window — timestamp each at its window end
+score_index = recent.index[WINDOW::WINDOW][:len(scores)]
+
+client.timeseries.create([datahub_sdk.TimeSeries(
+    external_id="pump_07_vibration_anomaly", name="Pump 07 vibration anomaly score")])
+client.timeseries.insert_from_lists(
+    timestamps=score_index, values=scores, ts="pump_07_vibration_anomaly")
+
+ALARM = 0.15
+if scores[-5:].mean() > ALARM:        # sustained, not a single spike
+    client.events.create([datahub_sdk.Event(
+        external_id=f"degradation_predicted_pump_07_{int(pd.Timestamp.now().timestamp())}",
+        type="degradation_predicted", status="open",
+        metadata={"asset": "pump_07", "score": f"{scores[-1]:.3f}", "model": "iforest_v1"})])
+```
+
+The anomaly score is now a first-class series — subscribe to it, chart it next to the
+raw vibration, or feed it into the [health score](/advanced/asset-health-score). The
+event lands in the same stream as every other alert.
+
+## Where to take it further
+
+- **Label as you learn.** Each confirmed failure is a labelled example; once you have a
+  handful, a supervised classifier (gradient boosting) can name the *failure mode*, not
+  just flag anomaly.
+- **Remaining useful life.** Fit a trend to the anomaly score's rise and extrapolate to
+  the alarm level for an estimated time-to-maintenance.
+- **Across the fleet.** Train per-asset for sensitivity, or one model across a class of
+  identical machines for cold-start coverage — and use
+  [graph blast-radius](/guides/correlate-alarms) to find every sibling machine when one
+  fails.
+
+## See also
+
+- [Query & aggregate](/guides/query-and-aggregate) — extracting the training windows.
+- [High-throughput ingestion](/guides/ingest-timeseries) — writing scores back at scale.
+- [Asset health scoring](/advanced/asset-health-score) — fold this score into a composite.

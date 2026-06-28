@@ -1,0 +1,134 @@
+---
+sidebar_position: 3
+title: Early warning (predict before it happens)
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Early warning — predicting a crash before it happens
+
+:::info At a glance
+**Effort:** ~1 hour · **You'll build:** a forward-looking labelled dataset and a
+classifier that fires *ahead* of the event · **Stack:** the SDK for data in/out, plus
+`pandas`, `numpy`, `scikit-learn`.
+:::
+
+A threshold alarm tells you the bad thing is *already happening*. For some problems
+that's too late — by the time dissolved oxygen in a [salmon pen](/industries/aquaculture)
+hits the danger line, fish are already stressed. The goal here is to fire **before** the
+crash: learn the early signature of a developing crash and predict it 45 minutes out,
+while aeration can still prevent it.
+
+The technique — a classifier trained on a **forward-looking label** — generalises to any
+"predict the incident ahead of time" problem: a transformer about to trip, a server
+about to breach SLO, a line about to jam.
+
+## 1. Load the signals that precede a crash
+
+Pull the pen's history at a few-minute cadence — the oxygen itself plus the drivers that
+move it (temperature, and tide if you have it).
+
+```python
+import datahub_sdk, numpy as np, pandas as pd
+
+client = datahub_sdk.DataHubClient.from_env()
+
+def load(external_id, days=90):
+    rf = datahub_sdk.RetrieveFilter(
+        ts=external_id,
+        start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=days),
+        end=pd.Timestamp.now(tz="UTC"),
+        aggregates=["average"], granularity="5m")
+    pts = client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()
+    return pd.Series([float(p.value) for p in pts],
+                     index=pd.to_datetime([p.timestamp for p in pts])).sort_index()
+
+do = load("pen_h_07_dissolved_oxygen_mg_l")
+temp = load("pen_h_07_water_temp_c")
+df = pd.DataFrame({"do": do, "temp": temp}).asfreq("5min").interpolate()
+```
+
+## 2. Engineer features and a *forward-looking* label
+
+The trick is the label: for each moment, look **ahead** and mark whether a crash happens
+in the next 45 minutes. The features only use the past, so the model learns to see a
+crash coming.
+
+```python
+CRITICAL = 5.0          # mg/L — below this is dangerous
+HORIZON = 9             # 9 × 5min = 45 minutes ahead
+
+# features: current level, recent slope, volatility, temperature, time of day
+df["do_slope"] = df["do"].diff().rolling(6).mean()      # trend over ~30 min
+df["do_std"]   = df["do"].rolling(6).std()
+df["temp_slope"] = df["temp"].diff().rolling(6).mean()
+df["hour"] = df.index.hour
+
+# label: will DO drop below CRITICAL within the next HORIZON steps?
+future_min = df["do"].shift(-1).rolling(HORIZON).min()
+df["will_crash"] = (future_min < CRITICAL).astype(int)
+
+frame = df.dropna()
+FEATURES = ["do", "do_slope", "do_std", "temp", "temp_slope", "hour"]
+```
+
+## 3. Train the classifier
+
+Crashes are rare, so the classes are imbalanced — weight them, and judge the model on
+precision/recall for the *crash* class, not raw accuracy.
+
+```python
+from sklearn.ensemble import HistGradientBoostingClassifier
+from sklearn.metrics import classification_report
+
+split = int(len(frame) * 0.8)
+train, test = frame.iloc[:split], frame.iloc[split:]
+
+# class_weight balances the rare positive class
+sample_weight = np.where(train["will_crash"] == 1, 20.0, 1.0)
+clf = HistGradientBoostingClassifier(max_iter=300, learning_rate=0.05)
+clf.fit(train[FEATURES], train["will_crash"], sample_weight=sample_weight)
+
+print(classification_report(test["will_crash"], clf.predict(test[FEATURES])))
+```
+
+## 4. Score live and warn ahead of time
+
+Take the latest reading, predict the crash probability, and when it's high raise an
+`oxygen_crash_predicted` event — minutes before the [reactive low-oxygen
+alarm](/industries/aquaculture) would ever fire — so aeration starts in time.
+
+```python
+latest = frame.iloc[[-1]]
+prob = clf.predict_proba(latest[FEATURES])[0, 1]
+
+# publish the live risk as its own series
+client.timeseries.create([datahub_sdk.TimeSeries(
+    external_id="pen_h_07_crash_risk", name="Pen H-07 oxygen-crash risk")])
+client.timeseries.insert_from_lists(
+    timestamps=[latest.index[-1]], values=[prob], ts="pen_h_07_crash_risk")
+
+if prob > 0.6:
+    client.events.create([datahub_sdk.Event(
+        external_id=f"oxygen_crash_predicted_h07_{int(pd.Timestamp.now().timestamp())}",
+        type="oxygen_crash_predicted", status="warning",
+        metadata={"pen": "pen_h_07", "risk": f"{prob:.2f}", "lead_minutes": "45"})])
+```
+
+The risk score is now a live series, and the event gives the farm a 45-minute head
+start — the difference between a near-miss and a lost pen.
+
+## Where to take it further
+
+- **Tune the lead time.** A longer `HORIZON` warns earlier but with more false alarms —
+  pick the trade-off the operation can act on.
+- **Add neighbours.** Pens sharing a water current crash together; add neighbouring pens'
+  oxygen as features, or correlate via [the graph](/guides/correlate-alarms).
+- **Close the loop.** Feed confirmed outcomes back as fresh labels and re-train on a
+  schedule so the model tracks the season.
+
+## See also
+
+- [Aquaculture — salmon farming](/industries/aquaculture) — the reactive version this upgrades.
+- [Turn readings into events](/guides/detect-events) — emitting the predictive warning.
+- [Query & aggregate](/guides/query-and-aggregate) — assembling the training history.
