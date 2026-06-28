@@ -1,0 +1,97 @@
+---
+sidebar_position: 4
+title: Healthcare — pharmacy cold chain
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Healthcare — pharmacy cold chain
+
+**The problem.** Vaccines, blood products and many medications are only safe within a
+narrow temperature band. A pharmacy or ward fridge that drifts out of range — a door
+left ajar, a failing compressor overnight — can spoil tens of thousands of euros of
+stock and, worse, leave a patient given a product that quietly lost its potency. Staff
+can't watch every fridge; they need an alarm the moment one strays, and a clean
+temperature record to prove the chain held.
+
+What we solve here is protecting temperature-sensitive stock with live monitoring and an
+auditable record.
+
+## 1. Watch every fridge live
+
+Each fridge streams its temperature; a subscription brings them into one feed. When one
+leaves its band, raise a `cold_chain_excursion` event so it's attended before stock is
+lost. See [Consume live data](/guides/realtime-subscriptions).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+import ai.intellistream.datahub.sdk.subscriptions.SubscriptionListener;
+import ai.intellistream.datahub.sdk.subscriptions.SubscriptionMessage;
+import java.time.Duration;
+
+try (SubscriptionListener listener =
+         client.subscriptions().listen(List.of("pharmacy_fridges"))) {
+    while (running) {
+        SubscriptionMessage msg = listener.poll(Duration.ofSeconds(10));
+        if (msg == null) continue;
+        if (outOfBand(msg.payload(), 2.0, 8.0)) {     // °C — vaccine fridge band
+            EventModel excursion = new EventModel();
+            excursion.setExternalId("cold_chain_excursion_f12_" + System.currentTimeMillis());
+            excursion.setType("cold_chain_excursion");
+            excursion.setStatus("critical");
+            excursion.setEventTime(ZonedDateTime.now());
+            excursion.setMetadata(Map.of("fridge", "fridge_pharmacy_12", "temp_c", "9.3"));
+            client.events().create(List.of(excursion));
+        }
+        listener.ack(msg.messageId());
+    }
+}
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+with client.subscriptions.listen(["pharmacy_fridges"]) as listener:
+    for msg in listener:
+        if out_of_band(msg.payload, 2.0, 8.0):         # °C — vaccine fridge band
+            client.events.create([datahub_sdk.Event(
+                external_id=f"cold_chain_excursion_f12_{int(pd.Timestamp.now().timestamp())}",
+                type="cold_chain_excursion", status="critical",
+                metadata={"fridge": "fridge_pharmacy_12", "temp_c": "9.3"})])
+        listener.ack([msg.message_id])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::events::Event;
+
+let mut listener = api.subscriptions.listen(&["pharmacy_fridges"]).await?;
+while let Some(Ok(msg)) = listener.next().await {
+    if out_of_band(&msg.payload, 2.0, 8.0) {           // °C — vaccine fridge band
+        let mut excursion = Event::new("cold_chain_excursion_f12".into());
+        excursion.r#type = Some("cold_chain_excursion".into());
+        excursion.status = Some("critical".into());
+        api.events.create(&vec![excursion]).await?;
+    }
+    listener.ack(&[msg.message_id.as_str()]).await?;
+}
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Keep the compliance record
+
+For an audit, retrieve a fridge's temperature history over any window to produce the
+time-stamped record showing the chain held. See [Query & aggregate](/guides/query-and-aggregate).
+
+## See also
+
+- [Consume live data](/guides/realtime-subscriptions) — the fridge-monitoring loop.
+- [Turn readings into events](/guides/detect-events) — the excursion rule.
+- [Maritime — reefer cold chain](/industries/transport-logistics/maritime) — the same pattern at sea.

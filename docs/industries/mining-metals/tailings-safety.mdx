@@ -1,0 +1,105 @@
+---
+sidebar_position: 3
+title: Mining — tailings dam safety
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Mining — tailings dam safety
+
+**The problem.** A tailings storage facility — the dam holding the mine's waste slurry —
+is one of the highest-consequence structures a company operates. A failure is
+catastrophic: lives, communities and the licence to operate. The warning signs are
+**slow and subtle**: pore-water pressure creeping up inside the embankment, the phreatic
+(water) surface rising, millimetres of movement accumulating. They're invisible day to
+day and only obvious in the trend. Engineers need those instruments watched continuously
+against trigger levels, with an alarm the instant one is crossed.
+
+What we solve here is the continuous, trigger-based monitoring a tailings dam's safety
+case depends on.
+
+## 1. Watch the instruments against trigger levels
+
+Piezometers (pore pressure), phreatic levels and movement prisms stream in. A reading
+past its **trigger level** raises a `tailings_alarm` — graded by severity — straight to
+the engineer of record. See [Consume live data](/guides/realtime-subscriptions).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+import ai.intellistream.datahub.sdk.subscriptions.SubscriptionListener;
+import ai.intellistream.datahub.sdk.subscriptions.SubscriptionMessage;
+import java.time.Duration;
+
+try (SubscriptionListener listener =
+         client.subscriptions().listen(List.of("tsf_instruments"))) {
+    while (running) {
+        SubscriptionMessage msg = listener.poll(Duration.ofSeconds(30));
+        if (msg == null) continue;
+        String level = triggerLevel(msg.payload());   // null | "amber" | "red"
+        if (level != null) {
+            EventModel alarm = new EventModel();
+            alarm.setExternalId("tailings_alarm_p14_" + System.currentTimeMillis());
+            alarm.setType("tailings_alarm");
+            alarm.setStatus(level.equals("red") ? "critical" : "warning");
+            alarm.setEventTime(ZonedDateTime.now());
+            alarm.setMetadata(Map.of("instrument", "piezometer_p14", "level", level,
+                                     "pore_pressure_kpa", "186"));
+            client.events().create(List.of(alarm));
+        }
+        listener.ack(msg.messageId());
+    }
+}
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+with client.subscriptions.listen(["tsf_instruments"]) as listener:
+    for msg in listener:
+        level = trigger_level(msg.payload)             # None | "amber" | "red"
+        if level:
+            client.events.create([datahub_sdk.Event(
+                external_id=f"tailings_alarm_p14_{int(pd.Timestamp.now().timestamp())}",
+                type="tailings_alarm",
+                status="critical" if level == "red" else "warning",
+                metadata={"instrument": "piezometer_p14", "level": level,
+                          "pore_pressure_kpa": "186"})])
+        listener.ack([msg.message_id])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::events::Event;
+
+let mut listener = api.subscriptions.listen(&["tsf_instruments"]).await?;
+while let Some(Ok(msg)) = listener.next().await {
+    if let Some(level) = trigger_level(&msg.payload) {  // "amber" | "red"
+        let mut alarm = Event::new("tailings_alarm_p14".into());
+        alarm.r#type = Some("tailings_alarm".into());
+        alarm.status = Some(if level == "red" { "critical" } else { "warning" }.into());
+        api.events.create(&vec![alarm]).await?;
+    }
+    listener.ack(&[msg.message_id.as_str()]).await?;
+}
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Watch the trend, not just the level
+
+A single reading rarely fails a dam; a rising *trend* is the real signal. Roll pore
+pressure up to daily values and watch the slope — a steady climb toward the trigger is
+the early warning the safety case is built on. See [Query & aggregate](/guides/query-and-aggregate),
+and for an ahead-of-time call, the [early-warning model](/advanced/oxygen-crash-early-warning).
+
+## See also
+
+- [Consume live data](/guides/realtime-subscriptions) — continuous instrument monitoring.
+- [Turn readings into events](/guides/detect-events) — trigger-level alarms.
+- [Water utilities](/industries/energy-utilities/water) — related dam/flow-network monitoring.

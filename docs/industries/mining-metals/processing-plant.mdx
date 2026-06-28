@@ -1,0 +1,134 @@
+---
+sidebar_position: 2
+title: Mining — processing plant
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Mining — processing plant recovery
+
+**The problem.** After the rock is hauled, the money is made (or lost) in the
+concentrator: how much of the valuable metal the mill actually **recovers** from the
+ore. A recovery that quietly slips a couple of percent — from a grind that's too coarse,
+a reagent dose that's off, a feed grade that changed — is metal going out with the
+tailings, worth a fortune over a shift. Metallurgists need recovery and throughput as
+live, rolled-up numbers so they can act on a dip while the ore is still in the circuit.
+
+What we solve here is protecting metal recovery by turning mill telemetry into the KPIs
+the control room steers on.
+
+## 1. Track recovery and throughput
+
+Feed grade, concentrate grade, tailings grade and tonnage are series; recovery is
+computed from them. Roll them up hourly to see recovery against target. See
+[Query & aggregate](/guides/query-and-aggregate).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+var filter = new RetrieveFilter();
+filter.setExternalId("mill_1_recovery_pct");
+filter.setStart(ZonedDateTime.now().minusHours(12));
+filter.setEnd(ZonedDateTime.now());
+filter.setAggregates(List.of("average"));
+filter.setGranularity("1h");
+
+var request = new DataRetriever<RetrieveFilter>();
+request.setItems(List.of(filter));
+
+client.timeseries().retrieve(request).getItems().get(0).getDatapoints()
+    .forEach(p -> compareToTarget(p.getTimestamp(), p.getValue()));   // % recovery
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import pandas as pd
+
+rf = datahub_sdk.RetrieveFilter(
+    ts="mill_1_recovery_pct",
+    start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=12),
+    end=pd.Timestamp.now(tz="UTC"),
+    aggregates=["average"], granularity="1h")
+
+for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
+    compare_to_target(dp.timestamp, dp.average)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+
+let filter = RetrieveFilter {
+    external_id: Some("mill_1_recovery_pct".into()),
+    aggregates: vec!["average".into()],
+    granularity: Some("1h".into()),
+    ..Default::default()
+};
+let series = api.time_series
+    .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?
+    .get_items().remove(0);
+for p in &series.datapoints { compare_to_target(&p.timestamp, p.average); }
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Flag a recovery dip
+
+When recovery drops below target for a sustained period, raise a `recovery_loss` event so
+the metallurgist investigates grind, reagents or feed before more metal is lost. See
+[Turn readings into events](/guides/detect-events).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+EventModel loss = new EventModel();
+loss.setExternalId("recovery_loss_mill1_" + System.currentTimeMillis());
+loss.setType("recovery_loss");
+loss.setStatus("open");
+loss.setEventTime(ZonedDateTime.now());
+loss.setMetadata(Map.of("mill", "mill_1", "recovery_pct", "88.4", "target_pct", "91.0"));
+client.events().create(List.of(loss));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+client.events.create([datahub_sdk.Event(
+    external_id=f"recovery_loss_mill1_{int(pd.Timestamp.now().timestamp())}",
+    type="recovery_loss", status="open",
+    metadata={"mill": "mill_1", "recovery_pct": "88.4", "target_pct": "91.0"})])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::events::Event;
+
+let mut loss = Event::new("recovery_loss_mill1".into());
+loss.r#type = Some("recovery_loss".into());
+api.events.create(&vec![loss]).await?;
+```
+
+</TabItem>
+</Tabs>
+
+## 3. Find the best operating point
+
+Recovery, grind and reagents interact in complex ways — [cluster the operating
+states](/advanced/kmeans-clustering) to discover which regimes recover best, or build a
+[soft sensor](/advanced/random-forest-soft-sensor) to estimate recovery between assays.
+
+## See also
+
+- [Query & aggregate](/guides/query-and-aggregate) — recovery and throughput KPIs.
+- [Turn readings into events](/guides/detect-events) — the recovery-dip rule.
+- [Mining operations](/industries/mining-metals/operations) — the haul fleet that feeds the mill.

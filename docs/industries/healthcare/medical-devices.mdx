@@ -1,0 +1,138 @@
+---
+sidebar_position: 2
+title: Healthcare — medical-device fleet
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Healthcare — medical-device fleet
+
+**The problem.** A hospital runs thousands of connected devices — infusion pumps,
+ventilators, monitors — and two things must never slip: a critical device must be
+available when a clinician reaches for it, and when a **recall or fault pattern** hits a
+device model, every affected unit must be found and pulled *today*, before it reaches a
+patient. Tracking that across wards by spreadsheet is how units get missed.
+
+What we solve here is device availability and fast, complete recall tracing.
+
+## 1. Model the fleet and watch availability
+
+A hospital *contains* wards, a ward *contains* devices, and each device *is a* model.
+Device status is a series; a unit that faults or drops offline raises a `device_down`
+event for biomedical engineering.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+ResourceForm pump = new ResourceForm();
+pump.setExternalId("pump_icu_3391");
+pump.setName("Infusion pump 3391");
+
+RelForm inWard = new RelForm();
+inWard.setName("located_in");
+inWard.setFromExternalId("pump_icu_3391");
+inWard.setToExternalId("ward_icu");
+
+RelForm isModel = new RelForm();
+isModel.setName("is_model");
+isModel.setFromExternalId("pump_icu_3391");
+isModel.setToExternalId("model_acme_x200");
+
+client.resources().create(List.of(pump), List.of(inWard, isModel));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import datahub_sdk
+
+client.resources.create(
+    [datahub_sdk.Resource(external_id="pump_icu_3391", name="Infusion pump 3391")],
+    [datahub_sdk.RelForm.by_external_ids("pump_icu_3391", "ward_icu", "located_in"),
+     datahub_sdk.RelForm.by_external_ids("pump_icu_3391", "model_acme_x200", "is_model")])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::resources::Resource;
+use dataplatform_rust_sdk::relations::RelForm;
+
+let mut pump = Resource::new();
+pump.external_id = "pump_icu_3391".into();
+pump.name = "Infusion pump 3391".into();
+
+api.resources.create(
+    vec![pump],
+    vec![
+        RelForm::by_external_ids("pump_icu_3391", "ward_icu", "located_in"),
+        RelForm::by_external_ids("pump_icu_3391", "model_acme_x200", "is_model"),
+    ],
+).await?;
+```
+
+</TabItem>
+</Tabs>
+
+## 2. A recall lands — find every affected unit
+
+When `model_acme_x200` is recalled, walk the graph out from the model node: every device
+that `is_model` of it, and the ward each sits in, is the exact pull list. This is the
+[blast-radius traversal](/guides/correlate-alarms) — the same shape as an aerospace part
+recall, applied to hospital equipment.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+ResourceNetwork affected = client.resources().fetchRelated("model_acme_x200", 3);
+
+affected.nodes().stream()
+    .filter(n -> n.getExternalId().startsWith("pump_"))
+    .forEach(d -> System.out.println("pull from service: " + d.getExternalId()));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+affected = client.resources.fetch_related(external_id="model_acme_x200", depth=3)
+
+for node in affected.nodes:
+    if node.external_id.startswith("pump_"):
+        print("pull from service:", node.external_id)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::resources::RelatedResourcesForm;
+
+let affected = api.resources.fetch_related(
+    &RelatedResourcesForm::from_external_id("model_acme_x200").with_depth(3)).await?;
+
+for node in affected.nodes() {
+    if node.external_id.starts_with("pump_") {
+        println!("pull from service: {}", node.external_id);
+    }
+}
+```
+
+</TabItem>
+</Tabs>
+
+## 3. Predict failures before they strand a clinician
+
+Pump and battery health are series; rolling them up surfaces units trending toward
+failure for planned swap-out — and the [XGBoost failure
+predictor](/advanced/xgboost-failure-prediction) does it properly.
+
+## See also
+
+- [Model assets as a graph](/guides/model-assets-graph) — the hospital/ward/device hierarchy.
+- [Correlate alarms with the graph](/guides/correlate-alarms) — recall blast-radius tracing.
+- [Aerospace fleet](/industries/transport-logistics/aerospace) — the same recall pattern.

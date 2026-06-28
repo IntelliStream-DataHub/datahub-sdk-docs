@@ -1,0 +1,132 @@
+---
+sidebar_position: 3
+title: Healthcare — patient flow
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Healthcare — patient flow
+
+**The problem.** Patients move through a hospital in a chain — emergency department →
+assessment → ward → discharge — and the whole thing jams if any link backs up. A slow
+discharge process leaves no free beds, which backs up the ward, which strands patients
+in the ED corridor. Operations needs to see **where the flow is actually stuck** —
+which stage's wait is growing — so they fix the real bottleneck, not the loudest one.
+
+What we solve here is finding the bottleneck stage in the patient journey, using the
+flow data the hospital already has.
+
+## 1. Roll up the wait at each stage
+
+ED wait, time-to-bed, and length-of-stay are series. Hourly and daily roll-ups show
+which stage is slow *right now* versus its normal — the bottleneck. See
+[Query & aggregate](/guides/query-and-aggregate).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+var filter = new RetrieveFilter();
+filter.setExternalId("ed_time_to_bed_minutes");
+filter.setStart(ZonedDateTime.now().minusDays(1));
+filter.setEnd(ZonedDateTime.now());
+filter.setAggregates(List.of("average", "max"));
+filter.setGranularity("1h");
+
+var request = new DataRetriever<RetrieveFilter>();
+request.setItems(List.of(filter));
+
+client.timeseries().retrieve(request).getItems().get(0).getDatapoints()
+    .forEach(p -> trackStage("time_to_bed", p.getTimestamp(), p.getValue()));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import pandas as pd
+
+rf = datahub_sdk.RetrieveFilter(
+    ts="ed_time_to_bed_minutes",
+    start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=1),
+    end=pd.Timestamp.now(tz="UTC"),
+    aggregates=["average", "max"], granularity="1h")
+
+for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
+    track_stage("time_to_bed", dp.timestamp, dp.average)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+
+let filter = RetrieveFilter {
+    external_id: Some("ed_time_to_bed_minutes".into()),
+    aggregates: vec!["average".into(), "max".into()],
+    granularity: Some("1h".into()),
+    ..Default::default()
+};
+let series = api.time_series
+    .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?
+    .get_items().remove(0);
+for p in &series.datapoints { track_stage("time_to_bed", &p.timestamp, p.average); }
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Alert when the ED breaches its target
+
+When the ED's four-hour-target breach rate climbs past a threshold, raise a
+`flow_breach` event so the patient-flow coordinator can pull the right lever —
+expedite discharges, open an escalation area. See [Turn readings into events](/guides/detect-events).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+EventModel breach = new EventModel();
+breach.setExternalId("flow_breach_ed_" + System.currentTimeMillis());
+breach.setType("flow_breach");
+breach.setStatus("open");
+breach.setEventTime(ZonedDateTime.now());
+breach.setMetadata(Map.of("stage", "emergency_department", "breach_rate_pct", "22"));
+client.events().create(List.of(breach));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+client.events.create([datahub_sdk.Event(
+    external_id=f"flow_breach_ed_{int(pd.Timestamp.now().timestamp())}",
+    type="flow_breach", status="open",
+    metadata={"stage": "emergency_department", "breach_rate_pct": "22"})])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::events::Event;
+
+let mut breach = Event::new("flow_breach_ed".into());
+breach.r#type = Some("flow_breach".into());
+api.events.create(&vec![breach]).await?;
+```
+
+</TabItem>
+</Tabs>
+
+## 3. Forecast the surge
+
+Admissions follow strong daily and seasonal patterns — [forecast
+them](/advanced/demand-forecasting) to staff ahead of the surge instead of reacting to it.
+
+## See also
+
+- [Query & aggregate](/guides/query-and-aggregate) — per-stage wait roll-ups.
+- [Turn readings into events](/guides/detect-events) — the breach rule.
+- [Demand forecasting](/advanced/demand-forecasting) — predicting admissions.
