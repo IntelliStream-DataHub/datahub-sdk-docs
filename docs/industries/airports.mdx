@@ -1,0 +1,105 @@
+---
+sidebar_position: 24
+title: Airports — turnaround & on-time
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Airports — turnaround & on-time operations
+
+**The problem.** An aircraft on the ground earns nothing, and every minute past its
+slot ripples outward — a late turnaround misses the departure wave, the next rotation
+slips, and by evening the delay has spread across the network. A turnaround is a relay
+of independent teams — deboarding, cleaning, fuelling, catering, loading, boarding — and
+if any leg runs long, the whole thing does. Operations needs to **see a turnaround
+falling behind while it can still be recovered**, not after pushback is missed.
+
+What we solve here is delay propagation: catching the slow leg of a turnaround in time
+to throw resources at it.
+
+## 1. Track each turnaround milestone live
+
+Milestone timestamps and progress stream in per stand. When a leg overruns its planned
+duration, raise a `turnaround_risk` event so the duty manager reallocates before the
+slot is lost. See [Consume live data](/guides/realtime-subscriptions).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+import ai.intellistream.datahub.sdk.subscriptions.SubscriptionListener;
+import ai.intellistream.datahub.sdk.subscriptions.SubscriptionMessage;
+import java.time.Duration;
+
+try (SubscriptionListener listener =
+         client.subscriptions().listen(List.of("stand_b12_turnaround"))) {
+    while (running) {
+        SubscriptionMessage msg = listener.poll(Duration.ofSeconds(5));
+        if (msg == null) continue;
+        if (legOverrunning(msg.payload())) {          // e.g. fuelling past plan
+            EventModel risk = new EventModel();
+            risk.setExternalId("turnaround_risk_su204_" + System.currentTimeMillis());
+            risk.setType("turnaround_risk");
+            risk.setStatus("open");
+            risk.setEventTime(ZonedDateTime.now());
+            risk.setMetadata(Map.of("flight", "flight_su204", "leg", "fuelling", "stand", "stand_b12"));
+            client.events().create(List.of(risk));
+        }
+        listener.ack(msg.messageId());
+    }
+}
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+with client.subscriptions.listen(["stand_b12_turnaround"]) as listener:
+    for msg in listener:
+        if leg_overrunning(msg.payload):              # e.g. fuelling past plan
+            client.events.create([datahub_sdk.Event(
+                external_id=f"turnaround_risk_su204_{int(pd.Timestamp.now().timestamp())}",
+                type="turnaround_risk", status="open",
+                metadata={"flight": "flight_su204", "leg": "fuelling", "stand": "stand_b12"})])
+        listener.ack([msg.message_id])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::events::Event;
+
+let mut listener = api.subscriptions.listen(&["stand_b12_turnaround"]).await?;
+while let Some(Ok(msg)) = listener.next().await {
+    if leg_overrunning(&msg.payload) {                // e.g. fuelling past plan
+        let mut risk = Event::new("turnaround_risk_su204".into());
+        risk.r#type = Some("turnaround_risk".into());
+        api.events.create(&vec![risk]).await?;
+    }
+    listener.ack(&[msg.message_id.as_str()]).await?;
+}
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Trace the knock-on through shared aircraft
+
+One late arrival delays the *next* flight on the same airframe, and the one after that.
+Model flights and the aircraft and crews they share as a [graph](/guides/model-assets-graph);
+walking out from the delayed flight reveals the downstream rotations at risk — the
+[blast radius](/guides/correlate-alarms) of the delay — so re-timing decisions are made
+with the whole chain in view.
+
+## 3. Learn from the day
+
+On-time performance and per-leg durations are series; daily roll-ups by stand and
+ground-handler surface the legs that chronically run long. See
+[Query & aggregate](/guides/query-and-aggregate).
+
+## See also
+
+- [Consume live data](/guides/realtime-subscriptions) — live milestone tracking.
+- [Correlate alarms with the graph](/guides/correlate-alarms) — delay knock-on across rotations.
+- [Query & aggregate](/guides/query-and-aggregate) — on-time-performance reporting.

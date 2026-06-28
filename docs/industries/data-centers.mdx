@@ -1,0 +1,146 @@
+---
+sidebar_position: 23
+title: Data centers — power & cooling
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Data centers — power & cooling
+
+**The problem.** A data center's two biggest risks are heat and the power bill. A
+cooling unit that quietly fails lets a row of racks climb toward thermal shutdown;
+meanwhile cooling and power overhead — everything not spent on actual compute — is the
+largest controllable cost. Facilities teams need to **catch a thermal problem before
+racks throttle**, and to drive overhead down by seeing exactly where the watts go.
+
+What we solve here is preventing heat-related outages and cutting the energy that never
+reaches a server.
+
+## 1. Catch a thermal problem early
+
+Rack inlet temperatures and cooling-unit status stream live. When inlet temperature
+climbs past the safe band, raise a `thermal_warning` so the team intervenes before
+hardware protects itself by shutting down. See [Consume live data](/guides/realtime-subscriptions).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+import ai.intellistream.datahub.sdk.subscriptions.SubscriptionListener;
+import ai.intellistream.datahub.sdk.subscriptions.SubscriptionMessage;
+import java.time.Duration;
+
+try (SubscriptionListener listener =
+         client.subscriptions().listen(List.of("hall_2_thermal"))) {
+    while (running) {
+        SubscriptionMessage msg = listener.poll(Duration.ofSeconds(5));
+        if (msg == null) continue;
+        if (inletAbove(msg.payload(), 27.0)) {        // °C — above ASHRAE band
+            EventModel warning = new EventModel();
+            warning.setExternalId("thermal_warning_r14_" + System.currentTimeMillis());
+            warning.setType("thermal_warning");
+            warning.setStatus("open");
+            warning.setEventTime(ZonedDateTime.now());
+            warning.setMetadata(Map.of("rack", "rack_r14", "inlet_c", "29.4"));
+            client.events().create(List.of(warning));
+        }
+        listener.ack(msg.messageId());
+    }
+}
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+with client.subscriptions.listen(["hall_2_thermal"]) as listener:
+    for msg in listener:
+        if inlet_above(msg.payload, 27.0):            # °C — above ASHRAE band
+            client.events.create([datahub_sdk.Event(
+                external_id=f"thermal_warning_r14_{int(pd.Timestamp.now().timestamp())}",
+                type="thermal_warning", status="open",
+                metadata={"rack": "rack_r14", "inlet_c": "29.4"})])
+        listener.ack([msg.message_id])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::events::Event;
+
+let mut listener = api.subscriptions.listen(&["hall_2_thermal"]).await?;
+while let Some(Ok(msg)) = listener.next().await {
+    if inlet_above(&msg.payload, 27.0) {              // °C — above ASHRAE band
+        let mut warning = Event::new("thermal_warning_r14".into());
+        warning.r#type = Some("thermal_warning".into());
+        api.events.create(&vec![warning]).await?;
+    }
+    listener.ack(&[msg.message_id.as_str()]).await?;
+}
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Drive down overhead (PUE)
+
+PUE is total facility power over IT power. Roll both meters up to hourly sums, divide,
+and the trend shows whether a cooling tweak actually helped. See
+[Query & aggregate](/guides/query-and-aggregate).
+
+## 3. When racks overheat together, find the cooling unit
+
+Several racks climbing at once usually means one shared cooling unit, not a coincidence.
+Model racks → CRAC units as a [graph](/guides/model-assets-graph) and walk from each hot
+rack to the unit they share — the exact
+[two-alarms-one-cooling-system](/guides/correlate-alarms) pattern.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+ResourceNetwork a = client.resources().fetchRelated("rack_r14", 3);
+ResourceNetwork b = client.resources().fetchRelated("rack_r15", 3);
+
+Set<String> aNodes = a.nodes().stream().map(Resource::getExternalId).collect(Collectors.toSet());
+Set<String> shared = b.nodes().stream().map(Resource::getExternalId)
+    .filter(aNodes::contains).collect(Collectors.toSet());
+// shared contains "crac_unit_2" → one failing unit, not two hot racks
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+a = client.resources.fetch_related(external_id="rack_r14", depth=3)
+b = client.resources.fetch_related(external_id="rack_r15", depth=3)
+shared = {n.external_id for n in a.nodes} & {n.external_id for n in b.nodes}
+# 'crac_unit_2' in shared → one failing unit
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::resources::RelatedResourcesForm;
+use std::collections::HashSet;
+
+let a = api.resources.fetch_related(
+    &RelatedResourcesForm::from_external_id("rack_r14").with_depth(3)).await?;
+let b = api.resources.fetch_related(
+    &RelatedResourcesForm::from_external_id("rack_r15").with_depth(3)).await?;
+let an: HashSet<&str> = a.nodes().iter().map(|n| n.external_id.as_str()).collect();
+let shared: Vec<&str> = b.nodes().iter()
+    .map(|n| n.external_id.as_str()).filter(|id| an.contains(id)).collect();
+// shared contains "crac_unit_2"
+```
+
+</TabItem>
+</Tabs>
+
+## See also
+
+- [Consume live data](/guides/realtime-subscriptions) — the thermal-monitoring loop.
+- [Query & aggregate](/guides/query-and-aggregate) — the PUE trend.
+- [Correlate alarms with the graph](/guides/correlate-alarms) — find the shared cooling unit.

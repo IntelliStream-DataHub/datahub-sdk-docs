@@ -1,0 +1,128 @@
+---
+sidebar_position: 25
+title: Ports — terminal throughput
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Ports — container terminal throughput
+
+**The problem.** A container terminal is judged on two numbers: how fast cranes work a
+ship, and how long boxes sit in the yard. A crane running below its move-rate keeps a
+vessel — and its berthing fees — alongside longer than planned; a container that dwells
+too long clogs stacks and blocks the next move. Terminal operations needs to **see a
+crane falling behind and a yard filling up in time to rebalance**, not at the end-of-
+shift report.
+
+What we solve here is berth productivity and yard congestion — the throughput the whole
+terminal is measured on.
+
+## 1. Watch crane productivity by the hour
+
+Crane moves are series per crane. Roll them up to moves-per-hour and compare against the
+target to find an under-performing crane mid-vessel. See
+[Query & aggregate](/guides/query-and-aggregate).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+var filter = new RetrieveFilter();
+filter.setExternalId("crane_qc_07_moves");
+filter.setStart(ZonedDateTime.now().minusHours(6));
+filter.setEnd(ZonedDateTime.now());
+filter.setAggregates(List.of("sum"));
+filter.setGranularity("1h");
+
+var request = new DataRetriever<RetrieveFilter>();
+request.setItems(List.of(filter));
+
+client.timeseries().retrieve(request).getItems().get(0).getDatapoints()
+    .forEach(p -> compareToTarget(p.getTimestamp(), p.getValue()));   // moves/hour
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import pandas as pd
+
+rf = datahub_sdk.RetrieveFilter(
+    ts="crane_qc_07_moves",
+    start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=6),
+    end=pd.Timestamp.now(tz="UTC"),
+    aggregates=["sum"], granularity="1h")
+
+for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
+    compare_to_target(dp.timestamp, dp.sum)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+
+let filter = RetrieveFilter {
+    external_id: Some("crane_qc_07_moves".into()),
+    aggregates: vec!["sum".into()],
+    granularity: Some("1h".into()),
+    ..Default::default()
+};
+let series = api.time_series
+    .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?
+    .get_items().remove(0);
+for p in &series.datapoints { compare_to_target(&p.timestamp, p.sum); }
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Flag yard congestion before it blocks moves
+
+Stack occupancy is a series per yard block. When a block crosses its safe fill, raise a
+`yard_congestion` event so planners divert incoming boxes to another block. See
+[Turn readings into events](/guides/detect-events).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+EventModel congestion = new EventModel();
+congestion.setExternalId("yard_congestion_b07_" + System.currentTimeMillis());
+congestion.setType("yard_congestion");
+congestion.setStatus("open");
+congestion.setEventTime(ZonedDateTime.now());
+congestion.setMetadata(Map.of("block", "yard_block_b07", "occupancy_pct", "94"));
+client.events().create(List.of(congestion));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+client.events.create([datahub_sdk.Event(
+    external_id=f"yard_congestion_b07_{int(pd.Timestamp.now().timestamp())}",
+    type="yard_congestion", status="open",
+    metadata={"block": "yard_block_b07", "occupancy_pct": "94"})])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::events::Event;
+
+let mut congestion = Event::new("yard_congestion_b07".into());
+congestion.r#type = Some("yard_congestion".into());
+api.events.create(&vec![congestion]).await?;
+```
+
+</TabItem>
+</Tabs>
+
+## See also
+
+- [Query & aggregate](/guides/query-and-aggregate) — crane moves-per-hour.
+- [Turn readings into events](/guides/detect-events) — the congestion rule.
+- [High-throughput ingestion](/guides/ingest-timeseries) — equipment telemetry volume.
