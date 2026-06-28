@@ -196,6 +196,22 @@ api.events.create(&vec![event]).await?;
 </TabItem>
 </Tabs>
 
+## See the result
+
+Chart the feeder's hourly peak load — one bar pokes above the 12 MW rating line, which is
+the overload the event flags:
+
+```python
+import matplotlib.pyplot as plt
+
+rf = datahub_sdk.RetrieveFilter(ts="feeder_f12_load_mw",
+    start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=1), end=pd.Timestamp.now(tz="UTC"),
+    aggregates=["max"], granularity="1h")
+peaks = [dp.max for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()]
+plt.bar(range(len(peaks)), peaks); plt.axhline(12, color="r", ls="--")
+plt.title("Feeder F12 hourly peak load (MW)"); plt.show()
+```
+
 ## See also
 
 - [Query & aggregate time-series](/guides/query-and-aggregate) — granularity and aggregate options.

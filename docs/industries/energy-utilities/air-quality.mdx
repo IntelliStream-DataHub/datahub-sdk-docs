@@ -124,6 +124,20 @@ Roll each pollutant up to daily averages for the public index, and raise an
 the metadata carrying the pollutant, its unit, and the threshold so the record is
 unambiguous. See [Query & aggregate](/guides/query-and-aggregate).
 
+## See the result
+
+Chart the day's PM2.5 — now self-describing, because the series carries its `ug_m3` unit:
+
+```python
+import matplotlib.pyplot as plt
+
+rf = datahub_sdk.RetrieveFilter(ts="station_kirkeveien_pm25",
+    start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=1), end=pd.Timestamp.now(tz="UTC"),
+    aggregates=["average"], granularity="1h")
+vals = [dp.average for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()]
+plt.plot(vals); plt.title("Kirkeveien PM2.5 (µg/m³)"); plt.show()
+```
+
 ## See also
 
 - [Units reference](/reference/units) — the unit catalogue and lookups.

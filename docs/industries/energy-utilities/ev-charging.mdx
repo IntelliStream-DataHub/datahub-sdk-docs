@@ -108,6 +108,17 @@ network-quality number; the site's summed draw, aggregated to the minute, shows 
 close it runs to its grid limit — the input to load-balancing. See
 [Query & aggregate](/guides/query-and-aggregate).
 
+## See the result
+
+The faulted reading in the demo trips the loop, and a `charger_down` event lands:
+
+```python
+for e in client.events.filter(datahub_sdk.EventFilter(
+        basic_filter=datahub_sdk.BasicEventFilter(type="charger_down"), limit=5)):
+    print(e.external_id, e.metadata)
+# charger_down_oslo_14_…  {'charger': 'charger_oslo_14', 'connector': '2'}
+```
+
 ## See also
 
 - [Consume live data](/guides/realtime-subscriptions) — live charger status.

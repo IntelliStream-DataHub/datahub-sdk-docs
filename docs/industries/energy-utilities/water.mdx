@@ -149,6 +149,14 @@ Turbidity and chlorine are series per zone (`zone_west_12_turbidity_ntu`,
 `zone_west_12_chlorine_mg_l`); a reading out of range raises a `water_quality_alert`
 [event](/guides/detect-events) that kicks off the trace above.
 
+## See the result
+
+The two zones' upstream paths intersect at one node — where to isolate and flush:
+
+```text
+main_trunk_north        ← the shared supply behind both quality alerts
+```
+
 ## See also
 
 - [Correlate alarms with the graph](/guides/correlate-alarms) — upstream-convergence intersection.

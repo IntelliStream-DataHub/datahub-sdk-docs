@@ -152,6 +152,21 @@ When a turbine's capacity factor stays well below the farm average in good wind,
 a `turbine_underperformance` [event](/guides/detect-events) for the maintenance team —
 a sign of a pitch or gearbox problem worth a closer look.
 
+## See the result
+
+Print the average capacity factor and chart it over the week:
+
+```python
+import matplotlib.pyplot as plt
+
+rf = datahub_sdk.RetrieveFilter(ts="turbine_t14_power_kw",
+    start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=7), end=pd.Timestamp.now(tz="UTC"),
+    aggregates=["average"], granularity="1h")
+cf = [dp.average / 3500 for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()]
+print(f"average capacity factor: {sum(cf)/len(cf):.0%}")
+plt.plot(cf); plt.title("Turbine T14 capacity factor"); plt.show()
+```
+
 ## See also
 
 - [Query & aggregate](/guides/query-and-aggregate) — windows and aggregates for the capacity factor.
