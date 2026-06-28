@@ -1,0 +1,213 @@
+---
+sidebar_position: 5
+title: Fraud classification (graph + ML)
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Fraud classification — graph features + machine learning
+
+:::info At a glance
+**Effort:** ~1–2 hours · **You'll build:** graph-derived features from network traversal,
+combined with behavioural features, feeding a supervised classifier · **Stack:** the SDK
+for data and traversal, plus `networkx`, `pandas`, `scikit-learn`.
+:::
+
+This is the capstone: it fuses the two things the rest of the docs treat separately — the
+**knowledge graph** and **machine learning**. Money laundering doesn't look suspicious one
+payment at a time; it looks suspicious in the *shape* of the network — funds fanning out
+through mules and looping back — combined with behaviour like rapid pass-through. A rules
+engine flags thousands of alerts a day; a classifier that scores each one by its network
+shape *and* its behaviour lets investigators work the riskiest first.
+
+The technique generalises to any "score an entity by its connections plus its behaviour"
+problem — [wafer-lot risk](/industries/semiconductor), [insurance rings](/industries/insurance),
+[telecom abuse](/industries/telecom).
+
+## 1. Pull the account's network
+
+For a given account, [walk the money-flow graph](/guides/correlate-alarms) to get its
+cluster — the sub-graph of accounts and the transfers between them.
+
+<Tabs groupId="lang">
+<TabItem value="python" label="Python">
+
+```python
+import datahub_sdk, numpy as np, pandas as pd, networkx as nx
+
+client = datahub_sdk.DataHubClient.from_env()
+
+def network_of(account_external_id):
+    return client.resources.fetch_related(
+        external_id=account_external_id, depth=4, relationship_types=["sent_to"])
+```
+
+</TabItem>
+<TabItem value="java" label="Java">
+
+```java
+// Java extracts the same sub-graph; the feature engineering below is Python.
+RelatedResourcesForm form = new RelatedResourcesForm();
+form.setExternalId("account_77310");
+form.setDepth(4);
+form.setRelationshipTypes(List.of("sent_to"));
+ResourceNetwork net = client.resources().fetchRelated(form);
+// net.nodes() / net.edges() — feed your feature pipeline
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+// Rust extracts the same sub-graph; the feature engineering below is Python.
+use dataplatform_rust_sdk::resources::RelatedResourcesForm;
+
+let net = api.resources.fetch_related(
+    &RelatedResourcesForm::from_external_id("account_77310")
+        .with_depth(4)
+        .with_relationship_types(vec!["sent_to".into()])).await?;
+// net.nodes() / net.edges() — feed your feature pipeline
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Turn the network shape into features
+
+This is the heart of it. Load the returned nodes and edges into a directed graph and
+compute the structural signals that distinguish a laundering cluster from a normal
+account's neighbourhood — ring size, pass-through "mules", and whether the money loops
+back to where it started.
+
+```python
+def graph_features(account_external_id):
+    net = network_of(account_external_id)
+
+    g = nx.DiGraph()
+    for e in net.edges:                      # edges carry numeric start/end ids
+        g.add_edge(e.start, e.end)
+
+    accounts = [n for n in net.nodes if n.external_id.startswith("account_")]
+    focal = next(n.id for n in net.nodes if n.external_id == account_external_id)
+
+    # mules: pure pass-through nodes — money in, same money straight out
+    mules = sum(1 for n in g.nodes if g.in_degree(n) == 1 and g.out_degree(n) == 1)
+    # loops: is the focal account inside a cycle? (funds returning is a strong signal)
+    cycles = [c for c in nx.strongly_connected_components(g) if len(c) > 1]
+    in_loop = any(focal in c for c in cycles)
+
+    return {
+        "ring_size":   len(accounts),
+        "edge_count":  g.number_of_edges(),
+        "out_degree":  g.out_degree(focal) if focal in g else 0,
+        "in_degree":   g.in_degree(focal) if focal in g else 0,
+        "mule_count":  mules,
+        "in_loop":     int(in_loop),
+        "reach":       len(nx.descendants(g, focal)) if focal in g else 0,
+    }
+```
+
+## 3. Add behavioural features from the transaction series
+
+Network shape alone produces false positives — a busy merchant looks connected too.
+Combine it with how the account *behaves*: how much flows through, and whether what comes
+in goes straight back out (the pass-through ratio that defines a mule).
+
+```python
+def behaviour_features(account_external_id, hours=24):
+    def agg(metric, *aggregates):
+        rf = datahub_sdk.RetrieveFilter(
+            ts=f"{account_external_id}_{metric}",
+            start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=hours),
+            end=pd.Timestamp.now(tz="UTC"),
+            aggregates=list(aggregates), granularity=f"{hours}h")
+        pts = client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()
+        return pts[-1] if pts else None
+
+    out = agg("outflow", "sum", "average")
+    inn = agg("inflow", "sum")
+    out_sum = float(out.sum) if out else 0.0
+    in_sum  = float(inn.sum) if inn else 0.0
+    return {
+        "outflow_24h":  out_sum,
+        "avg_txn":      float(out.average) if out else 0.0,
+        "pass_through": out_sum / max(in_sum, 1.0),   # ~1.0 = money in → straight out
+    }
+
+def features(account_external_id):
+    return {**graph_features(account_external_id), **behaviour_features(account_external_id)}
+```
+
+## 4. Train on confirmed outcomes
+
+Past investigations are your labels: accounts that became Suspicious Activity Reports
+(SARs) are positives, the rest negatives. Build the feature matrix and train. SARs are
+rare, so judge the model on **average precision** (ranking quality), not accuracy.
+
+```python
+from sklearn.ensemble import HistGradientBoostingClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import average_precision_score, classification_report
+
+# labelled history: [(account_external_id, was_sar), ...]
+labelled = load_investigation_outcomes()
+X = pd.DataFrame([features(acct) for acct, _ in labelled])
+y = np.array([int(was_sar) for _, was_sar in labelled])
+
+Xtr, Xte, ytr, yte = train_test_split(X, y, test_size=0.2, stratify=y, random_state=0)
+clf = HistGradientBoostingClassifier(max_iter=300, learning_rate=0.05,
+                                     class_weight="balanced").fit(Xtr, ytr)
+
+proba = clf.predict_proba(Xte)[:, 1]
+print(f"average precision: {average_precision_score(yte, proba):.3f}")
+print(classification_report(yte, (proba > 0.5).astype(int)))
+```
+
+## 5. Score live alerts and explain the call
+
+Score a new alert, **write the risk back as a series** so it's trendable, and raise a
+`sar_candidate` event for the high-risk ones. Crucially, include the features that drove
+the score — an investigator needs to know *why* it's flagged, not just that it is.
+
+```python
+alert = "account_77310"
+feat = features(alert)
+risk = clf.predict_proba(pd.DataFrame([feat]))[0, 1]
+
+client.timeseries.create([datahub_sdk.TimeSeries(
+    external_id=f"{alert}_aml_risk", name="AML risk score")])
+client.timeseries.insert_from_lists(
+    timestamps=[pd.Timestamp.now(tz="UTC")], values=[risk], ts=f"{alert}_aml_risk")
+
+if risk > 0.7:
+    client.events.create([datahub_sdk.Event(
+        external_id=f"sar_candidate_{alert}_{int(pd.Timestamp.now().timestamp())}",
+        type="sar_candidate", status="open",
+        metadata={
+            "account": alert,
+            "risk": f"{risk:.2f}",
+            "ring_size": str(feat["ring_size"]),
+            "mule_count": str(feat["mule_count"]),
+            "in_loop": str(feat["in_loop"]),
+            "pass_through": f"{feat['pass_through']:.2f}",
+        })])
+```
+
+The risk score is now a live series the investigations dashboard ranks on, and each
+`sar_candidate` event arrives with its network-shape evidence attached — the alert and
+the reason for it, together.
+
+## Where to take it further
+
+- **Real explainability.** Swap the hand-picked metadata for SHAP values so every score
+  comes with its true top contributors.
+- **Richer graph features.** Add betweenness, community detection, or counterparty
+  diversity — the structural signal is deep.
+- **Stream it.** Drive scoring from the [flagged-payments subscription](/industries/banking)
+  so alerts are scored the moment they're raised.
+
+## See also
+
+- [Correlate alarms with the graph](/guides/correlate-alarms) — the traversal these features are built on.
+- [Banking — AML](/industries/banking) · [Insurance — fraud rings](/industries/insurance) — the quick versions.
+- [Predictive maintenance](/advanced/predictive-maintenance) — the other end-to-end model build.
