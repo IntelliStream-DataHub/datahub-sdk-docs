@@ -1,0 +1,138 @@
+---
+sidebar_position: 5
+title: Turn readings into events
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Turn readings into events
+
+Raw datapoints answer "what is the value?"; **events** answer "what happened?". A
+common pipeline reads recent readings, checks them against a rule, and records a
+discrete, queryable event when the rule fires — a threshold breach, a state change,
+an alarm. Events carry a type, a time, and metadata, and can reference the resources
+they concern.
+
+## Detect a threshold breach and record it
+
+Read the latest hour, and if any reading exceeds a limit, create an event.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+import java.time.ZonedDateTime;
+
+var filter = new RetrieveFilter();
+filter.setExternalId("engine_temperature");
+filter.setStart(ZonedDateTime.now().minusHours(1));
+filter.setEnd(ZonedDateTime.now());
+
+var request = new DataRetriever<RetrieveFilter>();
+request.setItems(List.of(filter));
+
+var series = client.timeseries().retrieve(request).getItems().get(0);
+boolean tooHot = series.getDatapoints().stream()
+    .anyMatch(p -> Double.parseDouble(p.getValue()) > 110.0);
+
+if (tooHot) {
+    EventModel event = new EventModel();
+    event.setExternalId("overheat_press_07_" + System.currentTimeMillis());
+    event.setType("overheat");
+    event.setStatus("open");
+    event.setEventTime(ZonedDateTime.now());
+    event.setMetadata(Map.of("series", "engine_temperature", "limit", "110"));
+    client.events().create(List.of(event));
+}
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import datahub_sdk, pandas as pd
+
+rf = datahub_sdk.RetrieveFilter(
+    ts="engine_temperature",
+    start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=1),
+    end=pd.Timestamp.now(tz="UTC"))
+
+points = client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()
+if any(float(dp.value) > 110.0 for dp in points):
+    client.events.create([datahub_sdk.Event(
+        external_id=f"overheat_press_07_{int(pd.Timestamp.now().timestamp())}",
+        type="overheat",
+        status="open",
+        event_time=pd.Timestamp.now(tz="UTC"),
+        metadata={"series": "engine_temperature", "limit": "110"})])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+use dataplatform_rust_sdk::events::Event;
+
+let filter = RetrieveFilter {
+    external_id: Some("engine_temperature".into()),
+    ..Default::default()
+};
+let series = api.time_series
+    .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?
+    .get_items().remove(0);
+
+let too_hot = series.datapoints.iter()
+    .any(|p| p.value.as_deref().and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.0) > 110.0);
+
+if too_hot {
+    let mut event = Event::new("overheat_press_07".into());
+    event.r#type = Some("overheat".into());
+    event.status = Some("open".into());
+    api.events.create(&vec![event]).await?;
+}
+```
+
+</TabItem>
+</Tabs>
+
+## Query the events later
+
+Events are first-class records — filter them by type, time or metadata for an audit
+trail or an incident timeline.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+EventRetreiver retriever = new EventRetreiver();
+// narrow by type / time range / metadata on the retriever
+DataWrapper<EventModel> overheats = client.events().filter(retriever);
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+overheats = client.events.filter(datahub_sdk.EventFilter(
+    basic_filter=datahub_sdk.BasicEventFilter(type="overheat"),
+    limit=100))
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::filters::EventFilter;
+
+let overheats = api.events.filter(&EventFilter::default()).await?;
+```
+
+</TabItem>
+</Tabs>
+
+:::tip Run it on the live stream
+Polling the last hour is fine for a cron job. To react the moment a reading crosses
+the line, run this rule inside a [live subscription loop](./realtime-subscriptions.mdx)
+instead of on a timer.
+:::

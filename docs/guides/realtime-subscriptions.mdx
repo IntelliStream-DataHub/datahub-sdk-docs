@@ -1,0 +1,153 @@
+---
+sidebar_position: 4
+title: Consume live data
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Consume live data
+
+Push-based monitoring: a **subscription** names a set of time-series, and a live
+connection delivers each new datapoint as it lands — no polling. A control-room
+dashboard, an alerting worker, or a downstream pipeline drives the loop and **acks**
+what it has handled. Anything unacked is redelivered, so a crash never loses data.
+
+## 1. Create a subscription
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+Subscription sub = new Subscription();
+sub.setExternalId("engine_room");
+// name the series this subscription fans out
+client.subscriptions().create(List.of(sub));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import datahub_sdk
+
+client.subscriptions.create([
+    datahub_sdk.Subscription(
+        external_id="engine_room",
+        name="Engine room",
+        timeseries=["engine_temperature", "engine_rpm"])])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::subscriptions::Subscription;
+use dataplatform_rust_sdk::generic::IdAndExtId;
+
+let sub = Subscription::new(
+    "engine_room".into(), "Engine room".into(),
+    vec![
+        IdAndExtId::from_external_id("engine_temperature"),
+        IdAndExtId::from_external_id("engine_rpm"),
+    ]);
+api.subscriptions.create(&sub).await?;
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Listen and ack
+
+Open the listener, drive it in a loop, and ack each message once you've durably
+handled it. Make the handler **idempotent** — a redelivery after a crash will replay
+the last unacked messages.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+The listener is `AutoCloseable`; `poll` returns `null` on a quiet interval.
+
+```java
+import ai.intellistream.datahub.sdk.subscriptions.SubscriptionListener;
+import ai.intellistream.datahub.sdk.subscriptions.SubscriptionMessage;
+import java.time.Duration;
+
+try (SubscriptionListener listener = client.subscriptions().listen(List.of("engine_room"))) {
+    while (running) {
+        SubscriptionMessage msg = listener.poll(Duration.ofSeconds(5));
+        if (msg == null) continue;
+        handle(msg.payload());        // event action + affected datapoints
+        listener.ack(msg.messageId());
+    }
+}
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+The listener is iterable and a context manager:
+
+```python
+with client.subscriptions.listen(["engine_room"]) as listener:
+    for msg in listener:
+        handle(msg.payload)
+        listener.ack([msg.message_id])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+`next().await` yields messages until the socket closes; reconnects are transparent.
+
+```rust
+let mut listener = api.subscriptions.listen(&["engine_room"]).await?;
+while let Some(result) = listener.next().await {
+    match result {
+        Ok(msg) => {
+            handle(&msg.payload);
+            listener.ack(&[msg.message_id.as_str()]).await?;
+        }
+        Err(e) => eprintln!("listen error: {}", e),
+    }
+}
+```
+
+</TabItem>
+</Tabs>
+
+## Change the interest set at runtime
+
+A long-lived listener doesn't need to reconnect to follow more (or fewer) series —
+`subscribe` / `unsubscribe` adjust it in place.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+listener.subscribe(List.of("engine_oil_pressure"));
+listener.unsubscribe(List.of("engine_rpm"));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+listener.subscribe(["engine_oil_pressure"])
+listener.unsubscribe(["engine_rpm"])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+listener.subscribe(&["engine_oil_pressure"]).await?;
+listener.unsubscribe(&["engine_rpm"]).await?;
+```
+
+</TabItem>
+</Tabs>
+
+:::tip nack to retry later
+If a message can't be processed right now (a downstream system is down), `nack` it
+instead of acking — it will be redelivered rather than dropped.
+:::

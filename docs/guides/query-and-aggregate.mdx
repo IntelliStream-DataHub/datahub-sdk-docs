@@ -1,0 +1,204 @@
+---
+sidebar_position: 2
+title: Query & aggregate time-series
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Query & aggregate time-series
+
+Read raw datapoints back for a window, then roll them up to fixed buckets
+(hourly averages, daily maxima) for a chart or report. Aggregates and the bucket
+size are part of the retrieve filter — no separate endpoint.
+
+## Raw datapoints for a window
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+import java.time.ZonedDateTime;
+
+var filter = new RetrieveFilter();
+filter.setExternalId("engine_temperature");
+filter.setStart(ZonedDateTime.now().minusDays(1));
+filter.setEnd(ZonedDateTime.now());
+filter.setLimit(10_000);
+
+var request = new DataRetriever<RetrieveFilter>();
+request.setItems(List.of(filter));
+
+client.timeseries().retrieve(request).getItems().forEach(series ->
+    series.getDatapoints().forEach(p ->
+        System.out.println(p.getTimestamp() + " = " + p.getValue())));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import datahub_sdk, pandas as pd
+
+rf = datahub_sdk.RetrieveFilter(
+    ts="engine_temperature",
+    start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=1),
+    end=pd.Timestamp.now(tz="UTC"),
+    limit=10_000)
+
+for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
+    print(dp.timestamp, dp.value)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+
+let filter = RetrieveFilter {
+    external_id: Some("engine_temperature".into()),
+    limit: Some(10_000),
+    ..Default::default()
+};
+let result = api.time_series.retrieve_datapoints(&DataWrapper::from(vec![filter])).await?;
+for series in result.get_items() {
+    for p in &series.datapoints {
+        println!("{} = {}", p.timestamp, p.value);
+    }
+}
+```
+
+</TabItem>
+</Tabs>
+
+## Hourly averages
+
+Set `aggregates` and `granularity` and the server returns one value per bucket.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+var filter = new RetrieveFilter();
+filter.setExternalId("engine_temperature");
+filter.setStart(ZonedDateTime.now().minusDays(1));
+filter.setEnd(ZonedDateTime.now());
+filter.setAggregates(List.of("average"));
+filter.setGranularity("1h");
+
+var request = new DataRetriever<RetrieveFilter>();
+request.setItems(List.of(filter));
+
+// each datapoint's value is the hourly average for its bucket
+client.timeseries().retrieve(request).getItems()
+    .forEach(s -> s.getDatapoints().forEach(p ->
+        System.out.println(p.getTimestamp() + " avg=" + p.getValue())));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+rf = datahub_sdk.RetrieveFilter(
+    ts="engine_temperature",
+    start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=1),
+    end=pd.Timestamp.now(tz="UTC"),
+    aggregates=["average", "max"],
+    granularity="1h")
+
+for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
+    print(dp.timestamp, dp.average, dp.max)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+let filter = RetrieveFilter {
+    external_id: Some("engine_temperature".into()),
+    aggregates: vec!["average".into(), "max".into()],
+    granularity: Some("1h".into()),
+    ..Default::default()
+};
+let result = api.time_series.retrieve_datapoints(&DataWrapper::from(vec![filter])).await?;
+for series in result.get_items() {
+    for p in &series.datapoints {
+        println!("{} avg={:?} max={:?}", p.timestamp, p.average, p.max);
+    }
+}
+```
+
+</TabItem>
+</Tabs>
+
+:::note Common aggregates
+`average`, `min`, `max`, `sum`, `count`. Granularity is a number plus a unit —
+`30s`, `5m`, `1h`, `1d`. The Python and Rust datapoint types expose each requested
+aggregate as its own field (`dp.average`, `dp.max`, …); the Java client returns one
+value per bucket on `getValue()`.
+:::
+
+## Paging large windows
+
+A wide window can exceed one response. When the result carries a cursor, pass it
+back to fetch the next page.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+String cursor = null;
+do {
+    var filter = new RetrieveFilter();
+    filter.setExternalId("engine_temperature");
+    filter.setStart(start);
+    filter.setEnd(end);
+    filter.setCursor(cursor);
+
+    var request = new DataRetriever<RetrieveFilter>();
+    request.setItems(List.of(filter));
+
+    var page = client.timeseries().retrieve(request).getItems().get(0);
+    page.getDatapoints().forEach(p -> handle(p));
+    cursor = page.getNextCursor();
+} while (cursor != null);
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+cursor = None
+while True:
+    rf = datahub_sdk.RetrieveFilter(ts="engine_temperature",
+                                    start=start, end=end, cursor=cursor)
+    page = client.timeseries.retrieve_datapoints(rf)[0]
+    for dp in page.get_datapoints():
+        handle(dp)
+    cursor = page.next_cursor
+    if not cursor:
+        break
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+let mut cursor: Option<String> = None;
+loop {
+    let filter = RetrieveFilter {
+        external_id: Some("engine_temperature".into()),
+        cursor: cursor.clone(),
+        ..Default::default()
+    };
+    let page = api.time_series
+        .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?
+        .get_items().remove(0);
+    for p in &page.datapoints { handle(p); }
+    cursor = page.next_cursor.clone();
+    if cursor.is_none() { break; }
+}
+```
+
+</TabItem>
+</Tabs>

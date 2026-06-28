@@ -1,0 +1,157 @@
+---
+sidebar_position: 3
+title: Model assets as a graph
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Model assets as a graph
+
+Most domains are a hierarchy of things that contain or feed each other — a plant
+contains lines, a line contains machines, a machine emits sensor readings. Model
+that as **resources** (the nodes) and **relations** (the edges), and the SDK returns
+the persisted graph in one call.
+
+## Create the graph
+
+Create the nodes and the edges between them together. Relationship-type names are
+upper-cased by the server, and external ids are canonicalized to snake_case.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+ResourceForm plant = new ResourceForm();
+plant.setExternalId("plant_oslo");
+plant.setName("Oslo Plant");
+
+ResourceForm line = new ResourceForm();
+line.setExternalId("line_a");
+line.setName("Assembly line A");
+
+ResourceForm press = new ResourceForm();
+press.setExternalId("press_07");
+press.setName("Hydraulic press 07");
+
+RelForm plantLine = new RelForm();
+plantLine.setName("contains");
+plantLine.setFromExternalId("plant_oslo");
+plantLine.setToExternalId("line_a");
+
+RelForm lineMachine = new RelForm();
+lineMachine.setName("contains");
+lineMachine.setFromExternalId("line_a");
+lineMachine.setToExternalId("press_07");
+
+var graph = client.resources().create(
+    List.of(plant, line, press), List.of(plantLine, lineMachine));
+
+System.out.println(graph.getNodes().size() + " nodes, "
+    + graph.getRelations().size() + " edges");
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import datahub_sdk
+
+nodes = [
+    datahub_sdk.Resource(external_id="plant_oslo", name="Oslo Plant"),
+    datahub_sdk.Resource(external_id="line_a", name="Assembly line A"),
+    datahub_sdk.Resource(external_id="press_07", name="Hydraulic press 07"),
+]
+edges = [
+    datahub_sdk.RelForm.by_external_ids("plant_oslo", "line_a", "contains"),
+    datahub_sdk.RelForm.by_external_ids("line_a", "press_07", "contains"),
+]
+
+graph = client.resources.create(nodes, edges)
+print(len(graph.nodes), "nodes,", len(graph.relations), "edges")
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::resources::Resource;
+use dataplatform_rust_sdk::relations::RelForm;
+
+let mut plant = Resource::new();
+plant.external_id = "plant_oslo".into();
+plant.name = "Oslo Plant".into();
+
+let mut line = Resource::new();
+line.external_id = "line_a".into();
+line.name = "Assembly line A".into();
+
+let mut press = Resource::new();
+press.external_id = "press_07".into();
+press.name = "Hydraulic press 07".into();
+
+let graph = api.resources.create(
+    vec![plant, line, press],
+    vec![
+        RelForm::by_external_ids("plant_oslo", "line_a", "contains"),
+        RelForm::by_external_ids("line_a", "press_07", "contains"),
+    ],
+).await?;
+```
+
+</TabItem>
+</Tabs>
+
+## Attach time-series to a node
+
+A machine's sensors are time-series. Tie a series to the machine that produces it
+with a relation, exactly as above (`press_07` → `produces` → `press_07_oil_temp`),
+then [ingest its datapoints](./ingest-timeseries.mdx).
+
+## Read the graph back
+
+Fetch nodes by external id; each resource carries its outgoing edges.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+var some = client.resources().byIds(List.of(
+    IdCollection.createFromExternalId("press_07")));
+
+Resource press = some.getItems().iterator().next();
+press.getRelations().forEach(edge ->
+    System.out.println(edge.getType() + " -> " + edge.getEnd()));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+press = client.resources.by_ids(["press_07"])[0]
+for edge in press.relations:
+    print(edge.relationship_type, "->", edge.end)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::generic::IdAndExtId;
+
+let some = api.resources.by_ids(&vec![IdAndExtId::from_external_id("press_07")]).await?;
+if let Some(press) = some.nodes().first() {
+    for edge in press.relations.iter().flatten() {
+        println!("{} -> {}", edge.relationship_type, edge.end);
+    }
+}
+```
+
+</TabItem>
+</Tabs>
+
+:::tip Group with datasets
+Relations model *structure*. To slice assets by ownership, environment or tenant —
+"everything in the Oslo plant" — also put them in a **dataset** (see the
+[Datasets reference](/reference/datasets)). A resource can sit in a graph and a
+dataset at once.
+:::

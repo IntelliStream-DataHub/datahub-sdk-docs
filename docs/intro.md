@@ -14,7 +14,7 @@ The SDK is available for **Java**, **Python** and **Rust**. Pick your language o
 
 :::tip Five-minute start
 Head to the [Quick start](/quickstart) to create a client and write your first
-datapoint, or jump to [Live monitoring](/guides/ingest-timeseries) to ingest data at scale.
+datapoint, or jump to [high-throughput ingestion](/guides/ingest-timeseries) to ingest data at scale.
 :::
 
 ## What you can do
@@ -25,4 +25,8 @@ datapoint, or jump to [Live monitoring](/guides/ingest-timeseries) to ingest dat
 - **Files** — attach documents and images to your assets.
 - **Subscriptions** — tail live data over a streaming connection.
 
-For every service, method and option, see the [API reference](/reference/client).
+## Where to go next
+
+- **[Examples](/guides/ingest-timeseries)** — task recipes: ingestion, graph modeling, querying & aggregation, live consumption, and event detection.
+- **[Industry scenarios](/industries/oil-and-gas)** — end-to-end walkthroughs for oil & gas, energy grids, finance, and IT operations.
+- **[API reference](/reference/client)** — every service, method and option, in Java, Python and Rust.

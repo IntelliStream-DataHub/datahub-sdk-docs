@@ -1,26 +1,29 @@
 ---
-title: Live monitoring (high-throughput ingestion)
+sidebar_position: 1
+title: High-throughput ingestion
 ---
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-# Live monitoring: high-throughput ingestion
+# High-throughput ingestion
 
-A common job: push a steady, high-volume stream of sensor readings into DataHub so a
-dashboard or alerting rule can act on them. The SDK parallelises ingestion for you — you
-hand it the data, it **chunks into batches and sends them concurrently**.
+A common job: push a steady, high-volume stream of sensor readings in so a dashboard
+or alerting rule can act on them. The SDK does the heavy lifting — it **chunks the
+data into batches and sends them concurrently**, retrying transient failures.
 
 :::note How it works
-Datapoints are chunked (default **10,000** per request — the analytics store is optimised
-for large batches), fanned out across virtual threads bounded by a concurrency limit, and
-transient failures are retried. You get back an `IngestResult` summarising what landed and
-what didn't.
+Datapoints are split into batches (default **10,000** per request — the store is
+optimised for large batches), sent concurrently up to a bounded in-flight limit, and
+transient failures (HTTP 429/5xx, network) are retried. The Java client returns an
+`IngestResult` summarising what landed and what didn't.
 :::
 
 ## Ingest a million readings
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
+
+`ingest` groups datapoints by series external id and returns an `IngestResult`.
 
 ```java
 var client = DatahubClient.fromEnv();
@@ -39,67 +42,62 @@ System.out.printf("ingested %,d, failed %,d%n", result.succeeded(), result.faile
 </TabItem>
 <TabItem value="python" label="Python">
 
+`insert_from_lists` takes whole arrays (NumPy / pandas) and batches them for you.
+
 ```python
+import numpy as np, pandas as pd
+
 client = DataHubClient.from_env()
 
-result = client.timeseries.ingest(
-    readings,                  # dict[str, list[tuple[datetime, float]]]
-    batch_size=10_000,
-    parallelism=16,
-    max_retries=3,
-)
-print(f"ingested {result.succeeded:,}, failed {result.failed:,}")
+client.timeseries.insert_from_lists(
+    timestamps=pd.date_range("2026-01-01", periods=1_000_000, freq="s", tz="UTC"),
+    values=np.random.rand(1_000_000),
+    ts="engine_temperature")
 ```
 
 </TabItem>
 <TabItem value="rust" label="Rust">
 
+`insert_datapoints` auto-batches large inputs (chunks above ~100k points).
+
 ```rust
-let api = datahub_sdk::create_api_service();
+use dataplatform_rust_sdk::create_api_service;
+use dataplatform_rust_sdk::generic::{DataWrapper, DatapointsCollection};
 
-let result = api.time_series
-    .ingest(readings, IngestOptions { batch_size: 10_000, parallelism: 16, max_retries: 3 })
-    .await?;
+let api = create_api_service();
 
-println!("ingested {}, failed {}", result.succeeded, result.failed);
+let mut dw = DataWrapper::new();
+dw.add_item(DatapointsCollection {
+    external_id: Some("engine_temperature".into()),
+    datapoints: readings,        // Vec<DatapointString { timestamp, value }>
+    ..Default::default()
+});
+api.time_series.insert_datapoints(&mut dw).await?;
 ```
 
 </TabItem>
 </Tabs>
 
-## Then query an aggregate
+## Tuning (Java)
 
-Roll the raw readings up to hourly averages for a chart:
+The `ingest` knobs let you trade throughput against load on the server:
 
-<Tabs groupId="lang">
-<TabItem value="java" label="Java">
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `batchSize` | `10_000` | Datapoints per request. |
+| `parallelism` | `8` | Concurrent in-flight requests. |
+| `maxRetries` | `3` | Retries for transient failures. |
+| `failFast` | `false` | Abort on the first failed batch instead of collecting errors. |
 
-```java
-var hourly = client.timeseries().aggregate("engine_temperature",
-    Aggregate.AVG, Granularity.HOUR, last(Duration.ofDays(1)));
-```
+When `failFast` is off, inspect `result.errors()` for the per-batch failures. See the
+[Time-series reference](/reference/timeseries#ingestresult) for the full result shape.
 
-</TabItem>
-<TabItem value="python" label="Python">
+## Then chart the trend
 
-```python
-hourly = client.timeseries.aggregate(
-    "engine_temperature", agg="avg", granularity="1h", last_days=1)
-```
-
-</TabItem>
-<TabItem value="rust" label="Rust">
-
-```rust
-let hourly = api.time_series
-    .aggregate("engine_temperature", Aggregate::Avg, Granularity::Hour, last_days(1))
-    .await?;
-```
-
-</TabItem>
-</Tabs>
+Once the data is in, roll it up to hourly or daily buckets for a dashboard — see
+[Query & aggregate time-series](./query-and-aggregate.mdx).
 
 :::warning Ordering
-Batches are sent in parallel, so there is **no cross-batch ordering guarantee** — which is
-fine for time-stamped data, since each datapoint carries its own timestamp.
+Batches are sent in parallel, so there is **no cross-batch ordering guarantee** —
+which is fine for time-stamped data, since each datapoint carries its own timestamp.
 :::

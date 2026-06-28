@@ -1,0 +1,9 @@
+{
+  "label": "Industry scenarios",
+  "position": 5,
+  "link": {
+    "type": "generated-index",
+    "title": "Industry scenarios",
+    "description": "End-to-end, real-world walkthroughs that map the SDK onto a domain — model the assets, ingest the signals, and act on them. Each scenario emphasizes a different part of the platform; together they cover the whole client."
+  }
+}
