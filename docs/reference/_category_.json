@@ -1,0 +1,9 @@
+{
+  "label": "Reference",
+  "position": 3,
+  "link": {
+    "type": "generated-index",
+    "title": "Java client reference",
+    "description": "Per-service reference for the Java client — every method, its parameters, and what it returns. All three clients (Java, Python, Rust) target the same DataHub REST API; the signatures below are the Java ones."
+  }
+}

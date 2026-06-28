@@ -1,0 +1,160 @@
+---
+sidebar_position: 2
+title: Quick start
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Quick start
+
+From zero to a stored datapoint in about five minutes.
+
+## 1. Install
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```kotlin
+// build.gradle.kts
+dependencies {
+    implementation("ai.intellistream:datahub-sdk:0.1.0")
+}
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```bash
+pip install datahub-sdk
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```toml
+# Cargo.toml
+[dependencies]
+dataplatform-rust-sdk = "0.1"
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Configure credentials
+
+The client reads configuration from the environment (or a `.env` file): a base URL and
+**either** a static token **or** OAuth2 client-credentials.
+
+```bash
+BASE_URL=https://api.intellistream.ai
+TOKEN=eyJhbGciOi...          # or CLIENT_ID / CLIENT_SECRET / TOKEN_URI
+```
+
+## 3. Create a client and write a datapoint
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+var client = DatahubClient.fromEnv();
+
+client.timeseries().create(
+    Timeseries.of("engine_temperature").unit("celsius"));
+
+client.timeseries().ingest(Map.of(
+    "engine_temperature", List.of(
+        Datapoint.of(Instant.now(), 92.4))));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import datahub_sdk, pandas as pd
+from datahub_sdk import DataHubClient
+
+client = DataHubClient.from_env()
+
+client.timeseries.create([
+    datahub_sdk.TimeSeries(external_id="engine_temperature", unit="celsius")])
+
+client.timeseries.insert_from_lists(
+    timestamps=[pd.Timestamp.now(tz="UTC")], values=[92.4], ts="engine_temperature")
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::create_api_service;
+use dataplatform_rust_sdk::timeseries::TimeSeries;
+use chrono::Utc;
+
+let api = create_api_service();
+
+api.time_series
+    .create_one(&TimeSeries::new("engine_temperature", "Engine temperature"))
+    .await?;
+api.time_series
+    .insert_datapoint(None, Some("engine_temperature".into()), Utc::now(), "92.4".into())
+    .await?;
+```
+
+</TabItem>
+</Tabs>
+
+## 4. Read it back
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+var filter = new RetrieveFilter();
+filter.setExternalId("engine_temperature");
+filter.setStart(ZonedDateTime.now().minusHours(1));
+filter.setEnd(ZonedDateTime.now());
+
+var request = new DataRetriever<RetrieveFilter>();
+request.setItems(List.of(filter));
+
+client.timeseries().retrieve(request).getItems()
+    .forEach(c -> c.getDatapoints().forEach(System.out::println));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+rf = datahub_sdk.RetrieveFilter(
+    ts="engine_temperature",
+    start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=1),
+    end=pd.Timestamp.now(tz="UTC"))
+
+for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
+    print(dp.timestamp, dp.value)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+
+let filter = RetrieveFilter {
+    external_id: Some("engine_temperature".into()),
+    limit: Some(100),
+    ..Default::default()
+};
+let points = api.time_series.retrieve_datapoints(&DataWrapper::from(vec![filter])).await?;
+for c in points.get_items() {
+    println!("{} points", c.datapoints.len());
+}
+```
+
+</TabItem>
+</Tabs>
+
+:::note Pick once, follow everywhere
+The tabs above all switch together — and your choice persists as you move through the
+docs. One selection for the whole site.
+:::

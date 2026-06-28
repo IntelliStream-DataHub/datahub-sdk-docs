@@ -1,0 +1,182 @@
+---
+sidebar_position: 2
+title: Resources
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Resources
+
+Hierarchical, asset-like entities and the relationships between them. Create resources
+and the edges between them in one call; the server returns the persisted graph.
+
+## Look up
+
+Fetch by numeric id or external id (you can mix them).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+import ai.intellistream.datahub.models.IdCollection;
+
+Resource pump = client.resources().getById(5677892).getItems().iterator().next();
+
+DataWrapper<Resource> some = client.resources().byIds(List.of(
+        IdCollection.createFromExternalId("pump_1"),
+        IdCollection.createFromId(5677892)));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+# pass entity objects, external-id strings, or numeric ids
+resources = client.resources.by_ids(["pump_1", 5677892])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::generic::IdAndExtId;
+
+let resources = api.resources.by_ids(&vec![
+    IdAndExtId::from_external_id("pump_1"),
+    IdAndExtId::from_id(5677892),
+]).await?;
+```
+
+</TabItem>
+</Tabs>
+
+## Create resources and relations
+
+Pass the resource forms (nodes) and the relation forms (edges); the call returns the
+created graph — nodes plus server-assigned edges. Relationship types are upper-cased by
+the server.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+ResourceForm plant = new ResourceForm();
+plant.setExternalId("plant_oslo");
+plant.setName("Oslo Plant");
+
+ResourceForm pump = new ResourceForm();
+pump.setExternalId("pump_1");
+pump.setName("Pump 1");
+
+RelForm contains = new RelForm();
+contains.setName("contains");
+contains.setFromExternalId("plant_oslo");
+contains.setToExternalId("pump_1");
+
+GraphDataWrapper<Resource, EdgeProxy> created = client.resources()
+        .create(List.of(plant, pump), List.of(contains));
+
+System.out.println(created.getNodes().size() + " resources, "
+        + created.getRelations().size() + " relations");
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import datahub_sdk
+
+plant = datahub_sdk.Resource(external_id="plant_oslo", name="Oslo Plant")
+pump = datahub_sdk.Resource(external_id="pump_1", name="Pump 1")
+contains = datahub_sdk.RelForm.by_external_ids("plant_oslo", "pump_1", "contains")
+
+result = client.resources.create([plant, pump], [contains])
+print(len(result.nodes), "resources,", len(result.relations), "relations")
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::resources::Resource;
+use dataplatform_rust_sdk::relations::RelForm;
+
+let mut plant = Resource::new();
+plant.external_id = "plant_oslo".into();
+plant.name = "Oslo Plant".into();
+
+let mut pump = Resource::new();
+pump.external_id = "pump_1".into();
+pump.name = "Pump 1".into();
+
+let contains = RelForm::by_external_ids("plant_oslo", "pump_1", "contains");
+
+let created = api.resources.create(vec![plant, pump], vec![contains]).await?;
+```
+
+</TabItem>
+</Tabs>
+
+## Search
+
+Free-text / fuzzy search across resources.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+ResourceSearch search = new ResourceSearch();
+// set the query / filters on the search object
+DataWrapper<Resource> matches = client.resources().search(search);
+```
+
+Use `filter(new ResourceRetreiver())` for structured filters (labels, metadata, parent).
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+form = datahub_sdk.SearchAndFilterForm(query="pump", limit=10)
+matches = client.resources.search(form)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::filters::SearchAndFilterForm;
+
+let form = SearchAndFilterForm { /* query, filters, limit */ ..Default::default() };
+let matches = api.resources.search(&form).await?;
+```
+
+</TabItem>
+</Tabs>
+
+## Delete
+
+Delete by id or external id; returns the removed graph.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+client.resources().delete(List.of(IdCollection.createFromExternalId("pump_1")));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+client.resources.delete(["pump_1"])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+api.resources.delete(&vec![IdAndExtId::from_external_id("pump_1")]).await?;
+```
+
+</TabItem>
+</Tabs>

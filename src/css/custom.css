@@ -1,0 +1,115 @@
+/* ============================================================================
+   GitBook-style skin for Docusaurus (Infima), themed with IntelliStream brand.
+   Brand palette (from intellistream.ai): teal #105984 / #005984, light blue
+   #98bbc8, peach #ffc49a.
+   ========================================================================== */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono&display=swap');
+
+:root {
+  /* Brand teal as the Infima primary */
+  --ifm-color-primary: #105984;
+  --ifm-color-primary-dark: #0e5077;
+  --ifm-color-primary-darker: #0d4b70;
+  --ifm-color-primary-darkest: #0a3e5c;
+  --ifm-color-primary-light: #1a648f;
+  --ifm-color-primary-lighter: #1f6b97;
+  --ifm-color-primary-lightest: #2a7aa8;
+
+  --brand-teal: #105984;
+  --brand-teal-deep: #005984;
+  --brand-blue: #98bbc8;
+  --brand-peach: #ffc49a;
+
+  --ifm-font-family-base: 'Inter', system-ui, -apple-system, sans-serif;
+  --ifm-font-family-monospace: 'JetBrains Mono', ui-monospace, monospace;
+  --ifm-heading-color: #15303f;
+  --ifm-font-color-base: #3b454f;
+  --ifm-line-height-base: 1.72;
+
+  --ifm-navbar-background-color: #ffffff;
+  --ifm-navbar-shadow: none;
+  --ifm-background-color: #ffffff;
+
+  --ifm-global-radius: 10px;
+  --ifm-code-border-radius: 6px;
+  --ifm-code-background: #f3f7f9;
+  --ifm-code-font-size: 88%;
+
+  --ifm-menu-color: #5c6b75;
+  --ifm-menu-color-active: var(--brand-teal);
+  --ifm-menu-color-background-active: #eaf2f6;
+  --ifm-toc-border-color: #e7edf0;
+  --ifm-hr-border-color: #e7edf0;
+  --ifm-link-color: var(--brand-teal);
+}
+
+/* Hairline navbar, no shadow (GitBook calm); roomy logo */
+.navbar { border-bottom: 1px solid #e7edf0; box-shadow: none; }
+/* Title: light weight. Light theme = a slightly brighter teal than #105984;
+   dark theme keeps the logo's light-blue (overridden in the dark block below). */
+.navbar__title { font-weight: 300; color: #1773a3; }
+.navbar__logo { height: 1.7rem; }
+
+/* Quiet sidebar tree */
+.menu { font-size: .84rem; padding: .8rem; }
+.menu__link { font-weight: 500; border-radius: 8px; }
+.menu__link--active { font-weight: 600; }
+
+/* Headings */
+.markdown h1 { font-weight: 700; letter-spacing: -.015em; }
+.markdown h2 {
+  font-weight: 650; letter-spacing: -.01em;
+  margin-top: 2.2rem; padding-bottom: .3rem;
+  border-bottom: 1px solid #e7edf0;
+}
+
+/* Rounded, bordered, shadowless code blocks */
+.theme-code-block,
+div[class^='codeBlockContainer'] {
+  border: 1px solid #e7edf0;
+  border-radius: 12px !important;
+  box-shadow: none !important;
+}
+
+/* Understated synced language tabs, brand-coloured when active */
+.tabs__item { font-weight: 600; color: #5c6b75; padding: .35rem .85rem; }
+.tabs__item--active { color: var(--brand-teal); border-bottom-color: var(--brand-teal); }
+
+/* Links + reading measure */
+.theme-doc-markdown { font-size: .95rem; }
+.markdown a { color: var(--brand-teal); text-decoration: none; }
+.markdown a:hover { text-decoration: underline; }
+
+/* A touch of brand: peach accent bar on "tip" admonitions */
+.theme-admonition-tip { border-left-color: var(--brand-peach); }
+
+[data-theme='dark'] {
+  --ifm-color-primary: #6aa9cd;
+  --ifm-color-primary-dark: #4f99c4;
+  --ifm-color-primary-darker: #4291bf;
+  --ifm-color-primary-darkest: #34789f;
+  --ifm-color-primary-light: #85b9d6;
+  --ifm-color-primary-lighter: #92c1da;
+  --ifm-color-primary-lightest: #b6d6e7;
+  --ifm-background-color: #0e1620;
+  --ifm-navbar-background-color: #0e1620;
+  --ifm-code-background: #15202b;
+  --ifm-heading-color: #e6eef4;
+  --ifm-font-color-base: #c2ccd6;
+  /* Legible greys/teals on the dark surface (the light-mode values were too dark) */
+  --ifm-menu-color: #aeb9c3;
+  --ifm-menu-color-active: #79b2d4;
+  --ifm-menu-color-background-active: #16242f;
+  --ifm-toc-border-color: #25313c;
+  --ifm-hr-border-color: #25313c;
+  --ifm-link-color: #79b2d4;
+}
+[data-theme='dark'] .navbar { border-bottom-color: #25313c; }
+[data-theme='dark'] .navbar__title { color: var(--brand-blue); }   /* keep light-blue title on dark */
+[data-theme='dark'] .markdown a { color: #79b2d4; }
+[data-theme='dark'] .markdown h2 { border-bottom-color: #25313c; }
+[data-theme='dark'] .theme-code-block,
+[data-theme='dark'] div[class^='codeBlockContainer'] { border-color: #25313c; }
+/* Language tabs: legible label text on dark */
+[data-theme='dark'] .tabs__item { color: #aeb9c3; }
+[data-theme='dark'] .tabs__item--active { color: var(--ifm-color-primary); border-bottom-color: var(--ifm-color-primary); }
