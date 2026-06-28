@@ -128,6 +128,19 @@ roll-ups surface the formations and crews where non-productive time accumulates,
 single biggest controllable cost in a drilling programme. See
 [Query & aggregate](/guides/query-and-aggregate).
 
+## See the result
+
+Run the setup, then the loop above. The demo kick (flow-out climbing past flow-in) trips
+the detector and a `kick_detected` event lands — confirm it:
+
+```python
+hits = client.events.filter(datahub_sdk.EventFilter(
+    basic_filter=datahub_sdk.BasicEventFilter(type="kick_detected"), limit=5))
+for e in hits:
+    print(e.external_id, "→", e.status)
+# kick_detected_a12_1751…  → critical
+```
+
 ## See also
 
 - [Consume live data](/guides/realtime-subscriptions) — the well-control monitoring loop.

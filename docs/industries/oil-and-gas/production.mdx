@@ -271,6 +271,22 @@ let shared: Vec<&str> = nb.nodes().iter()
 That single query turns two alarms into one incident — see
 [Correlate alarms with the graph](/guides/correlate-alarms) for the general pattern.
 
+## See the result
+
+Chart the intake pressure the alarm watches — it sags below the 80-bar line in the last
+half hour, which is exactly what trips the `esp_anomaly` event:
+
+```python
+import matplotlib.pyplot as plt
+
+rf = datahub_sdk.RetrieveFilter(ts="pump_intake_pressure_bar",
+    start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=2), end=pd.Timestamp.now(tz="UTC"))
+s = pd.Series({pd.to_datetime(p.timestamp): float(p.value)
+               for p in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()}).sort_index()
+s.plot(title="Pump intake pressure (bar)"); plt.axhline(80, color="r", ls="--"); plt.show()
+# the line drops from ~95 to ~75 bar — below the threshold, so the alarm fires
+```
+
 ## See also
 
 - [Model assets as a graph](/guides/model-assets-graph) — the field/well/pump modeling pattern.

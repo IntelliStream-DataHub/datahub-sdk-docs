@@ -116,6 +116,15 @@ Level, temperature and pressure are series per tank; trends catch a tank breathi
 abnormally or a level moving with no scheduled transfer — an early sign of a leak.
 See [Query & aggregate](/guides/query-and-aggregate).
 
+## See the result
+
+The reconciliation compares the 3000 bbl the tank actually lost against the 2500 bbl that
+was metered out — and flags the gap:
+
+```text
+unexplained_bbl ≈ 500.0     → an inventory_discrepancy event is raised for tank_t_12
+```
+
 ## See also
 
 - [Turn readings into events](/guides/detect-events) — the reconciliation rule.

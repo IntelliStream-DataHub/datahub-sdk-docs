@@ -137,6 +137,21 @@ api.events.create(&vec![upset]).await?;
 </TabItem>
 </Tabs>
 
+## See the result
+
+Chart the hourly energy you rolled up — the bar chart is the shape the board operator
+watches for drift:
+
+```python
+import matplotlib.pyplot as plt
+
+rf = datahub_sdk.RetrieveFilter(ts="cdu_1_energy_gj",
+    start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=1), end=pd.Timestamp.now(tz="UTC"),
+    aggregates=["sum"], granularity="1h")
+vals = [dp.sum for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()]
+plt.bar(range(len(vals)), vals); plt.title("CDU-1 hourly energy (GJ)"); plt.xlabel("hour"); plt.show()
+```
+
 ## See also
 
 - [Query & aggregate](/guides/query-and-aggregate) — energy-intensity and yield KPIs.

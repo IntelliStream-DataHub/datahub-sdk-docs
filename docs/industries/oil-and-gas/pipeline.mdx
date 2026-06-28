@@ -159,6 +159,16 @@ for node in around.nodes() {
 </TabItem>
 </Tabs>
 
+## See the result
+
+With the demo leak in place (inflow 1000 vs outflow 940), step 1 raises a
+`leak_suspected` event and step 2 prints the valves that bound the segment:
+
+```text
+close: valve_v18
+close: valve_v19
+```
+
 ## See also
 
 - [Turn readings into events](/guides/detect-events) — the mass-balance rule.
