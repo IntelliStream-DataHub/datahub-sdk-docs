@@ -26,6 +26,12 @@ These steps read a series that already exists. [Generate a sandbox](/advanced/ge
 first — section B ingests the decline curve this build forecasts.
 :::
 
+:::tip New to machine learning?
+No background needed. Skim the [gentle primer](/advanced/machine-learning-gently) for the
+ideas in plain language — model, feature, training, and the algorithm itself — and use
+[Generate sample data](/advanced/generate-sample-data) for a sandbox to run this against.
+:::
+
 ## 1. Load the history
 
 Pull a long, regularly-sampled history and scale it — neural nets train best on values
@@ -160,6 +166,12 @@ below its economic limit.
 - **Direct multi-step.** Predict all `HORIZON` steps at once (`Dense(HORIZON)`) to avoid
   recursive error build-up.
 - **Quantiles.** Train with a pinball loss for a P10/P90 band, not just a point forecast.
+
+## Further reading
+
+- **LSTM** — [Wikipedia](https://en.wikipedia.org/wiki/Long_short-term_memory) · [Keras](https://keras.io/api/layers/recurrent_layers/lstm/)
+- **Recurrent neural networks** — [Wikipedia](https://en.wikipedia.org/wiki/Recurrent_neural_network)
+- **Decline curve analysis** (the domain) — [Wikipedia](https://en.wikipedia.org/wiki/Decline_curve_analysis)
 
 ## See also
 

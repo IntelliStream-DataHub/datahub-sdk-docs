@@ -23,6 +23,12 @@ The technique — a classifier trained on a **forward-looking label** — genera
 "predict the incident ahead of time" problem: a transformer about to trip, a server
 about to breach SLO, a line about to jam.
 
+:::tip New to machine learning?
+No background needed. Skim the [gentle primer](/advanced/machine-learning-gently) for the
+ideas in plain language — model, feature, training, and the algorithm itself — and use
+[Generate sample data](/advanced/generate-sample-data) for a sandbox to run this against.
+:::
+
 ## 1. Load the signals that precede a crash
 
 Pull the pen's history at a few-minute cadence — the oxygen itself plus the drivers that
@@ -126,6 +132,12 @@ start — the difference between a near-miss and a lost pen.
   oxygen as features, or correlate via [the graph](/guides/correlate-alarms).
 - **Close the loop.** Feed confirmed outcomes back as fresh labels and re-train on a
   schedule so the model tracks the season.
+
+## Further reading
+
+- **Classification** — [Wikipedia](https://en.wikipedia.org/wiki/Statistical_classification)
+- **Gradient boosting** — [Wikipedia](https://en.wikipedia.org/wiki/Gradient_boosting)
+- **Precision & recall** (judging a rare-event model) — [Wikipedia](https://en.wikipedia.org/wiki/Precision_and_recall)
 
 ## See also
 

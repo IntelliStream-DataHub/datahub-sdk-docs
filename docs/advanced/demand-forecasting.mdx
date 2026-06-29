@@ -19,6 +19,12 @@ hour. The pattern is the same regardless of domain — past values plus calendar
 predict the next ones — and the forecast becomes a **new series** you can chart against
 actuals and alert on.
 
+:::tip New to machine learning?
+No background needed. Skim the [gentle primer](/advanced/machine-learning-gently) for the
+ideas in plain language — model, feature, training, and the algorithm itself — and use
+[Generate sample data](/advanced/generate-sample-data) for a sandbox to run this against.
+:::
+
 ## 1. Load the history
 
 Pull a long, regularly-sampled history of the quantity you want to forecast.
@@ -164,6 +170,12 @@ actual, is set to exceed a limit, hours before it happens.
   instead of a single line.
 - **Backtest rolling.** Re-fit on a sliding window and score each step to track drift
   over time.
+
+## Further reading
+
+- **Gradient boosting** — [Wikipedia](https://en.wikipedia.org/wiki/Gradient_boosting) · [scikit-learn](https://scikit-learn.org/stable/modules/ensemble.html#histogram-based-gradient-boosting)
+- **Time-series forecasting** — [Wikipedia](https://en.wikipedia.org/wiki/Time_series)
+- **The ideas in plain language** — [Machine learning, gently](/advanced/machine-learning-gently)
 
 ## See also
 

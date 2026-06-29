@@ -24,6 +24,12 @@ These steps read series and failure events that already exist. [Generate a sandb
 first — section E ingests the labelled failure history this build trains on.
 :::
 
+:::tip New to machine learning?
+No background needed. Skim the [gentle primer](/advanced/machine-learning-gently) for the
+ideas in plain language — model, feature, training, and the algorithm itself — and use
+[Generate sample data](/advanced/generate-sample-data) for a sandbox to run this against.
+:::
+
 ## 1. Engineer one feature row per asset per day
 
 For each pump on each day, summarise the recent week of its sensors into a feature row.
@@ -170,6 +176,12 @@ if risk > 0.6:
   (`monotone_constraints`) for a model that matches engineering intuition.
 - **Compare.** Benchmark against [Random Forest](/advanced/random-forest-soft-sensor) and
   the sklearn gradient booster in [fraud classification](/advanced/fraud-classification).
+
+## Further reading
+
+- **XGBoost** — [Wikipedia](https://en.wikipedia.org/wiki/XGBoost) · [docs](https://xgboost.readthedocs.io/)
+- **Gradient boosting** — [Wikipedia](https://en.wikipedia.org/wiki/Gradient_boosting)
+- **Feature importance** — [scikit-learn guide](https://scikit-learn.org/stable/modules/permutation_importance.html)
 
 ## See also
 

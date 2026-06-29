@@ -24,6 +24,12 @@ These steps read series (and a graph for section 3) that already exist.
 [Generate a sandbox](/advanced/generate-sample-data) first.
 :::
 
+:::tip New to machine learning?
+No background needed. Skim the [gentle primer](/advanced/machine-learning-gently) for the
+ideas in plain language — model, feature, training, and the algorithm itself — and use
+[Generate sample data](/advanced/generate-sample-data) for a sandbox to run this against.
+:::
+
 ## 1. Asset cohorts — group assets that behave alike
 
 Summarise each asset by a behavioural signature — a few aggregates of its key series —
@@ -173,6 +179,12 @@ scores = {k: silhouette_score(Xs, KMeans(k, n_init=10, random_state=0).fit_predi
           for k in range(2, 8)}
 best_k = max(scores, key=scores.get)
 ```
+
+## Further reading
+
+- **k-means** — [Wikipedia](https://en.wikipedia.org/wiki/K-means_clustering)
+- **Spectral clustering** (clustering a graph) — [Wikipedia](https://en.wikipedia.org/wiki/Spectral_clustering)
+- **Silhouette score** (choosing k) — [Wikipedia](https://en.wikipedia.org/wiki/Silhouette_%28clustering%29)
 
 ## See also
 

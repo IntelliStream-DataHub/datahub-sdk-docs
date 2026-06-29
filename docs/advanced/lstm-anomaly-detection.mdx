@@ -25,6 +25,12 @@ These steps read series that already exist. [Generate a sandbox](/advanced/gener
 first — section C ingests the correlated multivariate signal (with an injected fault) this build watches.
 :::
 
+:::tip New to machine learning?
+No background needed. Skim the [gentle primer](/advanced/machine-learning-gently) for the
+ideas in plain language — model, feature, training, and the algorithm itself — and use
+[Generate sample data](/advanced/generate-sample-data) for a sandbox to run this against.
+:::
+
 ## 1. Load the normal multivariate window
 
 Pull several channels over a period the operation ran normally, align them, and scale.
@@ -160,6 +166,12 @@ if error[-3:].mean() > THRESHOLD:
   the pattern — flow-out vs. pit volume points to different failure modes.
 - **Compare with the simpler detector.** The [Isolation Forest](/advanced/predictive-maintenance)
   on engineered features is cheaper; reach for the LSTM when the *temporal* pattern matters.
+
+## Further reading
+
+- **LSTM** — [Wikipedia](https://en.wikipedia.org/wiki/Long_short-term_memory)
+- **Autoencoder** — [Wikipedia](https://en.wikipedia.org/wiki/Autoencoder)
+- **Anomaly detection** — [Wikipedia](https://en.wikipedia.org/wiki/Anomaly_detection)
 
 ## See also
 
