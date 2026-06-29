@@ -50,10 +50,21 @@ idx, vib = degrading_vibration()
 ingest("pump_07_vibration_mm_s", idx, vib, unit="mm_s")
 ```
 
+The same pump's slower signals — bearing temperature, oil pressure, and a stand-in
+anomaly score — feed the [asset health score](/advanced/asset-health-score):
+
+```python
+hrs = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=24*60, freq="1h")
+n = len(hrs)
+ingest("pump_07_bearing_temp_c", hrs, 55 + np.linspace(0, 18, n) + np.random.normal(0, 1, n), unit="celsius")
+ingest("pump_07_oil_pressure_kpa", hrs, 320 - np.linspace(0, 60, n) + np.random.normal(0, 5, n), unit="kpa")
+# stand-in for the predictive-maintenance output, if you haven't run that scenario yet
+ingest("pump_07_vibration_anomaly", hrs, np.clip(np.linspace(0, 0.9, n) + np.random.normal(0, 0.03, n), 0, 1))
+```
+
 ## B. A production decline curve
 
-For [demand forecasting](/advanced/demand-forecasting) and
-[LSTM forecasting](/advanced/lstm-forecasting): a hyperbolic decline with noise and a
+For [LSTM forecasting](/advanced/lstm-forecasting): a hyperbolic decline with noise and a
 weekly wobble — the shape of a producing well's rate.
 
 ```python
@@ -121,18 +132,89 @@ for day_offset in (40, 95, 160, 240):                     # a few past failures
 ## F. A small graph
 
 For the graph-feature builds ([fraud classification](/advanced/fraud-classification),
-[K-Means communities](/advanced/kmeans-clustering)): a handful of accounts and the
-transfers between them.
+[K-Means communities](/advanced/kmeans-clustering)): the ordinary accounts
+`account_1…7`, plus the flagged ring that fraud classification traverses from
+`account_77310`.
 
 ```python
-nodes = [datahub_sdk.Resource(external_id=f"account_{i}", name=f"Account {i}") for i in range(1, 8)]
+ring = ["account_77310", "account_44120", "account_61885", "account_22907"]   # a flagged ring
+nodes = ([datahub_sdk.Resource(external_id=f"account_{i}", name=f"Account {i}") for i in range(1, 8)]
+         + [datahub_sdk.Resource(external_id=a, name=a.replace("_", " ").title()) for a in ring])
 edges = [
     datahub_sdk.RelForm.by_external_ids("account_1", "account_2", "sent_to"),
     datahub_sdk.RelForm.by_external_ids("account_2", "account_3", "sent_to"),
     datahub_sdk.RelForm.by_external_ids("account_3", "account_1", "sent_to"),   # a loop
     datahub_sdk.RelForm.by_external_ids("account_3", "account_4", "sent_to"),
+    # the flagged ring fraud-classification walks out from account_77310
+    datahub_sdk.RelForm.by_external_ids("account_77310", "account_44120", "sent_to"),
+    datahub_sdk.RelForm.by_external_ids("account_44120", "account_61885", "sent_to"),
+    datahub_sdk.RelForm.by_external_ids("account_61885", "account_22907", "sent_to"),
+    datahub_sdk.RelForm.by_external_ids("account_22907", "account_77310", "sent_to"),   # closes the ring
 ]
 client.resources.create(nodes, edges)
+```
+
+## G. An electrical feeder load curve
+
+For [demand forecasting](/advanced/demand-forecasting): 120 days of hourly feeder load
+with the daily double-peak, a lighter weekend, and a slow seasonal drift — the shape the
+forecaster learns.
+
+```python
+def feeder_load(days=120):
+    idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=days*24, freq="1h")
+    t = np.arange(days*24)
+    daily   = 8 * np.sin(2*np.pi*((t % 24) - 6)/24)        # morning & evening peaks
+    weekend = -3 * (((t // 24) % 7) >= 5)                  # weekends run lighter
+    season  = 4 * np.sin(2*np.pi*t/(24*365))              # slow seasonal swing
+    return idx, np.clip(30 + daily + weekend + season + np.random.normal(0, 1, len(t)), 5, None)
+
+idx, load = feeder_load()
+ingest("feeder_f12_load_mw", idx, load, unit="mw")
+```
+
+## H. Fish-pen oxygen, with crash episodes
+
+For the [oxygen-crash early warning](/advanced/oxygen-crash-early-warning): 30 days of
+dissolved oxygen and water temperature at 15-minute resolution, with a few episodes where
+oxygen plunges — the crashes the model learns to see coming.
+
+```python
+def pen_oxygen(days=30):
+    idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=days*24*4, freq="15min")
+    n = len(idx)
+    temp = 12 + 2*np.sin(2*np.pi*np.arange(n)/(24*4)) + np.random.normal(0, 0.2, n)
+    do   = 8.5 - 0.15*(temp - 12) + np.random.normal(0, 0.2, n)     # warmer water holds less O2
+    for start in (5*24*4, 14*24*4, 23*24*4):                        # three crash episodes
+        do[start:start+8]    -= np.linspace(0, 4, 8)
+        do[start+8:start+20] -= 4
+    return idx, np.clip(do, 1, None), temp
+
+idx, do, temp = pen_oxygen()
+ingest("pen_h_07_dissolved_oxygen_mg_l", idx, do, unit="mg_l")
+ingest("pen_h_07_water_temp_c", idx, temp, unit="celsius")
+```
+
+## I. One asset's operating channels
+
+For the [K-Means operating regimes](/advanced/kmeans-clustering): four channels for a
+single unit as it swings between idle, ramp, steady and overload.
+
+```python
+def operating_modes(minutes=60*24*14):
+    idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=minutes, freq="1min")
+    duty = (np.sin(2*np.pi*np.arange(minutes)/(60*8)) + 1) / 2      # 0..1 duty cycle
+    load = np.clip(duty*80 + np.random.normal(0, 3, minutes), 0, None)
+    return idx, {
+        "unit_3_load_mw":      load,
+        "unit_3_temp_c":       120 + 0.5*load + np.random.normal(0, 2, minutes),
+        "unit_3_pressure_kpa": 180 + 0.7*load + np.random.normal(0, 3, minutes),
+        "unit_3_flow_m3h":     20 + 0.4*load + np.random.normal(0, 1, minutes),
+    }
+
+idx, channels = operating_modes()
+for tag, values in channels.items():
+    ingest(tag, idx, values)
 ```
 
 ---
