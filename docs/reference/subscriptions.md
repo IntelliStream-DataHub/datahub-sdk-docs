@@ -64,18 +64,31 @@ api.subscriptions.delete(&vec![IdAndExtId::from_external_id("engine_temps")]).aw
 
 ## Live delivery
 
-`listen` opens an authenticated WebSocket over one or more subscriptions. Drive it in a
-loop and **ack** the messages you've processed — anything left unacked is redelivered on
-reconnect.
+`listen` opens an authenticated WebSocket over one or more subscriptions. Stream messages
+to a handler or drive a loop, and **ack** the messages you've processed — anything left
+unacked is redelivered on reconnect.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
 
-The listener is `AutoCloseable`; `poll` returns `null` on timeout:
+`stream` delivers each message on a dedicated virtual thread and auto-acks once the
+handler returns (throw to nack); the returned handle is `AutoCloseable`:
+
+```java
+import ai.intellistream.datahub.sdk.subscriptions.SubscriptionMessage;
+
+try (var stream = client.subscriptions().listen(List.of("engine_temps"))
+        .stream((SubscriptionMessage msg) -> process(msg.payload()))) {
+    awaitShutdown();
+}
+```
+
+Or drive `poll` yourself — a blocking queue hand-off (not network polling) that returns
+`null` on timeout. Reach for `poll`, or `stream(handler, AckMode.MANUAL)`, when you need
+to ack on your own schedule:
 
 ```java
 import ai.intellistream.datahub.sdk.subscriptions.SubscriptionListener;
-import ai.intellistream.datahub.sdk.subscriptions.SubscriptionMessage;
 import java.time.Duration;
 
 try (SubscriptionListener listener = client.subscriptions().listen(List.of("engine_temps"))) {
@@ -122,8 +135,9 @@ while let Some(result) = listener.next().await {
 </TabItem>
 </Tabs>
 
-Every listener also exposes `ack`/`nack`, `subscribe`/`unsubscribe`/`set_subscriptions`
-to change the live interest set at runtime, and `close`.
+Every listener also exposes `stream` for push delivery, `ack`/`nack`,
+`subscribe`/`unsubscribe`/`set_subscriptions` to change the live interest set at runtime,
+and `close`.
 
 A delivered message carries the originating subscription's external id, an opaque
 `messageId` you echo back to `ack`/`nack`, and a `payload` describing the fan-out event

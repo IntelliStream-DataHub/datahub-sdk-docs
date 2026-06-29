@@ -58,18 +58,32 @@ api.subscriptions.create(&sub).await?;
 
 ## 2. Listen and ack
 
-Open the listener, drive it in a loop, and ack each message once you've durably
+Hand each message to a handler (or drive a loop yourself), and ack once you've durably
 handled it. Make the handler **idempotent** — a redelivery after a crash will replay
 the last unacked messages.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
 
-The listener is `AutoCloseable`; `poll` returns `null` on a quiet interval.
+Register a handler with `stream` — a dedicated virtual thread delivers each message **as
+it arrives** and acks it once your handler returns (or nacks it if the handler throws).
+The returned handle stops delivery and closes the listener, so use try-with-resources.
+
+```java
+import ai.intellistream.datahub.sdk.subscriptions.SubscriptionMessage;
+
+try (var stream = client.subscriptions().listen(List.of("engine_room"))
+        .stream((SubscriptionMessage msg) -> handle(msg.payload()))) {   // auto-acks on return
+    awaitShutdown();        // your app's lifecycle; closing the handle ends the stream
+}
+```
+
+Prefer a loop, or want to ack on your own schedule? Drive `poll` yourself — it blocks up
+to the timeout and returns `null` on a quiet interval (it is a blocking queue hand-off,
+**not** network polling):
 
 ```java
 import ai.intellistream.datahub.sdk.subscriptions.SubscriptionListener;
-import ai.intellistream.datahub.sdk.subscriptions.SubscriptionMessage;
 import java.time.Duration;
 
 try (SubscriptionListener listener = client.subscriptions().listen(List.of("engine_room"))) {
@@ -149,5 +163,8 @@ listener.unsubscribe(&["engine_rpm"]).await?;
 
 :::tip nack to retry later
 If a message can't be processed right now (a downstream system is down), `nack` it
-instead of acking — it will be redelivered rather than dropped.
+instead of acking — it will be redelivered rather than dropped. With `stream`, throwing
+from the handler nacks for you; to control acks explicitly use
+`stream(handler, AckMode.MANUAL)` and call `ack`/`nack` yourself. With `poll`, just call
+`nack` instead of `ack`.
 :::
