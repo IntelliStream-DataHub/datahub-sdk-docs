@@ -15,6 +15,32 @@ and an event trail for post-incident review.
 This scenario centres on **live consumption**: a long-running worker that tails the
 metrics stream and reacts in real time, rather than polling on a timer.
 
+## Set up demo data
+
+New workspace? Run this once (Python) to create the checkout latency series, **create the
+subscription before we listen** (with a breach), and build the dependency graph where two
+services share a database — so step 4's correlation finds the shared cause. Safe to re-run.
+
+```python
+import datahub_sdk, numpy as np, pandas as pd
+
+client = datahub_sdk.DataHubClient.from_env()
+
+client.timeseries.create([datahub_sdk.TimeSeries(external_id="service_checkout_request_latency_ms", name="Checkout p99 latency")])
+client.subscriptions.create([datahub_sdk.Subscription(
+    external_id="checkout_slo", name="Checkout SLO", timeseries=["service_checkout_request_latency_ms"])])
+idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=60, freq="1min")
+lat = np.full(60, 180.0); lat[-10:] = 360.0          # p99 breaches the 300 ms SLO
+client.timeseries.insert_from_lists(timestamps=idx, values=lat, ts="service_checkout_request_latency_ms")
+
+client.resources.create(
+    [datahub_sdk.Resource(external_id=x, name=x) for x in
+     ["service_checkout", "service_payments", "order_db", "host_web_01"]],
+    [datahub_sdk.RelForm.by_external_ids("service_checkout", "order_db", "depends_on"),
+     datahub_sdk.RelForm.by_external_ids("service_payments", "order_db", "depends_on"),
+     datahub_sdk.RelForm.by_external_ids("service_checkout", "host_web_01", "runs_on")])
+```
+
 ## 1. Model services and hosts
 
 A service *runs on* hosts; both are resources. Modeling the topology lets an alert
@@ -239,6 +265,15 @@ let shared: Vec<&str> = payments.nodes().iter()
 The reverse is just as useful for change management: `fetchRelated` from a component
 you're about to restart returns its **blast radius** — every service that depends on
 it. See [Correlate alarms with the graph](/guides/correlate-alarms) for the pattern.
+
+## See the result
+
+The breach trips the loop, and expanding the two affected services finds their common cause:
+
+```text
+slo_breach event raised for service_checkout
+shared dependency: order_db        ← fix the database, not each service
+```
 
 ## See also
 

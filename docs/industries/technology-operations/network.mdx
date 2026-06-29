@@ -17,6 +17,31 @@ shares with others.
 What we solve here is finding and localizing degradation fast, and planning capacity
 before congestion bites.
 
+## Set up demo data
+
+New workspace? Run this once (Python) to create two cells' utilisation series (with
+busy-hour peaks) and the topology where they share a backhaul link — so the localisation
+in step 2 points at the link. Safe to re-run.
+
+```python
+import datahub_sdk, numpy as np, pandas as pd
+
+client = datahub_sdk.DataHubClient.from_env()
+
+util = 50 + 40 * np.clip(np.sin(np.arange(168) / 24 * 2 * np.pi), 0, 1)    # ~90% at busy hour
+idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=168, freq="1h")
+for c in ["cell_oslo_4412", "cell_oslo_4418"]:
+    client.timeseries.create([datahub_sdk.TimeSeries(external_id=f"{c}_prb_util", name=f"{c} PRB util")])
+    client.timeseries.insert_from_lists(timestamps=idx, values=util, ts=f"{c}_prb_util")
+
+client.resources.create(
+    [datahub_sdk.Resource(external_id=x, name=x) for x in
+     ["cell_oslo_4412", "cell_oslo_4418", "backhaul_link_88", "controller_rnc_3"]],
+    [datahub_sdk.RelForm.by_external_ids("cell_oslo_4412", "backhaul_link_88", "backhauled_by"),
+     datahub_sdk.RelForm.by_external_ids("cell_oslo_4418", "backhaul_link_88", "backhauled_by"),
+     datahub_sdk.RelForm.by_external_ids("backhaul_link_88", "controller_rnc_3", "connects_to")])
+```
+
 ## 1. Find the busy-hour congestion
 
 Per-cell throughput, drop rate and active users are series. Aggregating to hourly peaks
@@ -128,6 +153,14 @@ let shared: Vec<&str> = c2.nodes().iter()
 
 </TabItem>
 </Tabs>
+
+## See the result
+
+Busy-hour utilisation peaks near 90%, and the two degraded cells share one element:
+
+```text
+backhaul_link_88        ← fix the link, not the dozen cells behind it
+```
 
 ## See also
 

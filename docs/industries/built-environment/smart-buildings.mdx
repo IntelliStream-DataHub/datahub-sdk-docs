@@ -16,6 +16,29 @@ hours actually go so they can cut waste.
 This scenario pairs **live comfort monitoring** with **energy aggregation** on the same
 building model.
 
+## Set up demo data
+
+New workspace? Run this once (Python) to create a zone's CO₂ series, **create the
+subscription before we listen** (with a stuffy spell), and an energy series for the
+roll-up. Safe to re-run.
+
+```python
+import datahub_sdk, numpy as np, pandas as pd
+
+client = datahub_sdk.DataHubClient.from_env()
+
+client.timeseries.create([datahub_sdk.TimeSeries(external_id="zone_l8_co2_ppm", name="L8 open-plan CO2")])
+client.subscriptions.create([datahub_sdk.Subscription(
+    external_id="tower_a_comfort", name="Tower A comfort", timeseries=["zone_l8_co2_ppm"])])
+idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=60, freq="1min")
+co2 = np.full(60, 600.0); co2[-10:] = 1180.0          # out of comfort band
+client.timeseries.insert_from_lists(timestamps=idx, values=co2, ts="zone_l8_co2_ppm")
+
+client.timeseries.create([datahub_sdk.TimeSeries(external_id="tower_a_l8_energy_kwh", name="Tower A L8 energy")])
+idx2 = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=30, freq="1d")
+client.timeseries.insert_from_lists(timestamps=idx2, values=np.random.uniform(200, 400, 30), ts="tower_a_l8_energy_kwh")
+```
+
 ## 1. Watch comfort live
 
 Subscribe to the zone comfort series and react as readings land — raise a
@@ -150,6 +173,14 @@ When several zones go uncomfortable together, walk the graph from each to the ai
 handler they share — the same [alarm correlation](/guides/correlate-alarms) trick finds
 the one unit behind the complaints.
 :::
+
+## See the result
+
+The stuffy zone trips the loop before the complaints come in:
+
+```text
+comfort_alert_l8_…  → open   (CO₂ 1180 ppm, above the comfort band)
+```
 
 ## See also
 
