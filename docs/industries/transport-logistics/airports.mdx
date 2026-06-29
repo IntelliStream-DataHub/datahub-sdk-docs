@@ -17,6 +17,22 @@ falling behind while it can still be recovered**, not after pushback is missed.
 What we solve here is delay propagation: catching the slow leg of a turnaround in time
 to throw resources at it.
 
+## Set up demo data
+
+New workspace? Run this once (Python) to create the stand's turnaround feed, **create the
+subscription before we listen**, and push a leg-overrun reading. Safe to re-run.
+
+```python
+import datahub_sdk, pandas as pd
+
+client = datahub_sdk.DataHubClient.from_env()
+
+client.timeseries.create([datahub_sdk.TimeSeries(external_id="stand_b12_fuelling_progress", name="Stand B12 fuelling")])
+client.subscriptions.create([datahub_sdk.Subscription(
+    external_id="stand_b12_turnaround", name="Stand B12 turnaround", timeseries=["stand_b12_fuelling_progress"])])
+client.timeseries.insert_from_lists(timestamps=[pd.Timestamp.now(tz="UTC")], values=[1.0], ts="stand_b12_fuelling_progress")
+```
+
 ## 1. Track each turnaround milestone live
 
 Milestone timestamps and progress stream in per stand. When a leg overruns its planned
@@ -97,6 +113,14 @@ with the whole chain in view.
 On-time performance and per-leg durations are series; daily roll-ups by stand and
 ground-handler surface the legs that chronically run long. See
 [Query & aggregate](/guides/query-and-aggregate).
+
+## See the result
+
+The overrunning leg trips the loop:
+
+```text
+turnaround_risk_su204_…  → open   (fuelling running past plan, slot at risk)
+```
 
 ## See also
 

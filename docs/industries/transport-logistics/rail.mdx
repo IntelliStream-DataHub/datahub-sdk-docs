@@ -16,6 +16,24 @@ question, and on a graph it's a single traversal.
 This scenario introduces a graph pattern the others don't: **connectivity** — walk the
 network to see what's still reachable after a link goes down.
 
+## Set up demo data
+
+New workspace? Run this once (Python) to create the rail network (stations joined by
+`connects_to` track) so the reachability check has a graph to walk. Safe to re-run.
+
+```python
+import datahub_sdk
+
+client = datahub_sdk.DataHubClient.from_env()
+
+client.resources.create(
+    [datahub_sdk.Resource(external_id=x, name=x) for x in
+     ["station_oslo_s", "junction_lierstranda", "station_drammen", "station_bergen_n"]],
+    [datahub_sdk.RelForm.by_external_ids("station_oslo_s", "junction_lierstranda", "connects_to"),
+     datahub_sdk.RelForm.by_external_ids("junction_lierstranda", "station_drammen", "connects_to"),
+     datahub_sdk.RelForm.by_external_ids("station_drammen", "station_bergen_n", "connects_to")])
+```
+
 ## 1. Model the network
 
 Stations are resources; track segments are `connects_to` edges between them.
@@ -125,6 +143,16 @@ for the traversal mechanics.
 Dwell times and delays are series (`station_drammen_dwell_s`, `service_r10_delay_min`);
 roll them up for the punctuality report and raise a `delay_threshold` event when a
 service slips past its allowance.
+
+## See the result
+
+With the network intact, the destination is reachable:
+
+```text
+route open      ← station_bergen_n is in the set reachable from station_oslo_s
+```
+
+Delete a `connects_to` segment and re-run the check and it prints `SEVERED — reroute required`.
 
 ## See also
 

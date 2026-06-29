@@ -15,6 +15,22 @@ not when the angry message arrives.
 
 What we solve here is hitting delivery windows and cutting failed first attempts.
 
+## Set up demo data
+
+New workspace? Run this once (Python) to create a van's ETA-slack feed, **create the
+subscription before we listen**, and push a behind-schedule reading. Safe to re-run.
+
+```python
+import datahub_sdk, pandas as pd
+
+client = datahub_sdk.DataHubClient.from_env()
+
+client.timeseries.create([datahub_sdk.TimeSeries(external_id="van_22_eta_slack_min", name="Van 22 ETA slack")])
+client.subscriptions.create([datahub_sdk.Subscription(
+    external_id="fleet_eta", name="Fleet ETA", timeseries=["van_22_eta_slack_min"])])
+client.timeseries.insert_from_lists(timestamps=[pd.Timestamp.now(tz="UTC")], values=[-12.0], ts="van_22_eta_slack_min")
+```
+
 ## 1. Catch a slipping route live
 
 Each van streams progress against its plan — stops completed, running ETA. When the
@@ -88,6 +104,14 @@ On-time rate, stops-per-hour and failed-delivery counts are series per route and
 driver. Daily roll-ups show which routes chronically run long and where first-attempt
 failures cluster — the input to better planning. See
 [Query & aggregate](/guides/query-and-aggregate).
+
+## See the result
+
+The slipping route trips the loop:
+
+```text
+delivery_at_risk_v22_…  → open   (projected arrival past the delivery window)
+```
 
 ## See also
 

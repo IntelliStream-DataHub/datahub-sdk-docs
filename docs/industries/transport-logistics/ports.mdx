@@ -17,6 +17,21 @@ shift report.
 What we solve here is berth productivity and yard congestion — the throughput the whole
 terminal is measured on.
 
+## Set up demo data
+
+New workspace? Run this once (Python) to create a crane's move series with six hours of
+readings. Safe to re-run.
+
+```python
+import datahub_sdk, numpy as np, pandas as pd
+
+client = datahub_sdk.DataHubClient.from_env()
+
+client.timeseries.create([datahub_sdk.TimeSeries(external_id="crane_qc_07_moves", name="Crane QC-07 moves")])
+idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=6 * 60, freq="1min")
+client.timeseries.insert_from_lists(timestamps=idx, values=np.random.poisson(0.45, len(idx)).astype(float), ts="crane_qc_07_moves")
+```
+
 ## 1. Watch crane productivity by the hour
 
 Crane moves are series per crane. Roll them up to moves-per-hour and compare against the
@@ -120,6 +135,21 @@ api.events.create(&vec![congestion]).await?;
 
 </TabItem>
 </Tabs>
+
+## See the result
+
+Chart moves-per-hour against the target the terminal works to:
+
+```python
+import matplotlib.pyplot as plt
+
+rf = datahub_sdk.RetrieveFilter(ts="crane_qc_07_moves",
+    start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=6), end=pd.Timestamp.now(tz="UTC"),
+    aggregates=["sum"], granularity="1h")
+moves = [dp.sum for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()]
+plt.bar(range(len(moves)), moves); plt.axhline(25, color="r", ls="--")
+plt.title("Crane QC-07 moves per hour"); plt.show()
+```
 
 ## See also
 

@@ -17,6 +17,25 @@ minimal recall list.
 This scenario centres on **graph traceability**: model the chain of custody as
 relationships, and trace a recall downstream from a single bad lot.
 
+## Set up demo data
+
+New workspace? Run this once (Python) to create the chain of custody — a supplier lot built
+into a product, shipped out — so the downstream recall trace returns the affected items.
+Safe to re-run.
+
+```python
+import datahub_sdk
+
+client = datahub_sdk.DataHubClient.from_env()
+
+client.resources.create(
+    [datahub_sdk.Resource(external_id=x, name=x) for x in
+     ["lot_acme_8842", "part_bearing_55", "product_gearbox_910", "shipment_eu_2204"]],
+    [datahub_sdk.RelForm.by_external_ids("lot_acme_8842", "part_bearing_55", "supplied"),
+     datahub_sdk.RelForm.by_external_ids("part_bearing_55", "product_gearbox_910", "built_into"),
+     datahub_sdk.RelForm.by_external_ids("product_gearbox_910", "shipment_eu_2204", "shipped_in")])
+```
+
 ## 1. Model the chain of custody
 
 Each hop is a relationship: a supplier lot `supplied` a part, a part `built_into` a
@@ -137,6 +156,15 @@ Throughput and inventory are series (`dc_oslo_throughput_units`,
 `sku_4471_on_hand`); group each distribution centre's data with a
 [dataset](/reference/datasets) so each site sees only its own. A stockout becomes a
 `stockout` [event](/guides/detect-events) for the planning team.
+
+## See the result
+
+Tracing downstream from the bad lot returns exactly what to recall:
+
+```text
+affected product: product_gearbox_910
+recall shipment:  shipment_eu_2204
+```
 
 ## See also
 

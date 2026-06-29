@@ -16,6 +16,25 @@ real time and an alarm the instant one breaches its band.
 This scenario is about **live consumption at sea**: a long-running monitor that tails
 every reefer's temperature and reacts the moment it strays.
 
+## Set up demo data
+
+New workspace? Run this once (Python) to create a reefer's supply/set-point series and feed
+in air that drifts warm out of band. Step 1 below creates the subscription (before the
+listen loop) over these series. Safe to re-run.
+
+```python
+import datahub_sdk, numpy as np, pandas as pd
+
+client = datahub_sdk.DataHubClient.from_env()
+
+for s in ["reefer_msc_1182_supply_c", "reefer_msc_1182_setpoint_c"]:
+    client.timeseries.create([datahub_sdk.TimeSeries(external_id=s, name=s)])
+idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=120, freq="1min")
+client.timeseries.insert_from_lists(timestamps=idx, values=np.full(120, -18.0), ts="reefer_msc_1182_setpoint_c")
+supply = np.full(120, -18.0); supply[-30:] += np.linspace(0, 6, 30)        # drifting warm
+client.timeseries.insert_from_lists(timestamps=idx, values=supply, ts="reefer_msc_1182_supply_c")
+```
+
 ## 1. Subscribe to the reefer fleet
 
 Each reefer reports its set-point and supply-air temperature as series; a subscription
@@ -130,6 +149,14 @@ while let Some(Ok(msg)) = listener.next().await {
 For each delivered container, retrieve the voyage's temperature series to produce the
 compliance record the receiver requires — a complete, time-stamped trace. See
 [Query & aggregate](/guides/query-and-aggregate).
+
+## See the result
+
+The warming reefer trips the loop:
+
+```text
+reefer_excursion_1182_…  → open   (supply air strayed from set-point beyond tolerance)
+```
 
 ## See also
 
