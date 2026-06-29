@@ -50,18 +50,13 @@ land. See [Consume live data](/guides/realtime-subscriptions).
 <TabItem value="java" label="Java">
 
 ```java
-import ai.intellistream.datahub.sdk.subscriptions.SubscriptionListener;
 import ai.intellistream.datahub.sdk.subscriptions.SubscriptionMessage;
-import java.time.Duration;
 
-try (SubscriptionListener listener =
-         client.subscriptions().listen(List.of("flagged_payments"))) {
-    while (running) {
-        SubscriptionMessage msg = listener.poll(Duration.ofSeconds(2));
-        if (msg == null) continue;
-        investigate(accountFrom(msg.payload()));   // expand its network (step 2)
-        listener.ack(msg.messageId());
-    }
+try (var stream = client.subscriptions().listen(List.of("flagged_payments"))
+        .stream((SubscriptionMessage msg) -> {   // auto-acks after each message
+            investigate(accountFrom(msg.payload()));   // expand its network (step 2)
+        })) {
+    awaitShutdown();   // your app lifecycle; closing the stream ends delivery
 }
 ```
 

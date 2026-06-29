@@ -111,27 +111,22 @@ ward crosses its threshold, so charge nurses are paged before it's full. See
 <TabItem value="java" label="Java">
 
 ```java
-import ai.intellistream.datahub.sdk.subscriptions.SubscriptionListener;
 import ai.intellistream.datahub.sdk.subscriptions.SubscriptionMessage;
-import java.time.Duration;
 
-try (SubscriptionListener listener =
-         client.subscriptions().listen(List.of("bed_capacity"))) {
-    while (running) {
-        SubscriptionMessage msg = listener.poll(Duration.ofSeconds(2));
-        if (msg == null) continue;
-        updateWallboard(msg.payload());
-        if (overThreshold(msg.payload())) {            // e.g. occupancy > 95%
-            EventModel warning = new EventModel();
-            warning.setExternalId("capacity_warning_icu_" + System.currentTimeMillis());
-            warning.setType("capacity_warning");
-            warning.setStatus("open");
-            warning.setEventTime(ZonedDateTime.now());
-            warning.setMetadata(Map.of("ward", "ward_icu", "occupancy_pct", "96"));
-            client.events().create(List.of(warning));
-        }
-        listener.ack(msg.messageId());
-    }
+try (var stream = client.subscriptions().listen(List.of("bed_capacity"))
+        .stream((SubscriptionMessage msg) -> {   // auto-acks after each message
+            updateWallboard(msg.payload());
+            if (overThreshold(msg.payload())) {            // e.g. occupancy > 95%
+                EventModel warning = new EventModel();
+                warning.setExternalId("capacity_warning_icu_" + System.currentTimeMillis());
+                warning.setType("capacity_warning");
+                warning.setStatus("open");
+                warning.setEventTime(ZonedDateTime.now());
+                warning.setMetadata(Map.of("ward", "ward_icu", "occupancy_pct", "96"));
+                client.events().create(List.of(warning));
+            }
+        })) {
+    awaitShutdown();   // your app lifecycle; closing the stream ends delivery
 }
 ```
 

@@ -116,26 +116,21 @@ for the listener lifecycle.
 <TabItem value="java" label="Java">
 
 ```java
-import ai.intellistream.datahub.sdk.subscriptions.SubscriptionListener;
 import ai.intellistream.datahub.sdk.subscriptions.SubscriptionMessage;
-import java.time.Duration;
 
-try (SubscriptionListener listener =
-         client.subscriptions().listen(List.of("checkout_slo"))) {
-    while (running) {
-        SubscriptionMessage msg = listener.poll(Duration.ofSeconds(2));
-        if (msg == null) continue;
-        if (breachesSlo(msg.payload())) {       // e.g. p99 latency > 300 ms
-            EventModel event = new EventModel();
-            event.setExternalId("slo_breach_checkout_" + System.currentTimeMillis());
-            event.setType("slo_breach");
-            event.setStatus("firing");
-            event.setEventTime(ZonedDateTime.now());
-            event.setMetadata(Map.of("service", "service_checkout", "slo", "latency_p99"));
-            client.events().create(List.of(event));
-        }
-        listener.ack(msg.messageId());
-    }
+try (var stream = client.subscriptions().listen(List.of("checkout_slo"))
+        .stream((SubscriptionMessage msg) -> {   // auto-acks after each message
+            if (breachesSlo(msg.payload())) {       // e.g. p99 latency > 300 ms
+                EventModel event = new EventModel();
+                event.setExternalId("slo_breach_checkout_" + System.currentTimeMillis());
+                event.setType("slo_breach");
+                event.setStatus("firing");
+                event.setEventTime(ZonedDateTime.now());
+                event.setMetadata(Map.of("service", "service_checkout", "slo", "latency_p99"));
+                client.events().create(List.of(event));
+            }
+        })) {
+    awaitShutdown();   // your app lifecycle; closing the stream ends delivery
 }
 ```
 

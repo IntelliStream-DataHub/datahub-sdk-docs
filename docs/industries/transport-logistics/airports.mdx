@@ -43,26 +43,21 @@ slot is lost. See [Consume live data](/guides/realtime-subscriptions).
 <TabItem value="java" label="Java">
 
 ```java
-import ai.intellistream.datahub.sdk.subscriptions.SubscriptionListener;
 import ai.intellistream.datahub.sdk.subscriptions.SubscriptionMessage;
-import java.time.Duration;
 
-try (SubscriptionListener listener =
-         client.subscriptions().listen(List.of("stand_b12_turnaround"))) {
-    while (running) {
-        SubscriptionMessage msg = listener.poll(Duration.ofSeconds(5));
-        if (msg == null) continue;
-        if (legOverrunning(msg.payload())) {          // e.g. fuelling past plan
-            EventModel risk = new EventModel();
-            risk.setExternalId("turnaround_risk_su204_" + System.currentTimeMillis());
-            risk.setType("turnaround_risk");
-            risk.setStatus("open");
-            risk.setEventTime(ZonedDateTime.now());
-            risk.setMetadata(Map.of("flight", "flight_su204", "leg", "fuelling", "stand", "stand_b12"));
-            client.events().create(List.of(risk));
-        }
-        listener.ack(msg.messageId());
-    }
+try (var stream = client.subscriptions().listen(List.of("stand_b12_turnaround"))
+        .stream((SubscriptionMessage msg) -> {   // auto-acks after each message
+            if (legOverrunning(msg.payload())) {          // e.g. fuelling past plan
+                EventModel risk = new EventModel();
+                risk.setExternalId("turnaround_risk_su204_" + System.currentTimeMillis());
+                risk.setType("turnaround_risk");
+                risk.setStatus("open");
+                risk.setEventTime(ZonedDateTime.now());
+                risk.setMetadata(Map.of("flight", "flight_su204", "leg", "fuelling", "stand", "stand_b12"));
+                client.events().create(List.of(risk));
+            }
+        })) {
+    awaitShutdown();   // your app lifecycle; closing the stream ends delivery
 }
 ```
 

@@ -44,26 +44,21 @@ raises a `charger_down` event straight into the dispatch queue. See
 <TabItem value="java" label="Java">
 
 ```java
-import ai.intellistream.datahub.sdk.subscriptions.SubscriptionListener;
 import ai.intellistream.datahub.sdk.subscriptions.SubscriptionMessage;
-import java.time.Duration;
 
-try (SubscriptionListener listener =
-         client.subscriptions().listen(List.of("network_status"))) {
-    while (running) {
-        SubscriptionMessage msg = listener.poll(Duration.ofSeconds(5));
-        if (msg == null) continue;
-        if (faulted(msg.payload())) {
-            EventModel down = new EventModel();
-            down.setExternalId("charger_down_oslo_14_" + System.currentTimeMillis());
-            down.setType("charger_down");
-            down.setStatus("open");
-            down.setEventTime(ZonedDateTime.now());
-            down.setMetadata(Map.of("charger", "charger_oslo_14", "connector", "2"));
-            client.events().create(List.of(down));
-        }
-        listener.ack(msg.messageId());
-    }
+try (var stream = client.subscriptions().listen(List.of("network_status"))
+        .stream((SubscriptionMessage msg) -> {   // auto-acks after each message
+            if (faulted(msg.payload())) {
+                EventModel down = new EventModel();
+                down.setExternalId("charger_down_oslo_14_" + System.currentTimeMillis());
+                down.setType("charger_down");
+                down.setStatus("open");
+                down.setEventTime(ZonedDateTime.now());
+                down.setMetadata(Map.of("charger", "charger_oslo_14", "connector", "2"));
+                client.events().create(List.of(down));
+            }
+        })) {
+    awaitShutdown();   // your app lifecycle; closing the stream ends delivery
 }
 ```
 

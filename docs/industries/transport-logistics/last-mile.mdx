@@ -41,26 +41,21 @@ event so dispatch can act. See [Consume live data](/guides/realtime-subscription
 <TabItem value="java" label="Java">
 
 ```java
-import ai.intellistream.datahub.sdk.subscriptions.SubscriptionListener;
 import ai.intellistream.datahub.sdk.subscriptions.SubscriptionMessage;
-import java.time.Duration;
 
-try (SubscriptionListener listener =
-         client.subscriptions().listen(List.of("fleet_eta"))) {
-    while (running) {
-        SubscriptionMessage msg = listener.poll(Duration.ofSeconds(10));
-        if (msg == null) continue;
-        if (etaPastWindow(msg.payload())) {
-            EventModel risk = new EventModel();
-            risk.setExternalId("delivery_at_risk_v22_" + System.currentTimeMillis());
-            risk.setType("delivery_at_risk");
-            risk.setStatus("open");
-            risk.setEventTime(ZonedDateTime.now());
-            risk.setMetadata(Map.of("van", "van_22", "route", "route_oslo_e", "stops_left", "9"));
-            client.events().create(List.of(risk));
-        }
-        listener.ack(msg.messageId());
-    }
+try (var stream = client.subscriptions().listen(List.of("fleet_eta"))
+        .stream((SubscriptionMessage msg) -> {   // auto-acks after each message
+            if (etaPastWindow(msg.payload())) {
+                EventModel risk = new EventModel();
+                risk.setExternalId("delivery_at_risk_v22_" + System.currentTimeMillis());
+                risk.setType("delivery_at_risk");
+                risk.setStatus("open");
+                risk.setEventTime(ZonedDateTime.now());
+                risk.setMetadata(Map.of("van", "van_22", "route", "route_oslo_e", "stops_left", "9"));
+                client.events().create(List.of(risk));
+            }
+        })) {
+    awaitShutdown();   // your app lifecycle; closing the stream ends delivery
 }
 ```
 

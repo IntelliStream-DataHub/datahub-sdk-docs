@@ -50,26 +50,21 @@ hardware protects itself by shutting down. See [Consume live data](/guides/realt
 <TabItem value="java" label="Java">
 
 ```java
-import ai.intellistream.datahub.sdk.subscriptions.SubscriptionListener;
 import ai.intellistream.datahub.sdk.subscriptions.SubscriptionMessage;
-import java.time.Duration;
 
-try (SubscriptionListener listener =
-         client.subscriptions().listen(List.of("hall_2_thermal"))) {
-    while (running) {
-        SubscriptionMessage msg = listener.poll(Duration.ofSeconds(5));
-        if (msg == null) continue;
-        if (inletAbove(msg.payload(), 27.0)) {        // °C — above ASHRAE band
-            EventModel warning = new EventModel();
-            warning.setExternalId("thermal_warning_r14_" + System.currentTimeMillis());
-            warning.setType("thermal_warning");
-            warning.setStatus("open");
-            warning.setEventTime(ZonedDateTime.now());
-            warning.setMetadata(Map.of("rack", "rack_r14", "inlet_c", "29.4"));
-            client.events().create(List.of(warning));
-        }
-        listener.ack(msg.messageId());
-    }
+try (var stream = client.subscriptions().listen(List.of("hall_2_thermal"))
+        .stream((SubscriptionMessage msg) -> {   // auto-acks after each message
+            if (inletAbove(msg.payload(), 27.0)) {        // °C — above ASHRAE band
+                EventModel warning = new EventModel();
+                warning.setExternalId("thermal_warning_r14_" + System.currentTimeMillis());
+                warning.setType("thermal_warning");
+                warning.setStatus("open");
+                warning.setEventTime(ZonedDateTime.now());
+                warning.setMetadata(Map.of("rack", "rack_r14", "inlet_c", "29.4"));
+                client.events().create(List.of(warning));
+            }
+        })) {
+    awaitShutdown();   // your app lifecycle; closing the stream ends delivery
 }
 ```
 

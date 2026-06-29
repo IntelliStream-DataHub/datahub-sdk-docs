@@ -49,26 +49,21 @@ there's still time. See [Consume live data](/guides/realtime-subscriptions).
 <TabItem value="java" label="Java">
 
 ```java
-import ai.intellistream.datahub.sdk.subscriptions.SubscriptionListener;
 import ai.intellistream.datahub.sdk.subscriptions.SubscriptionMessage;
-import java.time.Duration;
 
-try (SubscriptionListener listener =
-         client.subscriptions().listen(List.of("farm_hardanger_pens"))) {
-    while (running) {
-        SubscriptionMessage msg = listener.poll(Duration.ofSeconds(5));
-        if (msg == null) continue;
-        if (oxygenBelow(msg.payload(), 6.0)) {        // mg/L — danger approaching
-            EventModel alarm = new EventModel();
-            alarm.setExternalId("low_oxygen_h07_" + System.currentTimeMillis());
-            alarm.setType("low_oxygen");
-            alarm.setStatus("critical");
-            alarm.setEventTime(ZonedDateTime.now());
-            alarm.setMetadata(Map.of("pen", "pen_h_07", "do_mg_l", "5.6"));
-            client.events().create(List.of(alarm));   // triggers aeration
-        }
-        listener.ack(msg.messageId());
-    }
+try (var stream = client.subscriptions().listen(List.of("farm_hardanger_pens"))
+        .stream((SubscriptionMessage msg) -> {   // auto-acks after each message
+            if (oxygenBelow(msg.payload(), 6.0)) {        // mg/L — danger approaching
+                EventModel alarm = new EventModel();
+                alarm.setExternalId("low_oxygen_h07_" + System.currentTimeMillis());
+                alarm.setType("low_oxygen");
+                alarm.setStatus("critical");
+                alarm.setEventTime(ZonedDateTime.now());
+                alarm.setMetadata(Map.of("pen", "pen_h_07", "do_mg_l", "5.6"));
+                client.events().create(List.of(alarm));   // triggers aeration
+            }
+        })) {
+    awaitShutdown();   // your app lifecycle; closing the stream ends delivery
 }
 ```
 

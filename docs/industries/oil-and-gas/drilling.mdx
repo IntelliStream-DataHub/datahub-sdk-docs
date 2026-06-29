@@ -54,27 +54,22 @@ subscription. The moment flow-out runs ahead of flow-in while pit volume rises, 
 <TabItem value="java" label="Java">
 
 ```java
-import ai.intellistream.datahub.sdk.subscriptions.SubscriptionListener;
 import ai.intellistream.datahub.sdk.subscriptions.SubscriptionMessage;
-import java.time.Duration;
 
-try (SubscriptionListener listener =
-         client.subscriptions().listen(List.of("rig_deepwater_1"))) {
-    while (running) {
-        SubscriptionMessage msg = listener.poll(Duration.ofSeconds(1));
-        if (msg == null) continue;
-        if (influxDetected(msg.payload())) {       // flow_out > flow_in & pit rising
-            EventModel kick = new EventModel();
-            kick.setExternalId("kick_detected_a12_" + System.currentTimeMillis());
-            kick.setType("kick_detected");
-            kick.setStatus("critical");
-            kick.setEventTime(ZonedDateTime.now());
-            kick.setMetadata(Map.of("well", "well_a12", "rig", "rig_deepwater_1",
-                                    "flow_delta_gpm", "18"));
-            client.events().create(List.of(kick));
-        }
-        listener.ack(msg.messageId());
-    }
+try (var stream = client.subscriptions().listen(List.of("rig_deepwater_1"))
+        .stream((SubscriptionMessage msg) -> {   // auto-acks after each message
+            if (influxDetected(msg.payload())) {       // flow_out > flow_in & pit rising
+                EventModel kick = new EventModel();
+                kick.setExternalId("kick_detected_a12_" + System.currentTimeMillis());
+                kick.setType("kick_detected");
+                kick.setStatus("critical");
+                kick.setEventTime(ZonedDateTime.now());
+                kick.setMetadata(Map.of("well", "well_a12", "rig", "rig_deepwater_1",
+                                        "flow_delta_gpm", "18"));
+                client.events().create(List.of(kick));
+            }
+        })) {
+    awaitShutdown();   // your app lifecycle; closing the stream ends delivery
 }
 ```
 

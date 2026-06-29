@@ -49,26 +49,21 @@ Subscribe to the zone comfort series and react as readings land — raise a
 <TabItem value="java" label="Java">
 
 ```java
-import ai.intellistream.datahub.sdk.subscriptions.SubscriptionListener;
 import ai.intellistream.datahub.sdk.subscriptions.SubscriptionMessage;
-import java.time.Duration;
 
-try (SubscriptionListener listener =
-         client.subscriptions().listen(List.of("tower_a_comfort"))) {
-    while (running) {
-        SubscriptionMessage msg = listener.poll(Duration.ofSeconds(10));
-        if (msg == null) continue;
-        if (outsideComfort(msg.payload())) {       // temp or CO2 out of band
-            EventModel alert = new EventModel();
-            alert.setExternalId("comfort_alert_l8_" + System.currentTimeMillis());
-            alert.setType("comfort_alert");
-            alert.setStatus("open");
-            alert.setEventTime(ZonedDateTime.now());
-            alert.setMetadata(Map.of("zone", "zone_l8_open_plan", "co2_ppm", "1180"));
-            client.events().create(List.of(alert));
-        }
-        listener.ack(msg.messageId());
-    }
+try (var stream = client.subscriptions().listen(List.of("tower_a_comfort"))
+        .stream((SubscriptionMessage msg) -> {   // auto-acks after each message
+            if (outsideComfort(msg.payload())) {       // temp or CO2 out of band
+                EventModel alert = new EventModel();
+                alert.setExternalId("comfort_alert_l8_" + System.currentTimeMillis());
+                alert.setType("comfort_alert");
+                alert.setStatus("open");
+                alert.setEventTime(ZonedDateTime.now());
+                alert.setMetadata(Map.of("zone", "zone_l8_open_plan", "co2_ppm", "1180"));
+                client.events().create(List.of(alert));
+            }
+        })) {
+    awaitShutdown();   // your app lifecycle; closing the stream ends delivery
 }
 ```
 
