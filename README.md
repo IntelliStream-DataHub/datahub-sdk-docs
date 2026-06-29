@@ -4,14 +4,30 @@ The external-facing documentation site for the DataHub SDK (Java, Python, Rust),
 built with [Docusaurus](https://docusaurus.io/). Code samples use synced language
 tabs — pick a language once and every snippet on the site follows.
 
-## Develop
+## Get it running locally
 
-Requires Node.js >= 20.
+From a fresh machine:
 
-```bash
-npm install        # first time only
-npm start          # dev server with hot reload (http://localhost:3000)
-```
+1. **Install Node.js ≥ 20** — easiest via [nvm](https://github.com/nvm-sh/nvm):
+
+   ```bash
+   nvm install 20 && nvm use 20      # or download from https://nodejs.org/
+   node --version                    # confirm v20+
+   ```
+
+2. **Clone the repo** and enter it:
+
+   ```bash
+   git clone <repository-url> datahub-sdk-docs
+   cd datahub-sdk-docs
+   ```
+
+3. **Install dependencies and start the dev server:**
+
+   ```bash
+   npm install        # first time only
+   npm start          # serves http://localhost:3000 with hot reload
+   ```
 
 To preview on this host's LAN address (e.g. for review on another device):
 
