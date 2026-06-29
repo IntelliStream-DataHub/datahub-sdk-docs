@@ -18,7 +18,7 @@ From a fresh machine:
 2. **Clone the repo** and enter it:
 
    ```bash
-   git clone <repository-url> datahub-sdk-docs
+   git clone https://github.com/IntelliStream-DataHub/datahub-sdk-docs.git
    cd datahub-sdk-docs
    ```
 
