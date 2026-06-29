@@ -77,9 +77,12 @@ var history = client.timeseries().retrieve(request).getItems().get(0).getDatapoi
 ```rust
 // Rust pulls the same hourly history; the modelling below is Python.
 use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+use chrono::Utc;
 
 let filter = RetrieveFilter {
     external_id: Some("feeder_f12_load_mw".into()),
+    start: Some(Utc::now() - chrono::Duration::days(120)),
+    end: Some(Utc::now()),
     aggregates: vec!["average".into()],
     granularity: Some("1h".into()),
     ..Default::default()

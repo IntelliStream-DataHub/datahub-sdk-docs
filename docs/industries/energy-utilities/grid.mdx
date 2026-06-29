@@ -140,8 +140,12 @@ for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
 <TabItem value="rust" label="Rust">
 
 ```rust
+use chrono::Utc;
+
 let filter = RetrieveFilter {
     external_id: Some("feeder_f12_load_mw".into()),
+    start: Some(Utc::now() - chrono::Duration::days(1)),
+    end: Some(Utc::now()),
     aggregates: vec!["average".into(), "max".into()],
     granularity: Some("1h".into()),
     ..Default::default()
@@ -168,7 +172,6 @@ EventModel event = new EventModel();
 event.setExternalId("feeder_overload_f12_" + System.currentTimeMillis());
 event.setType("feeder_overload");
 event.setStatus("open");
-event.setEventTime(ZonedDateTime.now());
 event.setMetadata(Map.of("feeder", "feeder_f12", "peak_mw", "14.8", "rating_mw", "12.0"));
 client.events().create(List.of(event));
 ```
@@ -187,9 +190,14 @@ client.events.create([datahub_sdk.Event(
 <TabItem value="rust" label="Rust">
 
 ```rust
-let mut event = Event::new("feeder_overload_f12".into());
+use chrono::Utc;
+
+let mut event = Event::new(format!("feeder_overload_f12_{}", Utc::now().timestamp()));
 event.r#type = Some("feeder_overload".into());
 event.status = Some("open".into());
+event.add_metadata("feeder".into(), "feeder_f12".into());
+event.add_metadata("peak_mw".into(), "14.8".into());
+event.add_metadata("rating_mw".into(), "12.0".into());
 api.events.create(&vec![event]).await?;
 ```
 

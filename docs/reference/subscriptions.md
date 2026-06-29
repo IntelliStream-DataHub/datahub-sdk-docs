@@ -17,7 +17,8 @@ Durable, fan-out subscriptions over time-series, plus **live delivery over a Web
 ```java
 Subscription sub = new Subscription();
 sub.setExternalId("engine_temps");
-// configure which series the subscription covers
+sub.setName("Engine temps");
+sub.setTimeseries(List.of(IdCollection.createFromExternalId("engine_temperature")));
 client.subscriptions().create(List.of(sub));
 
 DataWrapper<Subscription> all = client.subscriptions().list(new SubscriptionRetriever());

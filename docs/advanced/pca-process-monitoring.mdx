@@ -88,9 +88,12 @@ var pts = client.timeseries().retrieve(request).getItems().get(0).getDatapoints(
 ```rust
 // Rust pulls each tag the same way; the PCA below is Python.
 use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+use chrono::Utc;
 
 let filter = RetrieveFilter {
     external_id: Some("cdu_1_top_temp_c".into()),
+    start: Some("2026-05-01T00:00:00Z".parse().unwrap()),
+    end: Some("2026-05-15T00:00:00Z".parse().unwrap()),
     aggregates: vec!["average".into()],
     granularity: Some("1m".into()),
     ..Default::default()

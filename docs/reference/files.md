@@ -71,7 +71,9 @@ upload = datahub_sdk.FileUpload(
     path="report.csv",                 # local file
     destination_path="/reports/2026/",
     external_id="report_2026_q2",
-    name="q2.csv")
+    name="q2.csv",
+    data_set_id=42,
+    description="Q2 production")
 
 uploaded = client.files.upload_file(upload)   # -> list[INode]
 ```
@@ -82,8 +84,12 @@ uploaded = client.files.upload_file(upload)   # -> list[INode]
 ```rust
 use dataplatform_rust_sdk::files::FileUpload;
 
-// external id + mime type are inferred from the file; or use FileUpload::new(path)
-let upload = FileUpload::new_with_destination_path("report.csv", "/reports/2026/");
+// mime type is inferred from the file content
+let mut upload = FileUpload::new_with_destination_path("report.csv", "/reports/2026/");
+upload.set_external_id("report_2026_q2".into());
+upload.set_file_name("q2.csv".into());
+upload.set_data_set_id(42);
+upload.set_description("Q2 production".into());
 let uploaded = api.files.upload_file(upload).await?;
 ```
 
@@ -105,7 +111,7 @@ Files.write(Path.of("q2.csv"), bytes);
 <TabItem value="java" label="Java">
 
 ```java
-client.files().delete(List.of(IdCollection.createFromId(99)));
+client.files().delete(List.of(IdCollection.createFromExternalId("report_2026_q2")));
 ```
 
 </TabItem>

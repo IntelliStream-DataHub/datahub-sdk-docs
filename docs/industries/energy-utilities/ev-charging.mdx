@@ -53,7 +53,6 @@ try (var stream = client.subscriptions().listen(List.of("network_status"))
                 down.setExternalId("charger_down_oslo_14_" + System.currentTimeMillis());
                 down.setType("charger_down");
                 down.setStatus("open");
-                down.setEventTime(ZonedDateTime.now());
                 down.setMetadata(Map.of("charger", "charger_oslo_14", "connector", "2"));
                 client.events().create(List.of(down));
             }
@@ -80,13 +79,17 @@ with client.subscriptions.listen(["network_status"]) as listener:
 <TabItem value="rust" label="Rust">
 
 ```rust
+use chrono::Utc;
 use dataplatform_rust_sdk::events::Event;
 
 let mut listener = api.subscriptions.listen(&["network_status"]).await?;
 while let Some(Ok(msg)) = listener.next().await {
     if faulted(&msg.payload) {
-        let mut down = Event::new("charger_down_oslo_14".into());
+        let mut down = Event::new(format!("charger_down_oslo_14_{}", Utc::now().timestamp()));
         down.r#type = Some("charger_down".into());
+        down.status = Some("open".into());
+        down.add_metadata("charger".into(), "charger_oslo_14".into());
+        down.add_metadata("connector".into(), "2".into());
         api.events.create(&vec![down]).await?;
     }
     listener.ack(&[msg.message_id.as_str()]).await?;

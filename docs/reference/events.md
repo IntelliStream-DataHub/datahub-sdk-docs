@@ -15,11 +15,9 @@ Record and query operational events.
 <TabItem value="java" label="Java">
 
 ```java
-import java.time.ZonedDateTime;
-
 EventModel event = new EventModel();
 event.setExternalId("door_open");
-event.setEventTime(ZonedDateTime.now());   // also accepts an epoch-millis Long
+event.setType("alarm");
 
 client.events().create(List.of(event));
 ```
@@ -28,12 +26,11 @@ client.events().create(List.of(event));
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk, pandas as pd
+import datahub_sdk
 
 event = datahub_sdk.Event(
     external_id="door_open",
-    type="alarm",
-    event_time=pd.Timestamp.now(tz="UTC"))
+    type="alarm")
 
 client.events.create([event])
 ```
@@ -44,7 +41,8 @@ client.events.create([event])
 ```rust
 use dataplatform_rust_sdk::events::Event;
 
-let event = Event::new("door_open".into());
+let mut event = Event::new("door_open".into());
+event.r#type = Some("alarm".into());
 api.events.create(&vec![event]).await?;
 ```
 
@@ -58,7 +56,8 @@ api.events.create(&vec![event]).await?;
 
 ```java
 EventRetreiver retriever = new EventRetreiver();
-// set filter criteria on the retriever (time range, type, metadata, …)
+retriever.setLimit(50);
+retriever.getFilter().setType("alarm");
 DataWrapper<EventModel> events = client.events().filter(retriever);
 ```
 
@@ -76,9 +75,12 @@ events = client.events.filter(filter)
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::filters::EventFilter;
+use dataplatform_rust_sdk::filters::{BasicEventFilter, EventFilter};
 
-let filter = EventFilter::default();
+let filter = EventFilter::default()
+    .set_filter(BasicEventFilter { r#type: Some("alarm".into()), ..Default::default() })
+    .set_limit(50)
+    .build();
 let events = api.events.filter(&filter).await?;
 ```
 

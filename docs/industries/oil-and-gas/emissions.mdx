@@ -78,9 +78,12 @@ monthly = sum(dp.sum for dp in client.timeseries.retrieve_datapoints(rf)[0].get_
 
 ```rust
 use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+use chrono::Utc;
 
 let filter = RetrieveFilter {
     external_id: Some("platform_north_flare_volume_m3".into()),
+    start: Some(Utc::now() - chrono::Duration::days(30)),
+    end: Some(Utc::now()),
     aggregates: vec!["sum".into()],
     granularity: Some("1d".into()),
     ..Default::default()
@@ -109,7 +112,6 @@ EventModel exceedance = new EventModel();
 exceedance.setExternalId("flaring_exceedance_north_" + System.currentTimeMillis());
 exceedance.setType("flaring_exceedance");
 exceedance.setStatus("open");
-exceedance.setEventTime(ZonedDateTime.now());
 exceedance.setMetadata(Map.of("site", "platform_north", "flared_m3", "142000", "permit_m3", "120000"));
 client.events().create(List.of(exceedance));
 ```
@@ -129,9 +131,14 @@ client.events.create([datahub_sdk.Event(
 
 ```rust
 use dataplatform_rust_sdk::events::Event;
+use chrono::Utc;
 
-let mut exceedance = Event::new("flaring_exceedance_north".into());
+let mut exceedance = Event::new(format!("flaring_exceedance_north_{}", Utc::now().timestamp()));
 exceedance.r#type = Some("flaring_exceedance".into());
+exceedance.status = Some("open".into());
+exceedance.add_metadata("site".into(), "platform_north".into());
+exceedance.add_metadata("flared_m3".into(), "142000".into());
+exceedance.add_metadata("permit_m3".into(), "120000".into());
 api.events.create(&vec![exceedance]).await?;
 ```
 

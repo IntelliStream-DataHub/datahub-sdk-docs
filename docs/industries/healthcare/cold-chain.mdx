@@ -54,7 +54,6 @@ try (var stream = client.subscriptions().listen(List.of("pharmacy_fridges"))
                 excursion.setExternalId("cold_chain_excursion_f12_" + System.currentTimeMillis());
                 excursion.setType("cold_chain_excursion");
                 excursion.setStatus("critical");
-                excursion.setEventTime(ZonedDateTime.now());
                 excursion.setMetadata(Map.of("fridge", "fridge_pharmacy_12", "temp_c", "9.3"));
                 client.events().create(List.of(excursion));
             }
@@ -82,13 +81,16 @@ with client.subscriptions.listen(["pharmacy_fridges"]) as listener:
 
 ```rust
 use dataplatform_rust_sdk::events::Event;
+use chrono::Utc;
 
 let mut listener = api.subscriptions.listen(&["pharmacy_fridges"]).await?;
 while let Some(Ok(msg)) = listener.next().await {
     if out_of_band(&msg.payload, 2.0, 8.0) {           // °C — vaccine fridge band
-        let mut excursion = Event::new("cold_chain_excursion_f12".into());
+        let mut excursion = Event::new(format!("cold_chain_excursion_f12_{}", Utc::now().timestamp()));
         excursion.r#type = Some("cold_chain_excursion".into());
         excursion.status = Some("critical".into());
+        excursion.add_metadata("fridge".into(), "fridge_pharmacy_12".into());
+        excursion.add_metadata("temp_c".into(), "9.3".into());
         api.events.create(&vec![excursion]).await?;
     }
     listener.ack(&[msg.message_id.as_str()]).await?;

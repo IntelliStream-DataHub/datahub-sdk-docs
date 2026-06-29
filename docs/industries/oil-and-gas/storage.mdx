@@ -62,7 +62,6 @@ if (Math.abs(unexplained) > tolerance(closing)) {
     loss.setExternalId("inventory_discrepancy_t12_" + System.currentTimeMillis());
     loss.setType("inventory_discrepancy");
     loss.setStatus("open");
-    loss.setEventTime(ZonedDateTime.now());
     loss.setMetadata(Map.of("tank", "tank_t_12", "unexplained_bbl",
                             String.format("%.1f", unexplained)));
     client.events().create(List.of(loss));
@@ -93,6 +92,7 @@ if abs(unexplained) > tolerance(closing):
 
 ```rust
 use dataplatform_rust_sdk::events::Event;
+use chrono::Utc;
 
 let measured_change = latest("tank_t_12_volume_bbl").await?
     - first_value("tank_t_12_volume_bbl", shift_start).await?;
@@ -101,8 +101,11 @@ let metered = sum_over("tank_t_12_receipts_bbl", shift_start).await?
 
 let unexplained = measured_change - metered;
 if unexplained.abs() > tolerance(latest("tank_t_12_volume_bbl").await?) {
-    let mut loss = Event::new("inventory_discrepancy_t12".into());
+    let mut loss = Event::new(format!("inventory_discrepancy_t12_{}", Utc::now().timestamp()));
     loss.r#type = Some("inventory_discrepancy".into());
+    loss.status = Some("open".into());
+    loss.add_metadata("tank".into(), "tank_t_12".into());
+    loss.add_metadata("unexplained_bbl".into(), format!("{:.1}", unexplained));
     api.events.create(&vec![loss]).await?;
 }
 ```

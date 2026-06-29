@@ -18,8 +18,8 @@ high-throughput).
 ```java
 Timeseries series = new Timeseries()
         .setExternalId("engine_temperature")
-        .setName("Engine temperature")
-        .setUnitExternalId("celsius");
+        .setName("Engine temperature");
+series.setUnit("celsius");
 
 client.timeseries().create(List.of(series));
 ```
@@ -44,7 +44,8 @@ client.timeseries.create([ts])
 ```rust
 use dataplatform_rust_sdk::timeseries::TimeSeries;
 
-let ts = TimeSeries::new("engine_temperature", "Engine temperature");
+let mut ts = TimeSeries::new("engine_temperature", "Engine temperature");
+ts.unit = Some("celsius".into());
 api.time_series.create_one(&ts).await?;
 ```
 
@@ -167,6 +168,7 @@ RetrieveFilter series = new RetrieveFilter();
 series.setExternalId("engine_temperature");
 series.setStart(ZonedDateTime.now().minusHours(1));
 series.setEnd(ZonedDateTime.now());
+series.setLimit(1000);
 
 DataRetriever<RetrieveFilter> request = new DataRetriever<>();
 request.setItems(List.of(series));
@@ -184,8 +186,8 @@ import pandas as pd
 
 rf = datahub_sdk.RetrieveFilter(
     ts="engine_temperature",
-    start=pd.Timestamp("2026-01-01", tz="UTC"),
-    end=pd.Timestamp("2026-01-02", tz="UTC"),
+    start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=1),
+    end=pd.Timestamp.now(tz="UTC"),
     limit=1000)
 
 collection = client.timeseries.retrieve_datapoints(rf)[0]
@@ -197,10 +199,13 @@ for dp in collection.get_datapoints():
 <TabItem value="rust" label="Rust">
 
 ```rust
+use chrono::Utc;
 use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
 
 let filter = RetrieveFilter {
     external_id: Some("engine_temperature".into()),
+    start: Some(Utc::now() - chrono::Duration::hours(1)),
+    end: Some(Utc::now()),
     limit: Some(1000),
     ..Default::default()
 };

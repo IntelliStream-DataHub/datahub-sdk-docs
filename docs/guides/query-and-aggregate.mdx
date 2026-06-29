@@ -53,10 +53,13 @@ for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
 <TabItem value="rust" label="Rust">
 
 ```rust
+use chrono::Utc;
 use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
 
 let filter = RetrieveFilter {
     external_id: Some("engine_temperature".into()),
+    start: Some(Utc::now() - chrono::Duration::days(1)),
+    end: Some(Utc::now()),
     limit: Some(10_000),
     ..Default::default()
 };
@@ -83,16 +86,16 @@ var filter = new RetrieveFilter();
 filter.setExternalId("engine_temperature");
 filter.setStart(ZonedDateTime.now().minusDays(1));
 filter.setEnd(ZonedDateTime.now());
-filter.setAggregates(List.of("average"));
+filter.setAggregates(List.of("average", "max"));
 filter.setGranularity("1h");
 
 var request = new DataRetriever<RetrieveFilter>();
 request.setItems(List.of(filter));
 
-// each datapoint's value is the hourly average for its bucket
+// the Java client returns one value per bucket via getValue() (average then max)
 client.timeseries().retrieve(request).getItems()
     .forEach(s -> s.getDatapoints().forEach(p ->
-        System.out.println(p.getTimestamp() + " avg=" + p.getValue())));
+        System.out.println(p.getTimestamp() + " = " + p.getValue())));
 ```
 
 </TabItem>
@@ -114,8 +117,12 @@ for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
 <TabItem value="rust" label="Rust">
 
 ```rust
+use chrono::Utc;
+
 let filter = RetrieveFilter {
     external_id: Some("engine_temperature".into()),
+    start: Some(Utc::now() - chrono::Duration::days(1)),
+    end: Some(Utc::now()),
     aggregates: vec!["average".into(), "max".into()],
     granularity: Some("1h".into()),
     ..Default::default()
@@ -184,10 +191,14 @@ while True:
 <TabItem value="rust" label="Rust">
 
 ```rust
+use chrono::Utc;
+
 let mut cursor: Option<String> = None;
 loop {
     let filter = RetrieveFilter {
         external_id: Some("engine_temperature".into()),
+        start: Some(Utc::now() - chrono::Duration::days(1)),
+        end: Some(Utc::now()),
         cursor: cursor.clone(),
         ..Default::default()
     };

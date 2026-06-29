@@ -73,8 +73,11 @@ client.timeseries.insert_from_lists(
 ```rust
 use dataplatform_rust_sdk::timeseries::TimeSeries;
 
+let mut cycle = TimeSeries::new("station_07_cycle_time_s", "Station 07 cycle time");
+cycle.unit = Some("s".into());
+api.time_series.create_one(&cycle).await?;
 api.time_series
-    .create_one(&TimeSeries::new("station_07_cycle_time_s", "Station 07 cycle time"))
+    .create_one(&TimeSeries::new("station_07_scrap", "Station 07 scrap count"))
     .await?;
 api.time_series
     .insert_datapoint(None, Some("station_07_cycle_time_s".into()), ts, "11.4".into())
@@ -132,9 +135,12 @@ for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
 
 ```rust
 use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+use chrono::Utc;
 
 let filter = RetrieveFilter {
     external_id: Some("station_07_cycle_time_s".into()),
+    start: Some(Utc::now() - chrono::Duration::hours(8)),
+    end: Some(Utc::now()),
     aggregates: vec!["average".into(), "count".into()],
     granularity: Some("1h".into()),
     ..Default::default()
@@ -161,7 +167,6 @@ EventModel excursion = new EventModel();
 excursion.setExternalId("scrap_excursion_st07_" + System.currentTimeMillis());
 excursion.setType("scrap_excursion");
 excursion.setStatus("open");
-excursion.setEventTime(ZonedDateTime.now());
 excursion.setMetadata(Map.of("station", "station_07", "scrap_rate_pct", "4.8", "limit_pct", "2.0"));
 client.events().create(List.of(excursion));
 ```
@@ -181,10 +186,14 @@ client.events.create([datahub_sdk.Event(
 
 ```rust
 use dataplatform_rust_sdk::events::Event;
+use chrono::Utc;
 
-let mut excursion = Event::new("scrap_excursion_st07".into());
+let mut excursion = Event::new(format!("scrap_excursion_st07_{}", Utc::now().timestamp()));
 excursion.r#type = Some("scrap_excursion".into());
 excursion.status = Some("open".into());
+excursion.add_metadata("station".into(), "station_07".into());
+excursion.add_metadata("scrap_rate_pct".into(), "4.8".into());
+excursion.add_metadata("limit_pct".into(), "2.0".into());
 api.events.create(&vec![excursion]).await?;
 ```
 

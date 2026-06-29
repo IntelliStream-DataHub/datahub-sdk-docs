@@ -46,6 +46,10 @@ fans them all into one live feed.
 ```java
 Subscription sub = new Subscription();
 sub.setExternalId("reefer_fleet");
+sub.setName("Reefer fleet");
+sub.setTimeseries(List.of(
+    IdCollection.createFromExternalId("reefer_msc_1182_supply_c"),
+    IdCollection.createFromExternalId("reefer_msc_1182_setpoint_c")));
 client.subscriptions().create(List.of(sub));
 ```
 
@@ -68,7 +72,8 @@ use dataplatform_rust_sdk::subscriptions::Subscription;
 use dataplatform_rust_sdk::generic::IdAndExtId;
 
 let sub = Subscription::new("reefer_fleet".into(), "Reefer fleet".into(),
-    vec![IdAndExtId::from_external_id("reefer_msc_1182_supply_c")]);
+    vec![IdAndExtId::from_external_id("reefer_msc_1182_supply_c"),
+         IdAndExtId::from_external_id("reefer_msc_1182_setpoint_c")]);
 api.subscriptions.create(&sub).await?;
 ```
 
@@ -95,7 +100,6 @@ try (var stream = client.subscriptions().listen(List.of("reefer_fleet"))
                 excursion.setExternalId("reefer_excursion_1182_" + System.currentTimeMillis());
                 excursion.setType("reefer_excursion");
                 excursion.setStatus("open");
-                excursion.setEventTime(ZonedDateTime.now());
                 excursion.setMetadata(Map.of("reefer", "reefer_msc_1182", "vessel", "vessel_nordic_star"));
                 client.events().create(List.of(excursion));
             }
@@ -123,13 +127,16 @@ with client.subscriptions.listen(["reefer_fleet"]) as listener:
 
 ```rust
 use dataplatform_rust_sdk::events::Event;
+use chrono::Utc;
 
 let mut listener = api.subscriptions.listen(&["reefer_fleet"]).await?;
 while let Some(Ok(msg)) = listener.next().await {
     if out_of_band(&msg.payload) {                // |supply - setpoint| > tolerance
-        let mut excursion = Event::new("reefer_excursion_1182".into());
+        let mut excursion = Event::new(format!("reefer_excursion_1182_{}", Utc::now().timestamp()));
         excursion.r#type = Some("reefer_excursion".into());
         excursion.status = Some("open".into());
+        excursion.add_metadata("reefer".into(), "reefer_msc_1182".into());
+        excursion.add_metadata("vessel".into(), "vessel_nordic_star".into());
         api.events.create(&vec![excursion]).await?;
     }
     listener.ack(&[msg.message_id.as_str()]).await?;

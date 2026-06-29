@@ -126,7 +126,8 @@ Free-text / fuzzy search across resources.
 
 ```java
 ResourceSearch search = new ResourceSearch();
-// set the query / filters on the search object
+search.setLimit(10);
+search.getSearch().setQuery("pump");
 DataWrapper<Resource> matches = client.resources().search(search);
 ```
 
@@ -144,9 +145,13 @@ matches = client.resources.search(form)
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::filters::SearchAndFilterForm;
+use dataplatform_rust_sdk::generic::{SearchAndFilterForm, SearchForm};
 
-let form = SearchAndFilterForm { /* query, filters, limit */ ..Default::default() };
+let form = SearchAndFilterForm {
+    search: Some(SearchForm { name: None, description: None, query: Some("pump".into()) }),
+    limit: Some(10),
+    filter: None,
+};
 let matches = api.resources.search(&form).await?;
 ```
 

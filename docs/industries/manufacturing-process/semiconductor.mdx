@@ -77,9 +77,13 @@ client.timeseries.insert_from_lists(
 use dataplatform_rust_sdk::timeseries::TimeSeries;
 use chrono::Utc;
 
-let mut p = TimeSeries::new("tool_etch_07_chamber_pressure_mtorr", "Etch-07 pressure");
+let mut p = TimeSeries::new("tool_etch_07_chamber_pressure_mtorr", "Etch-07 chamber pressure");
 p.value_type = "numeric".into();
 api.time_series.create_one(&p).await?;
+
+api.time_series
+    .insert_datapoint(None, Some("tool_etch_07_chamber_pressure_mtorr".into()), Utc::now(), "12.0436".into())
+    .await?;
 ```
 
 </TabItem>

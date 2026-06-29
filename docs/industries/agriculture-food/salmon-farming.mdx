@@ -58,7 +58,6 @@ try (var stream = client.subscriptions().listen(List.of("farm_hardanger_pens"))
                 alarm.setExternalId("low_oxygen_h07_" + System.currentTimeMillis());
                 alarm.setType("low_oxygen");
                 alarm.setStatus("critical");
-                alarm.setEventTime(ZonedDateTime.now());
                 alarm.setMetadata(Map.of("pen", "pen_h_07", "do_mg_l", "5.6"));
                 client.events().create(List.of(alarm));   // triggers aeration
             }
@@ -86,13 +85,16 @@ with client.subscriptions.listen(["farm_hardanger_pens"]) as listener:
 
 ```rust
 use dataplatform_rust_sdk::events::Event;
+use chrono::Utc;
 
 let mut listener = api.subscriptions.listen(&["farm_hardanger_pens"]).await?;
 while let Some(Ok(msg)) = listener.next().await {
     if oxygen_below(&msg.payload, 6.0) {              // mg/L — danger approaching
-        let mut alarm = Event::new("low_oxygen_h07".into());
+        let mut alarm = Event::new(format!("low_oxygen_h07_{}", Utc::now().timestamp()));
         alarm.r#type = Some("low_oxygen".into());
         alarm.status = Some("critical".into());
+        alarm.add_metadata("pen".into(), "pen_h_07".into());
+        alarm.add_metadata("do_mg_l".into(), "5.6".into());
         api.events.create(&vec![alarm]).await?;       // triggers aeration
     }
     listener.ack(&[msg.message_id.as_str()]).await?;
@@ -113,7 +115,7 @@ See [Query & aggregate](/guides/query-and-aggregate).
 
 ```java
 client.timeseries().create(
-    Timeseries.of("pen_h_07_feed_kg").name("Pen H-07 feed dispensed").unit("kg"),
+    Timeseries.of("pen_h_07_feed_kg").name("Pen H-07 feed").unit("kg"),
     Timeseries.of("pen_h_07_biomass_kg").name("Pen H-07 biomass").unit("kg"));
 
 client.timeseries().ingest(Map.of(
@@ -138,10 +140,19 @@ client.timeseries.insert_from_lists(
 
 ```rust
 use dataplatform_rust_sdk::timeseries::TimeSeries;
+use chrono::Utc;
 
 let mut feed = TimeSeries::new("pen_h_07_feed_kg", "Pen H-07 feed");
 feed.unit = Some("kg".into());
 api.time_series.create_one(&feed).await?;
+
+let mut biomass = TimeSeries::new("pen_h_07_biomass_kg", "Pen H-07 biomass");
+biomass.unit = Some("kg".into());
+api.time_series.create_one(&biomass).await?;
+
+api.time_series
+    .insert_datapoint(None, Some("pen_h_07_feed_kg".into()), Utc::now(), "420.0".into())
+    .await?;
 ```
 
 </TabItem>

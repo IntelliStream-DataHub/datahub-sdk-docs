@@ -75,11 +75,13 @@ client.timeseries.create([datahub_sdk.TimeSeries(
 use dataplatform_rust_sdk::datasets::Dataset;
 use dataplatform_rust_sdk::timeseries::TimeSeries;
 
-// external_id derives as snake_case → "nordics_region"
-let created = api.datasets.create(&vec![Dataset::new("Nordics region".into())]).await?;
+// Dataset::new derives external_id as snake_case → set it explicitly to match
+let mut ds = Dataset::new("Nordics region".into());
+ds.external_id = "region_nordics".into();
+let created = api.datasets.create(&vec![ds]).await?;
 let region_id = created.get_items()[0].id;
 
-let mut ts = TimeSeries::new("store_oslo_01_sku_4471_sales", "Oslo 01 — SKU 4471 sold");
+let mut ts = TimeSeries::new("store_oslo_01_sku_4471_sales", "Oslo 01 — SKU 4471 units sold");
 ts.data_set_id = region_id;
 api.time_series.create_one(&ts).await?;
 ```
@@ -98,7 +100,7 @@ replenishment. See [Datasets reference](/reference/datasets) and
 
 ```java
 DataSetRetreiver retriever = new DataSetRetreiver();
-// scope to the region's dataset
+retriever.getFilter().setExternalIdPrefix("region_nordics");   // scope to the region's dataset
 DataWrapper<DataSetModel> regional = client.datasets().list(retriever);
 ```
 

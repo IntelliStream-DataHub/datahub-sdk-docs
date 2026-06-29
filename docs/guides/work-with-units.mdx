@@ -19,7 +19,7 @@ reference a unit by its external id when you create a series.
 
 ```java
 client.units().list().getItems().forEach(u ->
-    System.out.println(u.getExternalId() + "  " + u.getName() + "  (" + u.getSymbol() + ")"));
+    System.out.println(u.getExternalId() + "  " + u.getName() + "  (" + u.getSymbol() + ")  —  " + u.getQuantity()));
 ```
 
 </TabItem>
@@ -35,7 +35,7 @@ for u in client.units.list():
 
 ```rust
 for u in api.units.list().await?.get_items() {
-    println!("{}  {}  ({})", u.external_id, u.name, u.symbol);
+    println!("{}  {}  ({})  —  {}", u.external_id, u.name, u.symbol, u.quantity);
 }
 ```
 

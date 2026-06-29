@@ -69,6 +69,7 @@ var filter = new RetrieveFilter();
 filter.setExternalId("pump_07_vibration_mm_s");
 filter.setStart(ZonedDateTime.parse("2026-05-01T00:00:00Z"));
 filter.setEnd(ZonedDateTime.parse("2026-05-08T00:00:00Z"));
+filter.setLimit(100000);
 
 var request = new DataRetriever<RetrieveFilter>();
 request.setItems(List.of(filter));
@@ -81,9 +82,12 @@ var points = client.timeseries().retrieve(request).getItems().get(0).getDatapoin
 ```rust
 // Rust extracts the same data; the learning step (Step 3) is Python.
 use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+use chrono::Utc;
 
 let filter = RetrieveFilter {
     external_id: Some("pump_07_vibration_mm_s".into()),
+    start: Some("2026-05-01T00:00:00Z".parse().unwrap()),
+    end: Some("2026-05-08T00:00:00Z".parse().unwrap()),
     limit: Some(100_000),
     ..Default::default()
 };

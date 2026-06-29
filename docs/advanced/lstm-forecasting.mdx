@@ -83,9 +83,12 @@ var points = client.timeseries().retrieve(request).getItems().get(0).getDatapoin
 ```rust
 // Rust pulls the same daily history; the model below is Python.
 use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+use chrono::Utc;
 
 let filter = RetrieveFilter {
     external_id: Some("well_a12_oil_rate_bpd".into()),
+    start: Some(Utc::now() - chrono::Duration::days(730)),
+    end: Some(Utc::now()),
     aggregates: vec!["average".into()],
     granularity: Some("1d".into()),
     ..Default::default()

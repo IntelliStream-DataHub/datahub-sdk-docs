@@ -59,7 +59,6 @@ try (var stream = client.subscriptions().listen(List.of("hall_2_thermal"))
                 warning.setExternalId("thermal_warning_r14_" + System.currentTimeMillis());
                 warning.setType("thermal_warning");
                 warning.setStatus("open");
-                warning.setEventTime(ZonedDateTime.now());
                 warning.setMetadata(Map.of("rack", "rack_r14", "inlet_c", "29.4"));
                 client.events().create(List.of(warning));
             }
@@ -87,12 +86,16 @@ with client.subscriptions.listen(["hall_2_thermal"]) as listener:
 
 ```rust
 use dataplatform_rust_sdk::events::Event;
+use chrono::Utc;
 
 let mut listener = api.subscriptions.listen(&["hall_2_thermal"]).await?;
 while let Some(Ok(msg)) = listener.next().await {
     if inlet_above(&msg.payload, 27.0) {              // °C — above ASHRAE band
-        let mut warning = Event::new("thermal_warning_r14".into());
+        let mut warning = Event::new(format!("thermal_warning_r14_{}", Utc::now().timestamp()));
         warning.r#type = Some("thermal_warning".into());
+        warning.status = Some("open".into());
+        warning.add_metadata("rack".into(), "rack_r14".into());
+        warning.add_metadata("inlet_c".into(), "29.4".into());
         api.events.create(&vec![warning]).await?;
     }
     listener.ack(&[msg.message_id.as_str()]).await?;

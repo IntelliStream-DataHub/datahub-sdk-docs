@@ -78,9 +78,12 @@ for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
 
 ```rust
 use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+use chrono::Utc;
 
 let filter = RetrieveFilter {
     external_id: Some("cdu_1_energy_gj".into()),
+    start: Some(Utc::now() - chrono::Duration::days(1)),
+    end: Some(Utc::now()),
     aggregates: vec!["sum".into()],
     granularity: Some("1h".into()),
     ..Default::default()
@@ -108,7 +111,6 @@ EventModel upset = new EventModel();
 upset.setExternalId("process_upset_cdu1_" + System.currentTimeMillis());
 upset.setType("process_upset");
 upset.setStatus("open");
-upset.setEventTime(ZonedDateTime.now());
 upset.setMetadata(Map.of("unit", "crude_unit_1", "tag", "column_top_temp", "value_c", "168"));
 client.events().create(List.of(upset));
 ```
@@ -128,9 +130,14 @@ client.events.create([datahub_sdk.Event(
 
 ```rust
 use dataplatform_rust_sdk::events::Event;
+use chrono::Utc;
 
-let mut upset = Event::new("process_upset_cdu1".into());
+let mut upset = Event::new(format!("process_upset_cdu1_{}", Utc::now().timestamp()));
 upset.r#type = Some("process_upset".into());
+upset.status = Some("open".into());
+upset.add_metadata("unit".into(), "crude_unit_1".into());
+upset.add_metadata("tag".into(), "column_top_temp".into());
+upset.add_metadata("value_c".into(), "168".into());
 api.events.create(&vec![upset]).await?;
 ```
 

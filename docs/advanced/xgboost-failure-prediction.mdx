@@ -86,9 +86,12 @@ var agg = client.timeseries().retrieve(request).getItems().get(0).getDatapoints(
 ```rust
 // Rust pulls each pump's weekly aggregates; the model below is Python.
 use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+use chrono::Utc;
 
 let filter = RetrieveFilter {
     external_id: Some("pump_esp_a12_motor_temp_c".into()),
+    start: Some(Utc::now() - chrono::Duration::days(7)),
+    end: Some(Utc::now()),
     aggregates: vec!["average".into(), "max".into()],
     granularity: Some("7d".into()),
     ..Default::default()

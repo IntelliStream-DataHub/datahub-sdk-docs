@@ -87,9 +87,12 @@ var sig = client.timeseries().retrieve(request).getItems().get(0).getDatapoints(
 ```rust
 // Rust pulls each asset's aggregates the same way; the clustering below is Python.
 use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+use chrono::Utc;
 
 let filter = RetrieveFilter {
     external_id: Some("pump_07_load_mw".into()),
+    start: Some(Utc::now() - chrono::Duration::days(30)),
+    end: Some(Utc::now()),
     aggregates: vec!["average".into(), "max".into()],
     granularity: Some("30d".into()),
     ..Default::default()

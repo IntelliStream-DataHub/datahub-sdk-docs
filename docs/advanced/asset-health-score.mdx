@@ -86,9 +86,12 @@ double bearingTemp = Double.parseDouble(pts.get(pts.size() - 1).getValue());
 ```rust
 // The same retrieve, per signal; the scoring arithmetic below is shown in Python.
 use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+use chrono::Utc;
 
 let filter = RetrieveFilter {
     external_id: Some("pump_07_bearing_temp_c".into()),
+    start: Some(Utc::now() - chrono::Duration::minutes(15)),
+    end: Some(Utc::now()),
     aggregates: vec!["average".into()],
     granularity: Some("15m".into()),
     ..Default::default()

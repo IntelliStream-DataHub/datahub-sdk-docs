@@ -116,10 +116,11 @@ Methods return `DataWrapper<T>` — `getItems()` holds the results. Non-2xx thro
 `DatahubApiException`:
 
 ```java
+import ai.intellistream.datahub.models.IdCollection;
 import ai.intellistream.datahub.sdk.http.DatahubApiException;
 
 try {
-    DataWrapper<Resource> r = client.resources().getById(999);
+    DataWrapper<Resource> r = client.resources().byIds(List.of(IdCollection.createFromExternalId("pump_1")));
     r.getItems().forEach(System.out::println);
 } catch (DatahubApiException e) {
     System.err.println(e.statusCode() + ": " + e.body());

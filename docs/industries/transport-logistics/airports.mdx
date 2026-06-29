@@ -52,7 +52,6 @@ try (var stream = client.subscriptions().listen(List.of("stand_b12_turnaround"))
                 risk.setExternalId("turnaround_risk_su204_" + System.currentTimeMillis());
                 risk.setType("turnaround_risk");
                 risk.setStatus("open");
-                risk.setEventTime(ZonedDateTime.now());
                 risk.setMetadata(Map.of("flight", "flight_su204", "leg", "fuelling", "stand", "stand_b12"));
                 client.events().create(List.of(risk));
             }
@@ -80,12 +79,17 @@ with client.subscriptions.listen(["stand_b12_turnaround"]) as listener:
 
 ```rust
 use dataplatform_rust_sdk::events::Event;
+use chrono::Utc;
 
 let mut listener = api.subscriptions.listen(&["stand_b12_turnaround"]).await?;
 while let Some(Ok(msg)) = listener.next().await {
     if leg_overrunning(&msg.payload) {                // e.g. fuelling past plan
-        let mut risk = Event::new("turnaround_risk_su204".into());
+        let mut risk = Event::new(format!("turnaround_risk_su204_{}", Utc::now().timestamp()));
         risk.r#type = Some("turnaround_risk".into());
+        risk.status = Some("open".into());
+        risk.add_metadata("flight".into(), "flight_su204".into());
+        risk.add_metadata("leg".into(), "fuelling".into());
+        risk.add_metadata("stand".into(), "stand_b12".into());
         api.events.create(&vec![risk]).await?;
     }
     listener.ack(&[msg.message_id.as_str()]).await?;

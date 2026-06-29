@@ -125,7 +125,6 @@ try (var stream = client.subscriptions().listen(List.of("checkout_slo"))
                 event.setExternalId("slo_breach_checkout_" + System.currentTimeMillis());
                 event.setType("slo_breach");
                 event.setStatus("firing");
-                event.setEventTime(ZonedDateTime.now());
                 event.setMetadata(Map.of("service", "service_checkout", "slo", "latency_p99"));
                 client.events().create(List.of(event));
             }
@@ -153,13 +152,16 @@ with client.subscriptions.listen(["checkout_slo"]) as listener:
 
 ```rust
 use dataplatform_rust_sdk::events::Event;
+use chrono::Utc;
 
 let mut listener = api.subscriptions.listen(&["checkout_slo"]).await?;
 while let Some(Ok(msg)) = listener.next().await {
     if breaches_slo(&msg.payload) {           // e.g. p99 latency > 300 ms
-        let mut event = Event::new("slo_breach_checkout".into());
+        let mut event = Event::new(format!("slo_breach_checkout_{}", Utc::now().timestamp()));
         event.r#type = Some("slo_breach".into());
         event.status = Some("firing".into());
+        event.add_metadata("service".into(), "service_checkout".into());
+        event.add_metadata("slo".into(), "latency_p99".into());
         api.events.create(&vec![event]).await?;
     }
     listener.ack(&[msg.message_id.as_str()]).await?;
@@ -178,7 +180,10 @@ timeline, or by the `service` metadata to see one service's history.
 <TabItem value="java" label="Java">
 
 ```java
-DataWrapper<EventModel> breaches = client.events().filter(new EventRetreiver());
+EventRetreiver retriever = new EventRetreiver();
+retriever.getFilter().setType("slo_breach");
+retriever.setLimit(200);
+DataWrapper<EventModel> breaches = client.events().filter(retriever);
 ```
 
 </TabItem>
@@ -193,9 +198,14 @@ breaches = client.events.filter(datahub_sdk.EventFilter(
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::filters::EventFilter;
+use dataplatform_rust_sdk::filters::{BasicEventFilter, EventFilter};
 
-let breaches = api.events.filter(&EventFilter::default()).await?;
+let mut basic = BasicEventFilter::default();
+basic.set_type("slo_breach");
+let mut filter = EventFilter::default();
+filter.set_filter(basic);
+filter.set_limit(200);
+let breaches = api.events.filter(&filter).await?;
 ```
 
 </TabItem>

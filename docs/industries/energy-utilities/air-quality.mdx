@@ -107,6 +107,7 @@ use dataplatform_rust_sdk::timeseries::TimeSeries;
 for (id, name, unit) in [
     ("station_kirkeveien_pm25", "Kirkeveien PM2.5", "ug_m3"),
     ("station_kirkeveien_no2", "Kirkeveien NO2", "ppb"),
+    ("station_kirkeveien_co", "Kirkeveien CO", "ppm"),
 ] {
     let mut ts = TimeSeries::new(id, name);
     ts.unit = Some(unit.into());

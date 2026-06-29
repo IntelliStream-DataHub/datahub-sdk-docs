@@ -77,11 +77,14 @@ for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
 
 ```rust
 use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+use chrono::Utc;
 
 let filter = RetrieveFilter {
     external_id: Some("ed_time_to_bed_minutes".into()),
     aggregates: vec!["average".into(), "max".into()],
     granularity: Some("1h".into()),
+    start: Some(Utc::now() - chrono::Duration::days(1)),
+    end: Some(Utc::now()),
     ..Default::default()
 };
 let series = api.time_series
@@ -107,7 +110,6 @@ EventModel breach = new EventModel();
 breach.setExternalId("flow_breach_ed_" + System.currentTimeMillis());
 breach.setType("flow_breach");
 breach.setStatus("open");
-breach.setEventTime(ZonedDateTime.now());
 breach.setMetadata(Map.of("stage", "emergency_department", "breach_rate_pct", "22"));
 client.events().create(List.of(breach));
 ```
@@ -127,9 +129,13 @@ client.events.create([datahub_sdk.Event(
 
 ```rust
 use dataplatform_rust_sdk::events::Event;
+use chrono::Utc;
 
-let mut breach = Event::new("flow_breach_ed".into());
+let mut breach = Event::new(format!("flow_breach_ed_{}", Utc::now().timestamp()));
 breach.r#type = Some("flow_breach".into());
+breach.status = Some("open".into());
+breach.add_metadata("stage".into(), "emergency_department".into());
+breach.add_metadata("breach_rate_pct".into(), "22".into());
 api.events.create(&vec![breach]).await?;
 ```
 

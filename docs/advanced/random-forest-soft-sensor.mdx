@@ -83,9 +83,12 @@ var pts = client.timeseries().retrieve(request).getItems().get(0).getDatapoints(
 ```rust
 // Rust pulls the sensor and lab series the same way; the model below is Python.
 use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+use chrono::Utc;
 
 let filter = RetrieveFilter {
     external_id: Some("cdu_1_top_temp_c".into()),
+    start: Some("2026-01-01T00:00:00Z".parse().unwrap()),
+    end: Some("2026-06-01T00:00:00Z".parse().unwrap()),
     aggregates: vec!["average".into()],
     granularity: Some("5m".into()),
     ..Default::default()

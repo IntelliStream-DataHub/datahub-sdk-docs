@@ -57,7 +57,6 @@ try (var stream = client.subscriptions().listen(List.of("tsf_instruments"))
                 alarm.setExternalId("tailings_alarm_p14_" + System.currentTimeMillis());
                 alarm.setType("tailings_alarm");
                 alarm.setStatus(level.equals("red") ? "critical" : "warning");
-                alarm.setEventTime(ZonedDateTime.now());
                 alarm.setMetadata(Map.of("instrument", "piezometer_p14", "level", level,
                                          "pore_pressure_kpa", "186"));
                 client.events().create(List.of(alarm));
@@ -89,13 +88,17 @@ with client.subscriptions.listen(["tsf_instruments"]) as listener:
 
 ```rust
 use dataplatform_rust_sdk::events::Event;
+use chrono::Utc;
 
 let mut listener = api.subscriptions.listen(&["tsf_instruments"]).await?;
 while let Some(Ok(msg)) = listener.next().await {
     if let Some(level) = trigger_level(&msg.payload) {  // "amber" | "red"
-        let mut alarm = Event::new("tailings_alarm_p14".into());
+        let mut alarm = Event::new(format!("tailings_alarm_p14_{}", Utc::now().timestamp()));
         alarm.r#type = Some("tailings_alarm".into());
         alarm.status = Some(if level == "red" { "critical" } else { "warning" }.into());
+        alarm.add_metadata("instrument".into(), "piezometer_p14".into());
+        alarm.add_metadata("level".into(), level.into());
+        alarm.add_metadata("pore_pressure_kpa".into(), "186".into());
         api.events.create(&vec![alarm]).await?;
     }
     listener.ack(&[msg.message_id.as_str()]).await?;

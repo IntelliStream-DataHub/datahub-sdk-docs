@@ -66,8 +66,9 @@ desk_id = created[0].id
 ```rust
 use dataplatform_rust_sdk::datasets::Dataset;
 
-// external_id is derived as snake_case of the name → "equities_desk"
-let created = api.datasets.create(&vec![Dataset::new("Equities desk".into())]).await?;
+let mut ds = Dataset::new("Equities desk".into());
+ds.external_id = "desk_equities".into();
+let created = api.datasets.create(&vec![ds]).await?;
 let desk_id = created.get_items()[0].id;
 ```
 
@@ -117,7 +118,7 @@ client.timeseries.insert_from_lists(
 use dataplatform_rust_sdk::timeseries::TimeSeries;
 use chrono::Utc;
 
-let mut ts = TimeSeries::new("portfolio_growth_mtm_usd", "Growth portfolio — MtM (USD)");
+let mut ts = TimeSeries::new("portfolio_growth_mtm_usd", "Growth portfolio — mark-to-market (USD)");
 ts.unit = Some("usd".into());
 ts.value_type = "numeric".into();
 ts.data_set_id = desk_id;          // desk_id is already Option<u64>
@@ -146,7 +147,6 @@ EventModel breach = new EventModel();
 breach.setExternalId("var_limit_breach_growth_" + System.currentTimeMillis());
 breach.setType("var_limit_breach");
 breach.setStatus("open");
-breach.setEventTime(ZonedDateTime.now());
 breach.setDataSetId(deskId);
 breach.setMetadata(Map.of(
     "portfolio", "portfolio_growth", "var_1d_usd", "512340", "limit_usd", "500000"));
@@ -169,11 +169,15 @@ client.events.create([datahub_sdk.Event(
 
 ```rust
 use dataplatform_rust_sdk::events::Event;
+use chrono::Utc;
 
-let mut breach = Event::new("var_limit_breach_growth".into());
+let mut breach = Event::new(format!("var_limit_breach_growth_{}", Utc::now().timestamp()));
 breach.r#type = Some("var_limit_breach".into());
 breach.status = Some("open".into());
 breach.data_set_id = desk_id;
+breach.add_metadata("portfolio".into(), "portfolio_growth".into());
+breach.add_metadata("var_1d_usd".into(), "512340".into());
+breach.add_metadata("limit_usd".into(), "500000".into());
 api.events.create(&vec![breach]).await?;
 ```
 

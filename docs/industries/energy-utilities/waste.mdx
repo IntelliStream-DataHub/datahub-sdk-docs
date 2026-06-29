@@ -49,7 +49,6 @@ if (fill >= 80.0) {
     due.setExternalId("collection_due_114_" + System.currentTimeMillis());
     due.setType("collection_due");
     due.setStatus("open");
-    due.setEventTime(ZonedDateTime.now());
     due.setMetadata(Map.of("bin", "bin_grunerlokka_114", "fill_pct", String.valueOf(fill)));
     client.events().create(List.of(due));
 }
@@ -72,14 +71,18 @@ if fill >= 80.0:
 <TabItem value="rust" label="Rust">
 
 ```rust
+use chrono::Utc;
 use dataplatform_rust_sdk::events::Event;
 
 let points = api.time_series.retrieve_datapoints(&last_reading("bin_grunerlokka_114_fill_pct")).await?
     .get_items().remove(0);
 let fill: f64 = points.datapoints[0].value.as_deref().unwrap_or("0").parse().unwrap_or(0.0);
 if fill >= 80.0 {
-    let mut due = Event::new("collection_due_114".into());
+    let mut due = Event::new(format!("collection_due_114_{}", Utc::now().timestamp()));
     due.r#type = Some("collection_due".into());
+    due.status = Some("open".into());
+    due.add_metadata("bin".into(), "bin_grunerlokka_114".into());
+    due.add_metadata("fill_pct".into(), fill.to_string());
     api.events.create(&vec![due]).await?;
 }
 ```

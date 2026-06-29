@@ -56,9 +56,11 @@ client.timeseries().ingest(Map.of(
 ```python
 import datahub_sdk
 
-client.timeseries.create([datahub_sdk.TimeSeries(
-    external_id="field_north_40_soil_moisture",
-    name="North 40 soil moisture", unit="pct")])
+client.timeseries.create([
+    datahub_sdk.TimeSeries(external_id="field_north_40_soil_moisture",
+        name="North 40 soil moisture", unit="pct"),
+    datahub_sdk.TimeSeries(external_id="field_north_40_soil_temp_c",
+        name="North 40 soil temperature", unit="deg_c")])
 client.timeseries.insert_from_lists(
     timestamps=timestamps, values=moisture, ts="field_north_40_soil_moisture")
 ```
@@ -72,6 +74,14 @@ use dataplatform_rust_sdk::timeseries::TimeSeries;
 let mut moisture = TimeSeries::new("field_north_40_soil_moisture", "North 40 soil moisture");
 moisture.unit = Some("pct".into());
 api.time_series.create_one(&moisture).await?;
+
+let mut soil_temp = TimeSeries::new("field_north_40_soil_temp_c", "North 40 soil temperature");
+soil_temp.unit = Some("deg_c".into());
+api.time_series.create_one(&soil_temp).await?;
+
+api.time_series
+    .insert_datapoint(None, Some("field_north_40_soil_moisture".into()), ts, "21.5".into())
+    .await?;
 ```
 
 </TabItem>
@@ -117,8 +127,10 @@ client.files.upload_file(datahub_sdk.FileUpload(
 ```rust
 use dataplatform_rust_sdk::files::FileUpload;
 
-let upload = FileUpload::new_with_destination_path(
+let mut upload = FileUpload::new_with_destination_path(
     "north_40_2026_06_28.tif", "/fields/north_40/scans/");
+upload.external_id = "scan_north_40_2026_06_28".into();
+upload.name = "2026_06_28.tif".into();
 api.files.upload_file(upload).await?;
 ```
 

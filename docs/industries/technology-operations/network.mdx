@@ -87,11 +87,14 @@ for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
 
 ```rust
 use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+use chrono::Utc;
 
 let filter = RetrieveFilter {
     external_id: Some("cell_oslo_4412_prb_util".into()),
     aggregates: vec!["max".into()],
     granularity: Some("1h".into()),
+    start: Some(Utc::now() - chrono::Duration::days(7)),
+    end: Some(Utc::now()),
     ..Default::default()
 };
 let series = api.time_series

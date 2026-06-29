@@ -78,11 +78,14 @@ for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
 
 ```rust
 use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+use chrono::Utc;
 
 let filter = RetrieveFilter {
     external_id: Some("mill_1_recovery_pct".into()),
     aggregates: vec!["average".into()],
     granularity: Some("1h".into()),
+    start: Some(Utc::now() - chrono::Duration::hours(12)),
+    end: Some(Utc::now()),
     ..Default::default()
 };
 let series = api.time_series
@@ -108,7 +111,6 @@ EventModel loss = new EventModel();
 loss.setExternalId("recovery_loss_mill1_" + System.currentTimeMillis());
 loss.setType("recovery_loss");
 loss.setStatus("open");
-loss.setEventTime(ZonedDateTime.now());
 loss.setMetadata(Map.of("mill", "mill_1", "recovery_pct", "88.4", "target_pct", "91.0"));
 client.events().create(List.of(loss));
 ```
@@ -128,9 +130,14 @@ client.events.create([datahub_sdk.Event(
 
 ```rust
 use dataplatform_rust_sdk::events::Event;
+use chrono::Utc;
 
-let mut loss = Event::new("recovery_loss_mill1".into());
+let mut loss = Event::new(format!("recovery_loss_mill1_{}", Utc::now().timestamp()));
 loss.r#type = Some("recovery_loss".into());
+loss.status = Some("open".into());
+loss.add_metadata("mill".into(), "mill_1".into());
+loss.add_metadata("recovery_pct".into(), "88.4".into());
+loss.add_metadata("target_pct".into(), "91.0".into());
 api.events.create(&vec![loss]).await?;
 ```
 

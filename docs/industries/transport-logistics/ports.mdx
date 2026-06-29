@@ -77,9 +77,12 @@ for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
 
 ```rust
 use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+use chrono::Utc;
 
 let filter = RetrieveFilter {
     external_id: Some("crane_qc_07_moves".into()),
+    start: Some(Utc::now() - chrono::Duration::hours(6)),
+    end: Some(Utc::now()),
     aggregates: vec!["sum".into()],
     granularity: Some("1h".into()),
     ..Default::default()
@@ -107,7 +110,6 @@ EventModel congestion = new EventModel();
 congestion.setExternalId("yard_congestion_b07_" + System.currentTimeMillis());
 congestion.setType("yard_congestion");
 congestion.setStatus("open");
-congestion.setEventTime(ZonedDateTime.now());
 congestion.setMetadata(Map.of("block", "yard_block_b07", "occupancy_pct", "94"));
 client.events().create(List.of(congestion));
 ```
@@ -127,9 +129,13 @@ client.events.create([datahub_sdk.Event(
 
 ```rust
 use dataplatform_rust_sdk::events::Event;
+use chrono::Utc;
 
-let mut congestion = Event::new("yard_congestion_b07".into());
+let mut congestion = Event::new(format!("yard_congestion_b07_{}", Utc::now().timestamp()));
 congestion.r#type = Some("yard_congestion".into());
+congestion.status = Some("open".into());
+congestion.add_metadata("block".into(), "yard_block_b07".into());
+congestion.add_metadata("occupancy_pct".into(), "94".into());
 api.events.create(&vec![congestion]).await?;
 ```
 

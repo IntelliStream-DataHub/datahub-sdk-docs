@@ -63,7 +63,6 @@ try (var stream = client.subscriptions().listen(List.of("rig_deepwater_1"))
                 kick.setExternalId("kick_detected_a12_" + System.currentTimeMillis());
                 kick.setType("kick_detected");
                 kick.setStatus("critical");
-                kick.setEventTime(ZonedDateTime.now());
                 kick.setMetadata(Map.of("well", "well_a12", "rig", "rig_deepwater_1",
                                         "flow_delta_gpm", "18"));
                 client.events().create(List.of(kick));
@@ -92,13 +91,17 @@ with client.subscriptions.listen(["rig_deepwater_1"]) as listener:
 
 ```rust
 use dataplatform_rust_sdk::events::Event;
+use chrono::Utc;
 
 let mut listener = api.subscriptions.listen(&["rig_deepwater_1"]).await?;
 while let Some(Ok(msg)) = listener.next().await {
     if influx_detected(&msg.payload) {             // flow_out > flow_in & pit rising
-        let mut kick = Event::new("kick_detected_a12".into());
+        let mut kick = Event::new(format!("kick_detected_a12_{}", Utc::now().timestamp()));
         kick.r#type = Some("kick_detected".into());
         kick.status = Some("critical".into());
+        kick.add_metadata("well".into(), "well_a12".into());
+        kick.add_metadata("rig".into(), "rig_deepwater_1".into());
+        kick.add_metadata("flow_delta_gpm".into(), "18".into());
         api.events.create(&vec![kick]).await?;
     }
     listener.ack(&[msg.message_id.as_str()]).await?;

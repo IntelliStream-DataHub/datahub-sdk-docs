@@ -50,7 +50,6 @@ try (var stream = client.subscriptions().listen(List.of("fleet_eta"))
                 risk.setExternalId("delivery_at_risk_v22_" + System.currentTimeMillis());
                 risk.setType("delivery_at_risk");
                 risk.setStatus("open");
-                risk.setEventTime(ZonedDateTime.now());
                 risk.setMetadata(Map.of("van", "van_22", "route", "route_oslo_e", "stops_left", "9"));
                 client.events().create(List.of(risk));
             }
@@ -78,12 +77,17 @@ with client.subscriptions.listen(["fleet_eta"]) as listener:
 
 ```rust
 use dataplatform_rust_sdk::events::Event;
+use chrono::Utc;
 
 let mut listener = api.subscriptions.listen(&["fleet_eta"]).await?;
 while let Some(Ok(msg)) = listener.next().await {
     if eta_past_window(&msg.payload) {
-        let mut risk = Event::new("delivery_at_risk_v22".into());
+        let mut risk = Event::new(format!("delivery_at_risk_v22_{}", Utc::now().timestamp()));
         risk.r#type = Some("delivery_at_risk".into());
+        risk.status = Some("open".into());
+        risk.add_metadata("van".into(), "van_22".into());
+        risk.add_metadata("route".into(), "route_oslo_e".into());
+        risk.add_metadata("stops_left".into(), "9".into());
         api.events.create(&vec![risk]).await?;
     }
     listener.ack(&[msg.message_id.as_str()]).await?;

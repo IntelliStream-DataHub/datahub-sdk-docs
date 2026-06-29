@@ -145,6 +145,10 @@ client.timeseries().ingest(Map.of(
 ```python
 client.timeseries.insert_from_lists(
     timestamps=timestamps, values=pressure_bar, ts="wellhead_pressure_bar")
+client.timeseries.insert_from_lists(
+    timestamps=timestamps, values=temperature_c, ts="casing_temperature_c")
+client.timeseries.insert_from_lists(
+    timestamps=timestamps, values=flow_bpd, ts="flow_rate_bpd")
 ```
 
 </TabItem>
@@ -153,6 +157,12 @@ client.timeseries.insert_from_lists(
 ```rust
 api.time_series
     .insert_datapoint(None, Some("wellhead_pressure_bar".into()), ts, "248.6".into())
+    .await?;
+api.time_series
+    .insert_datapoint(None, Some("casing_temperature_c".into()), ts, "92.0".into())
+    .await?;
+api.time_series
+    .insert_datapoint(None, Some("flow_rate_bpd".into()), ts, "1850.0".into())
     .await?;
 ```
 
@@ -177,7 +187,6 @@ if (series.getDatapoints().stream().anyMatch(p -> Double.parseDouble(p.getValue(
     event.setExternalId("esp_anomaly_a12_" + System.currentTimeMillis());
     event.setType("esp_anomaly");
     event.setStatus("open");
-    event.setEventTime(ZonedDateTime.now());
     event.setMetadata(Map.of("well", "well_a12", "pump", "pump_esp_a12"));
     client.events().create(List.of(event));
 }
@@ -199,13 +208,18 @@ if any(float(dp.value) < 80.0 for dp in points.get_datapoints()):
 <TabItem value="rust" label="Rust">
 
 ```rust
+use chrono::Utc;
+
 let points = api.time_series.retrieve_datapoints(&last_hour("pump_intake_pressure_bar")).await?
     .get_items().remove(0);
 let low = points.datapoints.iter()
     .any(|p| p.value.as_deref().and_then(|v| v.parse::<f64>().ok()).unwrap_or(99.0) < 80.0);
 if low {
-    let mut event = Event::new("esp_anomaly_a12".into());
+    let mut event = Event::new(format!("esp_anomaly_a12_{}", Utc::now().timestamp()));
     event.r#type = Some("esp_anomaly".into());
+    event.status = Some("open".into());
+    event.add_metadata("well".into(), "well_a12".into());
+    event.add_metadata("pump".into(), "pump_esp_a12".into());
     api.events.create(&vec![event]).await?;
 }
 ```

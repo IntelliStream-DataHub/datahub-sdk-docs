@@ -40,7 +40,6 @@ if (tooHot) {
     event.setExternalId("overheat_press_07_" + System.currentTimeMillis());
     event.setType("overheat");
     event.setStatus("open");
-    event.setEventTime(ZonedDateTime.now());
     event.setMetadata(Map.of("series", "engine_temperature", "limit", "110"));
     client.events().create(List.of(event));
 }
@@ -63,7 +62,6 @@ if any(float(dp.value) > 110.0 for dp in points):
         external_id=f"overheat_press_07_{int(pd.Timestamp.now().timestamp())}",
         type="overheat",
         status="open",
-        event_time=pd.Timestamp.now(tz="UTC"),
         metadata={"series": "engine_temperature", "limit": "110"})])
 ```
 
@@ -71,11 +69,14 @@ if any(float(dp.value) > 110.0 for dp in points):
 <TabItem value="rust" label="Rust">
 
 ```rust
+use chrono::Utc;
 use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
 use dataplatform_rust_sdk::events::Event;
 
 let filter = RetrieveFilter {
     external_id: Some("engine_temperature".into()),
+    start: Some(Utc::now() - chrono::Duration::hours(1)),
+    end: Some(Utc::now()),
     ..Default::default()
 };
 let series = api.time_series
@@ -86,9 +87,11 @@ let too_hot = series.datapoints.iter()
     .any(|p| p.value.as_deref().and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.0) > 110.0);
 
 if too_hot {
-    let mut event = Event::new("overheat_press_07".into());
+    let mut event = Event::new(format!("overheat_press_07_{}", Utc::now().timestamp()));
     event.r#type = Some("overheat".into());
     event.status = Some("open".into());
+    event.add_metadata("series".into(), "engine_temperature".into());
+    event.add_metadata("limit".into(), "110".into());
     api.events.create(&vec![event]).await?;
 }
 ```
@@ -106,7 +109,8 @@ trail or an incident timeline.
 
 ```java
 EventRetreiver retriever = new EventRetreiver();
-// narrow by type / time range / metadata on the retriever
+retriever.setLimit(100);
+retriever.getFilter().setType("overheat");
 DataWrapper<EventModel> overheats = client.events().filter(retriever);
 ```
 
@@ -123,9 +127,13 @@ overheats = client.events.filter(datahub_sdk.EventFilter(
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::filters::EventFilter;
+use dataplatform_rust_sdk::filters::{BasicEventFilter, EventFilter};
 
-let overheats = api.events.filter(&EventFilter::default()).await?;
+let filter = EventFilter::default()
+    .set_filter(BasicEventFilter { r#type: Some("overheat".into()), ..Default::default() })
+    .set_limit(100)
+    .build();
+let overheats = api.events.filter(&filter).await?;
 ```
 
 </TabItem>

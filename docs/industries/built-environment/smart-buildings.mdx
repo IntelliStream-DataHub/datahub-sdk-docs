@@ -58,7 +58,6 @@ try (var stream = client.subscriptions().listen(List.of("tower_a_comfort"))
                 alert.setExternalId("comfort_alert_l8_" + System.currentTimeMillis());
                 alert.setType("comfort_alert");
                 alert.setStatus("open");
-                alert.setEventTime(ZonedDateTime.now());
                 alert.setMetadata(Map.of("zone", "zone_l8_open_plan", "co2_ppm", "1180"));
                 client.events().create(List.of(alert));
             }
@@ -86,13 +85,16 @@ with client.subscriptions.listen(["tower_a_comfort"]) as listener:
 
 ```rust
 use dataplatform_rust_sdk::events::Event;
+use chrono::Utc;
 
 let mut listener = api.subscriptions.listen(&["tower_a_comfort"]).await?;
 while let Some(Ok(msg)) = listener.next().await {
     if outside_comfort(&msg.payload) {              // temp or CO2 out of band
-        let mut alert = Event::new("comfort_alert_l8".into());
+        let mut alert = Event::new(format!("comfort_alert_l8_{}", Utc::now().timestamp()));
         alert.r#type = Some("comfort_alert".into());
         alert.status = Some("open".into());
+        alert.add_metadata("zone".into(), "zone_l8_open_plan".into());
+        alert.add_metadata("co2_ppm".into(), "1180".into());
         api.events.create(&vec![alert]).await?;
     }
     listener.ack(&[msg.message_id.as_str()]).await?;
@@ -147,11 +149,14 @@ for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
 
 ```rust
 use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+use chrono::Utc;
 
 let filter = RetrieveFilter {
     external_id: Some("tower_a_l8_energy_kwh".into()),
     aggregates: vec!["sum".into()],
     granularity: Some("1d".into()),
+    start: Some(Utc::now() - chrono::Duration::days(30)),
+    end: Some(Utc::now()),
     ..Default::default()
 };
 let series = api.time_series

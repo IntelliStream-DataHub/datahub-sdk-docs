@@ -54,7 +54,6 @@ if (series.getDatapoints().stream().anyMatch(p -> Double.parseDouble(p.getValue(
     warning.setExternalId("equipment_warning_785_" + System.currentTimeMillis());
     warning.setType("equipment_warning");
     warning.setStatus("open");
-    warning.setEventTime(ZonedDateTime.now());
     warning.setMetadata(Map.of("unit", "truck_785", "signal", "oil_pressure"));
     client.events().create(List.of(warning));
 }
@@ -77,14 +76,18 @@ if any(float(dp.value) < 250.0 for dp in points.get_datapoints()):
 
 ```rust
 use dataplatform_rust_sdk::events::Event;
+use chrono::Utc;
 
 let points = api.time_series.retrieve_datapoints(&last_hour("truck_785_oil_pressure_kpa")).await?
     .get_items().remove(0);
 let low = points.datapoints.iter()
     .any(|p| p.value.as_deref().and_then(|v| v.parse::<f64>().ok()).unwrap_or(999.0) < 250.0);
 if low {
-    let mut warning = Event::new("equipment_warning_785".into());
+    let mut warning = Event::new(format!("equipment_warning_785_{}", Utc::now().timestamp()));
     warning.r#type = Some("equipment_warning".into());
+    warning.status = Some("open".into());
+    warning.add_metadata("unit".into(), "truck_785".into());
+    warning.add_metadata("signal".into(), "oil_pressure".into());
     api.events.create(&vec![warning]).await?;
 }
 ```
@@ -137,11 +140,14 @@ for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
 
 ```rust
 use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+use chrono::Utc;
 
 let filter = RetrieveFilter {
     external_id: Some("crusher_01_throughput_tph".into()),
     aggregates: vec!["average".into()],
     granularity: Some("1h".into()),
+    start: Some(Utc::now() - chrono::Duration::hours(12)),
+    end: Some(Utc::now()),
     ..Default::default()
 };
 let series = api.time_series

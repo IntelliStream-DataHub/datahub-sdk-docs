@@ -48,7 +48,9 @@ uploaded = client.files.upload_file(datahub_sdk.FileUpload(
     path="calibration_a12.pdf",                # local file
     destination_path="/certificates/2026/",
     external_id="calibration_pump_esp_a12",
-    name="calibration_a12.pdf"))
+    name="calibration_a12.pdf",
+    data_set_id=42,
+    description="ESP A-12 calibration certificate"))
 ```
 
 </TabItem>
@@ -57,9 +59,13 @@ uploaded = client.files.upload_file(datahub_sdk.FileUpload(
 ```rust
 use dataplatform_rust_sdk::files::FileUpload;
 
-// external id + MIME type are inferred from the file
-let upload = FileUpload::new_with_destination_path(
+// MIME type is inferred from the file content
+let mut upload = FileUpload::new_with_destination_path(
     "calibration_a12.pdf", "/certificates/2026/");
+upload.set_external_id("calibration_pump_esp_a12".into());
+upload.set_file_name("calibration_a12.pdf".into());
+upload.set_data_set_id(42);
+upload.set_description("ESP A-12 calibration certificate".into());
 let uploaded = api.files.upload_file(upload).await?;
 ```
 

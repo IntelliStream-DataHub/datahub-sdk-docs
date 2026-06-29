@@ -121,7 +121,6 @@ try (var stream = client.subscriptions().listen(List.of("bed_capacity"))
                 warning.setExternalId("capacity_warning_icu_" + System.currentTimeMillis());
                 warning.setType("capacity_warning");
                 warning.setStatus("open");
-                warning.setEventTime(ZonedDateTime.now());
                 warning.setMetadata(Map.of("ward", "ward_icu", "occupancy_pct", "96"));
                 client.events().create(List.of(warning));
             }
@@ -150,14 +149,17 @@ with client.subscriptions.listen(["bed_capacity"]) as listener:
 
 ```rust
 use dataplatform_rust_sdk::events::Event;
+use chrono::Utc;
 
 let mut listener = api.subscriptions.listen(&["bed_capacity"]).await?;
 while let Some(Ok(msg)) = listener.next().await {
     update_wallboard(&msg.payload);
     if over_threshold(&msg.payload) {                  // e.g. occupancy > 95%
-        let mut warning = Event::new("capacity_warning_icu".into());
+        let mut warning = Event::new(format!("capacity_warning_icu_{}", Utc::now().timestamp()));
         warning.r#type = Some("capacity_warning".into());
         warning.status = Some("open".into());
+        warning.add_metadata("ward".into(), "ward_icu".into());
+        warning.add_metadata("occupancy_pct".into(), "96".into());
         api.events.create(&vec![warning]).await?;
     }
     listener.ack(&[msg.message_id.as_str()]).await?;
