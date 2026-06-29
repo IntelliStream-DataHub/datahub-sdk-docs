@@ -17,6 +17,24 @@ temperature record to prove the chain held.
 What we solve here is protecting temperature-sensitive stock with live monitoring and an
 auditable record.
 
+## Set up demo data
+
+New workspace? Run this once (Python) to create a fridge's temperature series, **create the
+subscription before we listen**, and push it above the 2–8 °C band. Safe to re-run.
+
+```python
+import datahub_sdk, numpy as np, pandas as pd
+
+client = datahub_sdk.DataHubClient.from_env()
+
+client.timeseries.create([datahub_sdk.TimeSeries(external_id="fridge_pharmacy_12_temp_c", name="Pharmacy fridge 12 temp")])
+client.subscriptions.create([datahub_sdk.Subscription(
+    external_id="pharmacy_fridges", name="Pharmacy fridges", timeseries=["fridge_pharmacy_12_temp_c"])])
+idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=60, freq="1min")
+t = np.full(60, 4.5); t[-10:] = 9.3                 # rises above the 8 °C ceiling
+client.timeseries.insert_from_lists(timestamps=idx, values=t, ts="fridge_pharmacy_12_temp_c")
+```
+
 ## 1. Watch every fridge live
 
 Each fridge streams its temperature; a subscription brings them into one feed. When one
@@ -89,6 +107,14 @@ while let Some(Ok(msg)) = listener.next().await {
 
 For an audit, retrieve a fridge's temperature history over any window to produce the
 time-stamped record showing the chain held. See [Query & aggregate](/guides/query-and-aggregate).
+
+## See the result
+
+The warming fridge trips the loop while there's still time to act:
+
+```text
+cold_chain_excursion_f12_…  → critical   (9.3 °C, above the 2–8 °C band)
+```
 
 ## See also
 

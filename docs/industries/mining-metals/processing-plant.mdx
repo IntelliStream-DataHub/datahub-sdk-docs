@@ -17,6 +17,22 @@ live, rolled-up numbers so they can act on a dip while the ore is still in the c
 What we solve here is protecting metal recovery by turning mill telemetry into the KPIs
 the control room steers on.
 
+## Set up demo data
+
+New workspace? Run this once (Python) to create the mill's recovery series with a dip below
+target. Safe to re-run.
+
+```python
+import datahub_sdk, numpy as np, pandas as pd
+
+client = datahub_sdk.DataHubClient.from_env()
+
+client.timeseries.create([datahub_sdk.TimeSeries(external_id="mill_1_recovery_pct", name="Mill 1 recovery %")])
+idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=12, freq="1h")
+rec = np.full(12, 91.0); rec[-4:] -= np.linspace(0, 3, 4)        # dips below the 91% target
+client.timeseries.insert_from_lists(timestamps=idx, values=rec, ts="mill_1_recovery_pct")
+```
+
 ## 1. Track recovery and throughput
 
 Feed grade, concentrate grade, tailings grade and tonnage are series; recovery is
@@ -126,6 +142,20 @@ api.events.create(&vec![loss]).await?;
 Recovery, grind and reagents interact in complex ways — [cluster the operating
 states](/advanced/kmeans-clustering) to discover which regimes recover best, or build a
 [soft sensor](/advanced/random-forest-soft-sensor) to estimate recovery between assays.
+
+## See the result
+
+Chart recovery against target — the dip is metal walking out with the tailings:
+
+```python
+import matplotlib.pyplot as plt
+
+rf = datahub_sdk.RetrieveFilter(ts="mill_1_recovery_pct",
+    start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=12), end=pd.Timestamp.now(tz="UTC"),
+    aggregates=["average"], granularity="1h")
+v = [dp.average for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()]
+plt.plot(v); plt.axhline(91, color="r", ls="--"); plt.title("Mill 1 recovery (%)"); plt.show()
+```
 
 ## See also
 

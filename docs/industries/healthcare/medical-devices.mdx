@@ -15,6 +15,26 @@ patient. Tracking that across wards by spreadsheet is how units get missed.
 
 What we solve here is device availability and fast, complete recall tracing.
 
+## Set up demo data
+
+New workspace? Run this once (Python) to create three pumps of the same model in a ward —
+so the recall walk in step 2 returns the full pull list. Safe to re-run.
+
+```python
+import datahub_sdk
+
+client = datahub_sdk.DataHubClient.from_env()
+
+nodes = [datahub_sdk.Resource(external_id="model_acme_x200", name="Acme X200 infusion pump"),
+         datahub_sdk.Resource(external_id="ward_icu", name="Intensive care")]
+edges = []
+for u in ["3391", "3392", "3401"]:
+    nodes.append(datahub_sdk.Resource(external_id=f"pump_icu_{u}", name=f"Infusion pump {u}"))
+    edges += [datahub_sdk.RelForm.by_external_ids(f"pump_icu_{u}", "ward_icu", "located_in"),
+              datahub_sdk.RelForm.by_external_ids(f"pump_icu_{u}", "model_acme_x200", "is_model")]
+client.resources.create(nodes, edges)
+```
+
 ## 1. Model the fleet and watch availability
 
 A hospital *contains* wards, a ward *contains* devices, and each device *is a* model.
@@ -130,6 +150,16 @@ for node in affected.nodes() {
 Pump and battery health are series; rolling them up surfaces units trending toward
 failure for planned swap-out — and the [XGBoost failure
 predictor](/advanced/xgboost-failure-prediction) does it properly.
+
+## See the result
+
+The recall walk returns every unit of the model to pull:
+
+```text
+pull from service: pump_icu_3391
+pull from service: pump_icu_3392
+pull from service: pump_icu_3401
+```
 
 ## See also
 

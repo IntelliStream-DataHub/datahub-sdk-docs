@@ -16,6 +16,26 @@ plan so it can act on the bottleneck rather than the loudest radio call.
 What we solve here is unplanned downtime and hidden bottlenecks across a fleet of
 expensive, hard-worked machines.
 
+## Set up demo data
+
+New workspace? Run this once (Python) to create a haul truck's oil-pressure series (sagging
+below its limit) and a crusher throughput series. Safe to re-run.
+
+```python
+import datahub_sdk, numpy as np, pandas as pd
+
+client = datahub_sdk.DataHubClient.from_env()
+
+client.timeseries.create([datahub_sdk.TimeSeries(external_id="truck_785_oil_pressure_kpa", name="Truck 785 oil pressure")])
+idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=60, freq="1min")
+op = np.full(60, 320.0); op[-15:] -= np.linspace(0, 90, 15)      # sags below 250 kPa
+client.timeseries.insert_from_lists(timestamps=idx, values=op, ts="truck_785_oil_pressure_kpa")
+
+client.timeseries.create([datahub_sdk.TimeSeries(external_id="crusher_01_throughput_tph", name="Crusher 01 throughput")])
+idx2 = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=12, freq="1h")
+client.timeseries.insert_from_lists(timestamps=idx2, values=np.random.uniform(1800, 2200, 12), ts="crusher_01_throughput_tph")
+```
+
 ## 1. Spot a machine trending to failure
 
 Haul-truck engine temperature, oil pressure and payload stream in. A drifting reading
@@ -138,6 +158,14 @@ for p in &series.datapoints { compare_to_plan(&p.timestamp, p.average); }
 Model pit → loader → truck → crusher as a [graph](/guides/model-assets-graph) so a
 crusher fault's [blast radius](/guides/correlate-alarms) — every truck that feeds it —
 is one traversal away when you plan the workaround.
+
+## See the result
+
+The sagging oil pressure trips the predictive rule before the breakdown:
+
+```text
+equipment_warning_785_…  → open   (oil pressure fell below 250 kPa)
+```
 
 ## See also
 

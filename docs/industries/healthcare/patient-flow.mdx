@@ -16,6 +16,22 @@ which stage's wait is growing — so they fix the real bottleneck, not the loude
 What we solve here is finding the bottleneck stage in the patient journey, using the
 flow data the hospital already has.
 
+## Set up demo data
+
+New workspace? Run this once (Python) to create the ED time-to-bed series with a day of
+readings whose wait grows through the afternoon. Safe to re-run.
+
+```python
+import datahub_sdk, numpy as np, pandas as pd
+
+client = datahub_sdk.DataHubClient.from_env()
+
+client.timeseries.create([datahub_sdk.TimeSeries(external_id="ed_time_to_bed_minutes", name="ED time to bed (min)")])
+idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=24, freq="1h")
+ttb = 90 + np.linspace(0, 120, 24) + np.random.normal(0, 10, 24)
+client.timeseries.insert_from_lists(timestamps=idx, values=ttb, ts="ed_time_to_bed_minutes")
+```
+
 ## 1. Roll up the wait at each stage
 
 ED wait, time-to-bed, and length-of-stay are series. Hourly and daily roll-ups show
@@ -124,6 +140,20 @@ api.events.create(&vec![breach]).await?;
 
 Admissions follow strong daily and seasonal patterns — [forecast
 them](/advanced/demand-forecasting) to staff ahead of the surge instead of reacting to it.
+
+## See the result
+
+Chart the hourly wait — the climb is the bottleneck the coordinator acts on:
+
+```python
+import matplotlib.pyplot as plt
+
+rf = datahub_sdk.RetrieveFilter(ts="ed_time_to_bed_minutes",
+    start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=1), end=pd.Timestamp.now(tz="UTC"),
+    aggregates=["average"], granularity="1h")
+v = [dp.average for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()]
+plt.plot(v); plt.title("ED time-to-bed (min), hourly average"); plt.show()
+```
 
 ## See also
 

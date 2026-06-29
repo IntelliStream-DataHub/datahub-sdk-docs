@@ -17,6 +17,25 @@ This scenario is about **live operational monitoring**: model the hospital, stre
 occupancy in, and drive a capacity wall-board off a push connection. It uses only
 operational signals — bed counts, wait times, census — never patient records.
 
+## Set up demo data
+
+New workspace? Run this once (Python) to create a ward's occupancy series, **create the
+subscription before we listen**, and push it over the 95% line. The hospital graph is
+created by step 1. Safe to re-run.
+
+```python
+import datahub_sdk, numpy as np, pandas as pd
+
+client = datahub_sdk.DataHubClient.from_env()
+
+client.timeseries.create([datahub_sdk.TimeSeries(external_id="ward_icu_occupancy_pct", name="ICU occupancy %")])
+client.subscriptions.create([datahub_sdk.Subscription(
+    external_id="bed_capacity", name="Bed capacity", timeseries=["ward_icu_occupancy_pct"])])
+idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=60, freq="1min")
+occ = np.full(60, 88.0); occ[-10:] = 96.0          # crosses the 95% capacity threshold
+client.timeseries.insert_from_lists(timestamps=idx, values=occ, ts="ward_icu_occupancy_pct")
+```
+
 ## 1. Model the hospital
 
 A hospital *contains* wards, a ward *contains* beds. The same hierarchy you'd model
@@ -157,6 +176,14 @@ while let Some(Ok(msg)) = listener.next().await {
 
 Hourly-average occupancy per ward shows planners *when* the squeeze happens, so they
 can shift staff and elective schedules. See [Query & aggregate](/guides/query-and-aggregate).
+
+## See the result
+
+The ICU crossing 95% trips the loop:
+
+```text
+capacity_warning_icu_…  → open   (occupancy 96% — page the charge nurse)
+```
 
 ## See also
 

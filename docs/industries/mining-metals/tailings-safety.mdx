@@ -18,6 +18,25 @@ against trigger levels, with an alarm the instant one is crossed.
 What we solve here is the continuous, trigger-based monitoring a tailings dam's safety
 case depends on.
 
+## Set up demo data
+
+New workspace? Run this once (Python) to create a piezometer's pore-pressure series,
+**create the subscription before we listen**, and feed in a pressure that climbs past its
+trigger. Safe to re-run.
+
+```python
+import datahub_sdk, numpy as np, pandas as pd
+
+client = datahub_sdk.DataHubClient.from_env()
+
+client.timeseries.create([datahub_sdk.TimeSeries(external_id="piezometer_p14_pore_pressure_kpa", name="Piezometer P14 pore pressure")])
+client.subscriptions.create([datahub_sdk.Subscription(
+    external_id="tsf_instruments", name="Tailings instruments", timeseries=["piezometer_p14_pore_pressure_kpa"])])
+idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=90, freq="1h")
+client.timeseries.insert_from_lists(timestamps=idx, values=150 + np.linspace(0, 40, 90),   # rises past ~180 trigger
+    ts="piezometer_p14_pore_pressure_kpa")
+```
+
 ## 1. Watch the instruments against trigger levels
 
 Piezometers (pore pressure), phreatic levels and movement prisms stream in. A reading
@@ -97,6 +116,14 @@ A single reading rarely fails a dam; a rising *trend* is the real signal. Roll p
 pressure up to daily values and watch the slope — a steady climb toward the trigger is
 the early warning the safety case is built on. See [Query & aggregate](/guides/query-and-aggregate),
 and for an ahead-of-time call, the [early-warning model](/advanced/oxygen-crash-early-warning).
+
+## See the result
+
+The climbing pore pressure crosses its trigger and raises a graded alarm:
+
+```text
+tailings_alarm_p14_…  → warning   (pore pressure past its amber trigger level)
+```
 
 ## See also
 
