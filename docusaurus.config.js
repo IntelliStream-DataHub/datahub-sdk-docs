@@ -55,8 +55,9 @@ const config = {
         logo: { alt: 'IntelliStream', src: 'img/logo.svg', srcDark: 'img/logo-dark.svg' },
         items: [
           { type: 'docSidebar', sidebarId: 'tutorialSidebar', position: 'left', label: 'Docs' },
-          // A real deploy adds the mike-equivalent version dropdown here via
-          // `docs:version`; Docusaurus renders a docsVersionDropdown automatically.
+          // Simple version indicator. When the docs start tracking multiple releases,
+          // replace this with a docsVersionDropdown via `npm run docusaurus docs:version`.
+          { type: 'html', position: 'right', value: '<span class="badge badge--secondary navbar__version-badge">v1.0-alpha</span>' },
           { href: 'https://git.intellistream.ai/olavgg/datahub-sdk', label: 'Source', position: 'right' },
         ],
       },

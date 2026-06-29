@@ -113,3 +113,6 @@ div[class^='codeBlockContainer'] {
 /* Language tabs: legible label text on dark */
 [data-theme='dark'] .tabs__item { color: #aeb9c3; }
 [data-theme='dark'] .tabs__item--active { color: var(--ifm-color-primary); border-bottom-color: var(--ifm-color-primary); }
+
+/* Version badge in the navbar */
+.navbar__version-badge { align-self: center; margin-right: 0.5rem; font-weight: 600; }
