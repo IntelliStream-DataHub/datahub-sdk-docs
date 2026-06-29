@@ -17,6 +17,26 @@ wafers for weeks.
 What we solve here is tracing a yield excursion back to its root tool before it costs a
 fortune in scrapped silicon.
 
+## Set up demo data
+
+New workspace? Run this once (Python) to create two failing lots that both ran on
+`tool_etch_07` (plus other tools) — so the intersection in step 2 finds the shared
+culprit. Safe to re-run.
+
+```python
+import datahub_sdk
+
+client = datahub_sdk.DataHubClient.from_env()
+
+client.resources.create(
+    [datahub_sdk.Resource(external_id=x, name=x) for x in
+     ["lot_22841", "lot_22863", "tool_etch_07", "tool_litho_03", "tool_cmp_05"]],
+    [datahub_sdk.RelForm.by_external_ids("lot_22841", "tool_etch_07", "processed_on"),
+     datahub_sdk.RelForm.by_external_ids("lot_22841", "tool_litho_03", "processed_on"),
+     datahub_sdk.RelForm.by_external_ids("lot_22863", "tool_etch_07", "processed_on"),
+     datahub_sdk.RelForm.by_external_ids("lot_22863", "tool_cmp_05", "processed_on")])
+```
+
 ## 1. Record process data exactly
 
 Chamber pressure, temperature and gas flow are the process record, and they must be
@@ -126,6 +146,14 @@ let suspect: Vec<&str> = lot_b.nodes().iter()
 With the suspect tool identified, pull its exact process series around the failing lots'
 run times and compare to a known-good window — the drift that explains the excursion
 should be right there. See [Query & aggregate](/guides/query-and-aggregate).
+
+## See the result
+
+The tools common to both failing lots:
+
+```text
+suspect contains 'tool_etch_07'     ← the chamber to pull and check
+```
 
 ## See also
 

@@ -15,6 +15,24 @@ only its own books, plus an event whenever a portfolio breaches a risk limit.
 This scenario leans on **datasets** to partition data by desk, and on events as a
 durable record of limit breaches.
 
+## Set up demo data
+
+New workspace? Run this once (Python) to create the desk's dataset and a portfolio
+mark-to-market series with a month of daily values. Safe to re-run.
+
+```python
+import datahub_sdk, numpy as np, pandas as pd
+
+client = datahub_sdk.DataHubClient.from_env()
+
+desk_id = client.datasets.create([datahub_sdk.Dataset(external_id="desk_equities", name="Equities desk")])[0].id
+client.timeseries.create([datahub_sdk.TimeSeries(external_id="portfolio_growth_mtm_usd",
+    name="Growth portfolio — MtM (USD)", unit="usd", value_type="numeric", data_set_id=desk_id)])
+idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=30, freq="1d")
+client.timeseries.insert_from_lists(timestamps=idx,
+    values=1e7 + np.cumsum(np.random.normal(0, 5e4, 30)), ts="portfolio_growth_mtm_usd")
+```
+
 ## 1. Partition by desk with a dataset
 
 A dataset is the unit of grouping and access. Give each desk its own; everything the
@@ -167,6 +185,20 @@ Use the `NUMERIC` value type for monetary series — it stores exact decimals, u
 the floating-point types. See the [Time-series reference](/reference/timeseries) for
 the full list of value types.
 :::
+
+## See the result
+
+Chart the portfolio's mark-to-market over the month:
+
+```python
+import matplotlib.pyplot as plt
+
+rf = datahub_sdk.RetrieveFilter(ts="portfolio_growth_mtm_usd",
+    start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=30), end=pd.Timestamp.now(tz="UTC"))
+s = pd.Series({pd.to_datetime(p.timestamp): float(p.value)
+               for p in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()}).sort_index()
+s.plot(title="Growth portfolio mark-to-market (USD)"); plt.show()
+```
 
 ## See also
 

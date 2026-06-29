@@ -16,6 +16,24 @@ stressed-crop image line up.
 This scenario is the one where **files** matter as much as numbers: attach imagery and
 scouting reports to the field, alongside its sensor series.
 
+## Set up demo data
+
+New workspace? Run this once (Python) to create the field's soil series with two days of
+readings that dry out toward the irrigation threshold. (The drone-scan upload in step 2
+needs a local image file — any file works.) Safe to re-run.
+
+```python
+import datahub_sdk, numpy as np, pandas as pd
+
+client = datahub_sdk.DataHubClient.from_env()
+
+for s, u in [("field_north_40_soil_moisture", "pct"), ("field_north_40_soil_temp_c", "deg_c")]:
+    client.timeseries.create([datahub_sdk.TimeSeries(external_id=s, name=s, unit=u)])
+idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=48, freq="1h")
+moisture = 35 - np.linspace(0, 15, 48) + np.random.normal(0, 1, 48)     # drying out
+client.timeseries.insert_from_lists(timestamps=idx, values=moisture, ts="field_north_40_soil_moisture")
+```
+
 ## 1. Model fields and stream soil sensors
 
 A farm *contains* fields; each field's sensors are series.
@@ -140,6 +158,20 @@ for node in scans.get_items() { println!("{}", node.name); }
 
 When soil moisture stays below target through the heat of the day, raise an
 `irrigation_needed` [event](/guides/detect-events) the irrigation controller acts on.
+
+## See the result
+
+Chart the soil moisture — the downward trend is what triggers irrigation:
+
+```python
+import matplotlib.pyplot as plt
+
+rf = datahub_sdk.RetrieveFilter(ts="field_north_40_soil_moisture",
+    start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=2), end=pd.Timestamp.now(tz="UTC"))
+s = pd.Series({pd.to_datetime(p.timestamp): float(p.value)
+               for p in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()}).sort_index()
+s.plot(title="North 40 soil moisture (%)"); plt.show()
+```
 
 ## See also
 

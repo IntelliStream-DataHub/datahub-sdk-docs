@@ -16,6 +16,23 @@ alert when a station's scrap rate spikes.
 This scenario centres on **ingesting at volume and aggregating** the result into the
 hourly and shift-level numbers a production dashboard actually shows.
 
+## Set up demo data
+
+New workspace? Run this once (Python) to create the station's series with an 8-hour shift
+of readings, so the OEE roll-up has data. Safe to re-run.
+
+```python
+import datahub_sdk, numpy as np, pandas as pd
+
+client = datahub_sdk.DataHubClient.from_env()
+
+for s in ["station_07_cycle_time_s", "station_07_scrap"]:
+    client.timeseries.create([datahub_sdk.TimeSeries(external_id=s, name=s)])
+idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=8 * 60, freq="1min")
+client.timeseries.insert_from_lists(timestamps=idx, values=11 + np.random.normal(0, 0.6, len(idx)), ts="station_07_cycle_time_s")
+client.timeseries.insert_from_lists(timestamps=idx, values=np.random.poisson(0.3, len(idx)).astype(float), ts="station_07_scrap")
+```
+
 ## 1. Model the line and stream its output
 
 A plant *contains* lines, a line *contains* stations. Each station's signals are
@@ -173,6 +190,20 @@ api.events.create(&vec![excursion]).await?;
 
 </TabItem>
 </Tabs>
+
+## See the result
+
+Chart the hourly average cycle time — the line the production dashboard watches:
+
+```python
+import matplotlib.pyplot as plt
+
+rf = datahub_sdk.RetrieveFilter(ts="station_07_cycle_time_s",
+    start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=8), end=pd.Timestamp.now(tz="UTC"),
+    aggregates=["average"], granularity="1h")
+vals = [dp.average for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()]
+plt.plot(vals); plt.title("Station 07 hourly avg cycle time (s)"); plt.show()
+```
 
 ## See also
 

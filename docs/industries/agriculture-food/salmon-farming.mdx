@@ -18,6 +18,27 @@ escalate, and stop feeding the moment appetite drops.
 What we solve here is preventing mass mortality and protecting feed margin on a farm
 where conditions change by the minute.
 
+## Set up demo data
+
+New workspace? Run this once (Python) to create the pen's oxygen/temperature series,
+**create the subscription before we listen**, and feed in oxygen that falls below the
+6 mg/L danger line — so the loop raises a `low_oxygen` alarm. Safe to re-run.
+
+```python
+import datahub_sdk, numpy as np, pandas as pd
+
+client = datahub_sdk.DataHubClient.from_env()
+
+for s in ["pen_h_07_dissolved_oxygen_mg_l", "pen_h_07_water_temp_c"]:
+    client.timeseries.create([datahub_sdk.TimeSeries(external_id=s, name=s)])
+client.subscriptions.create([datahub_sdk.Subscription(
+    external_id="farm_hardanger_pens", name="Hardanger pens",
+    timeseries=["pen_h_07_dissolved_oxygen_mg_l"])])
+idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=120, freq="1min")
+client.timeseries.insert_from_lists(timestamps=idx, values=8 - np.linspace(0, 3, 120),
+    ts="pen_h_07_dissolved_oxygen_mg_l")
+```
+
 ## 1. Watch pen conditions live — and aerate before a crash
 
 Dissolved oxygen and temperature per pen stream into a subscription. The instant
@@ -135,6 +156,14 @@ api.time_series.create_one(&feed).await?;
 
 Sea-lice counts and any mortality are `lice_count` and `mortality` events tied to the
 pen — the auditable record the regulator and the vet both need.
+
+## See the result
+
+The falling oxygen trips the loop before a crash:
+
+```text
+low_oxygen_h07_…  → critical     (dissolved oxygen fell below 6 mg/L)
+```
 
 ## See also
 

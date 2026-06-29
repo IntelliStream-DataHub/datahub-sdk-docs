@@ -17,6 +17,30 @@ funds.
 The problem here is **finding hidden structure fast enough to act** — react to a live
 payment, then expand its network.
 
+## Set up demo data
+
+New workspace? Run this once (Python) to create the flagged-payments stream (**subscription
+created before we listen**) and the account network the flagged account sits in — a loop of
+transfers, i.e. a laundering ring. Safe to re-run.
+
+```python
+import datahub_sdk, pandas as pd
+
+client = datahub_sdk.DataHubClient.from_env()
+
+client.timeseries.create([datahub_sdk.TimeSeries(external_id="flagged_payments_feed", name="Flagged payments")])
+client.subscriptions.create([datahub_sdk.Subscription(
+    external_id="flagged_payments", name="Flagged payments", timeseries=["flagged_payments_feed"])])
+client.timeseries.insert_from_lists(timestamps=[pd.Timestamp.now(tz="UTC")], values=[1.0], ts="flagged_payments_feed")
+
+client.resources.create(
+    [datahub_sdk.Resource(external_id=f"account_{i}", name=f"Account {i}") for i in [77310, 8841, 8842, 8843]],
+    [datahub_sdk.RelForm.by_external_ids("account_77310", "account_8841", "sent_to"),
+     datahub_sdk.RelForm.by_external_ids("account_8841", "account_8842", "sent_to"),
+     datahub_sdk.RelForm.by_external_ids("account_8842", "account_8843", "sent_to"),
+     datahub_sdk.RelForm.by_external_ids("account_8843", "account_77310", "sent_to")])
+```
+
 ## 1. React to a flagged payment live
 
 A rules engine publishes flagged payments; subscribe and pick them up the moment they
@@ -121,6 +145,14 @@ Raise a `sar_candidate` [event](/guides/detect-events) on the cluster for the
 investigations queue, and track `account_77310_outflow` as a
 [series](/guides/query-and-aggregate) — a sudden outflow spike is structuring in
 progress.
+
+## See the result
+
+Expanding the flagged account reveals the ring it moves money through:
+
+```text
+ring accounts: ['account_8841', 'account_8842', 'account_8843']
+```
 
 ## See also
 

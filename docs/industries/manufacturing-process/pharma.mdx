@@ -16,6 +16,26 @@ the lineage has to be walkable in seconds, not days.
 
 This scenario combines **exact-value time-series** with **upstream graph genealogy**.
 
+## Set up demo data
+
+New workspace? Run this once (Python) to create the batch genealogy — a final lot derived
+from an intermediate, which came from two raw-material lots, produced on a bioreactor — so
+the upstream walk in step 2 returns a real lineage. Safe to re-run.
+
+```python
+import datahub_sdk
+
+client = datahub_sdk.DataHubClient.from_env()
+
+client.resources.create(
+    [datahub_sdk.Resource(external_id=x, name=x) for x in
+     ["lot_22f_final", "lot_int_88", "lot_raw_acme_41", "lot_raw_acme_42", "equipment_bioreactor_3"]],
+    [datahub_sdk.RelForm.by_external_ids("lot_22f_final", "lot_int_88", "derived_from"),
+     datahub_sdk.RelForm.by_external_ids("lot_int_88", "lot_raw_acme_41", "derived_from"),
+     datahub_sdk.RelForm.by_external_ids("lot_int_88", "lot_raw_acme_42", "derived_from"),
+     datahub_sdk.RelForm.by_external_ids("lot_22f_final", "equipment_bioreactor_3", "produced_on")])
+```
+
 ## 1. Record process data exactly
 
 A bioreactor's pH, temperature and dissolved oxygen are the batch record. Use the
@@ -134,6 +154,16 @@ found a shared root cause — the same intersection trick as
 Every out-of-band reading in the batch record is a `process_deviation` event tied to
 the lot, so the review team reconstructs an exact, ordered deviation timeline. See
 [Turn readings into events](/guides/detect-events).
+
+## See the result
+
+Walking up from the failed lot returns its complete genealogy:
+
+```text
+raw material: lot_raw_acme_41
+raw material: lot_raw_acme_42
+equipment:    equipment_bioreactor_3
+```
 
 ## See also
 
