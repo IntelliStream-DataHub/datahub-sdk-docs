@@ -103,6 +103,12 @@ api.time_series
 For large or unbounded volumes the SDK chunks and sends in bulk. See the
 [ingestion guide](/guides/ingest-timeseries) for the full story.
 
+:::tip Survive outages with durable buffering
+Enable [durable buffering](/reference/client#durable-ingest-buffering) on the client and datapoint
+ingestion that can't reach the API spools to disk and flushes on the next call, bounded by a time
+and/or size window. Retries are idempotent (datapoints dedup on `(series, timestamp)`).
+:::
+
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
 

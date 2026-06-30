@@ -49,6 +49,16 @@ api.events.create(&vec![event]).await?;
 </TabItem>
 </Tabs>
 
+:::note Event ids are client-stamped UUID v7
+`create` stamps every event that has no `id` with a time-ordered **UUID v7** before sending, and the
+server honors a client-supplied id. This makes retries idempotent: the events table is a
+`ReplacingMergeTree` ordered by `id`, so re-sending the same event (for example after a
+[buffered](./client#durable-ingest-buffering) outage) collapses to one row instead of duplicating.
+If you set the `id` yourself, use a time-ordered UUID v7 — a random v4 scatters writes across that
+sort key and hurts insert/query performance. The created event (with its id) is returned from
+`create`.
+:::
+
 ## Query
 
 <Tabs groupId="lang">
