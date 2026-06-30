@@ -104,6 +104,83 @@ DatahubConfig cfg = DatahubConfig.fromVaultAppRole(vaultAddr, roleId, secretId, 
 DatahubConfig cfg = DatahubConfig.fromVaultAppRoleEnv("datahub/sdk");          // VAULT_ADDR + VAULT_ROLE_ID + VAULT_SECRET_ID
 ```
 
+## Durable ingest buffering
+
+Optional and **off by default**. When enabled, datapoint and event ingestion that can't reach the
+API spools to disk and is flushed automatically on the next ingest call, so a transient outage
+doesn't lose data or raise. The buffer is a segmented, compressed log (gzip in Java, zstd in
+Rust/Python) bounded on two axes, either of which may be left unset; an unset axis defaults to
+**6 hours** / **5 GiB** once buffering is on:
+
+- **time** — datapoints/events older than the window are dropped.
+- **size** — when the on-disk spool exceeds the cap, the oldest segment is dropped.
+
+It is memory-safe: the spool is drained in segments, so even a multi-gigabyte buffer never loads
+into memory, and it is recovered from disk on the next start.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+DatahubClient client = DatahubClient.create(DatahubConfig.builder()
+        .baseUrl("https://api.intellistream.ai")
+        .token(System.getenv("TOKEN"))
+        .enableBuffering()                          // 6h / 5 GiB defaults
+        // .bufferRetention(Duration.ofMinutes(60))     // override the time window
+        // .bufferMaxBytes(2L * 1024 * 1024 * 1024)      // override the size cap
+        // .bufferDirectory(Path.of("datahub-spool"))    // default: .datahub-spool
+        .build());
+
+IngestResult r = client.timeseries().ingest(byExternalId);
+if (r.buffered() > 0) {
+    // server unreachable: r.buffered() datapoints are spooled, retried on the next call
+}
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+client = DataHubClient(
+    base_url="https://api.intellistream.ai",
+    token="...",
+    enable_buffering=True,            # 6h / 5 GiB defaults
+    buffer_retention_secs=3600,       # optional: override the time window
+    buffer_max_bytes=2 * 1024**3,     # optional: override the size cap
+    buffer_dir="datahub-spool",       # optional, default .datahub-spool
+)
+```
+
+`from_env()` / `from_envfile()` instead read `ENABLE_BUFFERING`, `BUFFER_RETENTION_SECS`,
+`BUFFER_MAX_BYTES` and `BUFFER_DIR` from the environment.
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::{ApiService, datahub::DataHubApi};
+
+let mut config = DataHubApi::from_env().unwrap();
+config
+    .enable_buffering()                            // 6h / 5 GiB defaults
+    .set_buffer_retention_secs(3600)               // optional: override the time window
+    .set_buffer_max_bytes(2 * 1024 * 1024 * 1024)  // optional: override the size cap
+    .set_buffer_dir("datahub-spool");              // optional, default .datahub-spool
+let api = ApiService::new(config);
+```
+
+Or via the environment (read by `create_api_service()`): `ENABLE_BUFFERING=true`,
+`BUFFER_RETENTION_SECS`, `BUFFER_MAX_BYTES`, `BUFFER_DIR`.
+
+</TabItem>
+</Tabs>
+
+:::note Retries are idempotent
+A flush re-sends buffered data, which is safe: datapoints are keyed by `(series, timestamp)` and
+events by `id`, so the backend collapses duplicates. The SDK stamps each event with a time-ordered
+UUID v7 before the first send, so a retried event keeps the same id (see [Events](./events)).
+:::
+
 ## Results & errors
 
 Most calls return the entity (or a thin wrapper around a list of them); a non-2xx
