@@ -89,13 +89,13 @@ The code below lives in a single file, `memory_ingest.py`.
 ```toml
 # Cargo.toml
 [dependencies]
-dataplatform-rust-sdk = "0.1"
+dataplatform-rust-sdk = { version = "0.1", features = ["blocking"] }
 chrono = "0.4"
 ```
 
-The code below lives in `src/main.rs`. No async runtime dependency is needed: the SDK
-is async inside, and its `block_on` helper drives your `async fn` on the SDK's own
-runtime.
+The code below lives in `src/main.rs`. The `blocking` feature enables the SDK's
+synchronous client (`dataplatform_rust_sdk::blocking`) — same services and methods as
+the async API, but no async runtime and no `async`/`.await` in your code.
 
 </TabItem>
 </Tabs>
@@ -148,14 +148,15 @@ client = DataHubClient(
 by itself:
 
 ```rust
-use dataplatform_rust_sdk::{ApiService, datahub::DataHubApi};
+use dataplatform_rust_sdk::blocking;
+use dataplatform_rust_sdk::datahub::DataHubApi;
 
 let mut config = DataHubApi::from_env().expect("BASE_URL and credentials must be set");
 config
     .enable_buffering()                 // spool to disk when unreachable
     .set_buffer_retention_secs(3600)    // keep up to an hour of backlog
     .set_buffer_dir("datahub-spool");
-let api = ApiService::new(config);
+let api = blocking::ApiService::new(config);
 ```
 
 </TabItem>
@@ -244,7 +245,7 @@ if missing:
 let lookups: Vec<IdAndExtId> = METRICS.iter()
     .map(|(base, _)| IdAndExtId::from_external_id(&format!("{base}_{host}")))
     .collect();
-let existing: Vec<String> = api.time_series.by_ids(&DataWrapper::from(lookups)).await?
+let existing: Vec<String> = api.time_series.by_ids(&DataWrapper::from(lookups))?
     .get_items().iter()
     .map(|ts| ts.external_id.clone())
     .collect();
@@ -257,7 +258,7 @@ for (base, name) in METRICS {
     let mut ts = TimeSeries::new(&ext_id, &format!("{name} ({host})"));
     ts.unit = Some("bytes".into());
     ts.value_type = "BIGINT".into();
-    api.time_series.create_one(&ts).await?;
+    api.time_series.create_one(&ts)?;
 }
 ```
 
@@ -390,8 +391,7 @@ let now = Utc::now();
 let values = sample()?;
 for (base, _) in METRICS {
     api.time_series
-        .insert_datapoint(None, Some(format!("{base}_{host}")), now, values[base].to_string())
-        .await?;
+        .insert_datapoint(None, Some(format!("{base}_{host}")), now, values[base].to_string())?;
 }
 ```
 
@@ -759,10 +759,10 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use chrono::Utc;
+use dataplatform_rust_sdk::blocking;
 use dataplatform_rust_sdk::datahub::DataHubApi;
 use dataplatform_rust_sdk::generic::{DataWrapper, IdAndExtId};
 use dataplatform_rust_sdk::timeseries::TimeSeries;
-use dataplatform_rust_sdk::ApiService;
 
 const INTERVAL_SECS: u64 = 3;
 
@@ -776,18 +776,13 @@ const METRICS: [(&str, &str); 5] = [
 ];
 
 fn main() {
-    // The SDK is async inside; block_on drives it without a Tokio dependency here.
-    dataplatform_rust_sdk::block_on(run());
-}
-
-async fn run() {
     // Step 1: build the client with a durable, spool-to-disk ingest buffer.
     let mut config = DataHubApi::from_env().expect("BASE_URL and credentials must be set");
     config
         .enable_buffering()
         .set_buffer_retention_secs(3600)
         .set_buffer_dir("datahub-spool");
-    let api = ApiService::new(config);
+    let api = blocking::ApiService::new(config);
 
     let host = std::env::var("HOST_ID").unwrap_or_else(|_| hostname());
 
@@ -795,7 +790,7 @@ async fn run() {
     loop {
         if !ensured {
             // API down: retry next tick — datapoints buffer meanwhile.
-            ensured = ensure_series(&api, &host).await.is_ok();
+            ensured = ensure_series(&api, &host).is_ok();
         }
 
         // Steps 4 & 5: send one datapoint per series. With buffering on, an
@@ -808,7 +803,6 @@ async fn run() {
                     let ext_id = format!("{base}_{host}");
                     match api.time_series
                         .insert_datapoint(None, Some(ext_id), now, values[base].to_string())
-                        .await
                     {
                         Ok(_) => sent += 1,
                         Err(e) => eprintln!("{now}  ingest failed: {e}"),
@@ -823,11 +817,11 @@ async fn run() {
 }
 
 /// Step 2: look up the five series by external id, create only the missing ones.
-async fn ensure_series(api: &ApiService, host: &str) -> Result<(), Box<dyn std::error::Error>> {
+fn ensure_series(api: &blocking::ApiService, host: &str) -> Result<(), Box<dyn std::error::Error>> {
     let lookups: Vec<IdAndExtId> = METRICS.iter()
         .map(|(base, _)| IdAndExtId::from_external_id(&format!("{base}_{host}")))
         .collect();
-    let existing: Vec<String> = api.time_series.by_ids(&DataWrapper::from(lookups)).await?
+    let existing: Vec<String> = api.time_series.by_ids(&DataWrapper::from(lookups))?
         .get_items().iter()
         .map(|ts| ts.external_id.clone())
         .collect();
@@ -840,7 +834,7 @@ async fn ensure_series(api: &ApiService, host: &str) -> Result<(), Box<dyn std::
         let mut ts = TimeSeries::new(&ext_id, &format!("{name} ({host})"));
         ts.unit = Some("bytes".into());
         ts.value_type = "BIGINT".into();
-        api.time_series.create_one(&ts).await?;
+        api.time_series.create_one(&ts)?;
     }
     Ok(())
 }

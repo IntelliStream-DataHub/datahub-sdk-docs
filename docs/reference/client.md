@@ -62,6 +62,16 @@ let api = create_api_service();
 Every method is `async`, so call them from an async runtime (e.g. `#[tokio::main]`) and
 `.await` the result.
 
+Don't want async? Enable the `blocking` cargo feature and use
+`dataplatform_rust_sdk::blocking` instead — the same services and methods without
+`.await`, driven by the SDK's own runtime (the `reqwest` / `reqwest::blocking` split):
+
+```rust
+use dataplatform_rust_sdk::blocking;
+
+let api = blocking::create_api_service();
+```
+
 </TabItem>
 </Tabs>
 
