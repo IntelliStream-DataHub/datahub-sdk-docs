@@ -222,12 +222,12 @@ except DataHubException as e:
 <TabItem value="rust" label="Rust">
 
 Methods return `Result<DataWrapper<T>, ResponseError>` — `get_items()` holds the results,
-and `ResponseError` carries `.status` and `.message`:
+and `ResponseError` exposes `get_status()` and `get_message()` (its `Display` prints both):
 
 ```rust
 match api.resources.by_ids(&vec![IdAndExtId::from_external_id("pump_1")]).await {
     Ok(wrapper) => for r in wrapper.get_items() { println!("{:?}", r); }
-    Err(e) => eprintln!("{}: {}", e.status, e.message),
+    Err(e) => eprintln!("{}: {}", e.get_status(), e.get_message()),
 }
 ```
 
