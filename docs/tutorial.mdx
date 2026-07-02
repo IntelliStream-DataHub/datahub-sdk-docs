@@ -84,7 +84,20 @@ pip install datahub-sdk
 The code below lives in a single file, `memory_ingest.py`.
 
 </TabItem>
-<TabItem value="rust" label="Rust">
+<TabItem value="rust" label="Rust (async)">
+
+```toml
+# Cargo.toml
+[dependencies]
+dataplatform-rust-sdk = "0.1"
+tokio = { version = "1", features = ["full"] }
+chrono = "0.4"
+```
+
+The code below lives in `src/main.rs`, with `#[tokio::main]` driving the async calls.
+
+</TabItem>
+<TabItem value="rust-blocking" label="Rust (blocking)">
 
 ```toml
 # Cargo.toml
@@ -142,7 +155,24 @@ client = DataHubClient(
 ```
 
 </TabItem>
-<TabItem value="rust" label="Rust">
+<TabItem value="rust" label="Rust (async)">
+
+`from_env` picks up `CLIENT_ID` / `CLIENT_SECRET` / `TOKEN_URI` (or a static `TOKEN`)
+by itself:
+
+```rust
+use dataplatform_rust_sdk::{ApiService, datahub::DataHubApi};
+
+let mut config = DataHubApi::from_env().expect("BASE_URL and credentials must be set");
+config
+    .enable_buffering()                 // spool to disk when unreachable
+    .set_buffer_retention_secs(3600)    // keep up to an hour of backlog
+    .set_buffer_dir("datahub-spool");
+let api = ApiService::new(config);
+```
+
+</TabItem>
+<TabItem value="rust-blocking" label="Rust (blocking)">
 
 `from_env` picks up `CLIENT_ID` / `CLIENT_SECRET` / `TOKEN_URI` (or a static `TOKEN`)
 by itself:
@@ -239,7 +269,31 @@ if missing:
 ```
 
 </TabItem>
-<TabItem value="rust" label="Rust">
+<TabItem value="rust" label="Rust (async)">
+
+```rust
+let lookups: Vec<IdAndExtId> = METRICS.iter()
+    .map(|(base, _)| IdAndExtId::from_external_id(&format!("{base}_{host}")))
+    .collect();
+let existing: Vec<String> = api.time_series.by_ids(&DataWrapper::from(lookups)).await?
+    .get_items().iter()
+    .map(|ts| ts.external_id.clone())
+    .collect();
+
+for (base, name) in METRICS {
+    let ext_id = format!("{base}_{host}");
+    if existing.contains(&ext_id) {
+        continue;
+    }
+    let mut ts = TimeSeries::new(&ext_id, &format!("{name} ({host})"));
+    ts.unit = Some("bytes".into());
+    ts.value_type = "BIGINT".into();
+    api.time_series.create_one(&ts).await?;
+}
+```
+
+</TabItem>
+<TabItem value="rust-blocking" label="Rust (blocking)">
 
 ```rust
 let lookups: Vec<IdAndExtId> = METRICS.iter()
@@ -319,7 +373,34 @@ def sample():
 ```
 
 </TabItem>
-<TabItem value="rust" label="Rust">
+<TabItem value="rust" label="Rust (async)">
+
+The sampler is plain synchronous code — identical in both Rust flavors:
+
+```rust
+fn sample() -> std::io::Result<HashMap<&'static str, i64>> {
+    let text = std::fs::read_to_string("/proc/meminfo")?;
+    let kb: HashMap<&str, i64> = text.lines()
+        .filter_map(|line| {
+            let (key, rest) = line.split_once(':')?;    // "MemTotal: 16321720 kB"
+            let n: i64 = rest.split_whitespace().next()?.parse().ok()?;
+            Some((key, n * 1024))
+        })
+        .collect();
+    Ok(HashMap::from([
+        ("system_memory_used", kb["MemTotal"] - kb["MemFree"] - kb["Buffers"] - kb["Cached"]),
+        ("system_memory_buffered", kb["Buffers"]),
+        ("system_memory_shared", kb["Shmem"]),
+        ("system_memory_available", kb["MemAvailable"]),
+        ("system_swap_used", kb["SwapTotal"] - kb["SwapFree"]),
+    ]))
+}
+```
+
+</TabItem>
+<TabItem value="rust-blocking" label="Rust (blocking)">
+
+The sampler is plain synchronous code — identical in both Rust flavors:
 
 ```rust
 fn sample() -> std::io::Result<HashMap<&'static str, i64>> {
@@ -382,7 +463,22 @@ for base in METRICS:
 ```
 
 </TabItem>
-<TabItem value="rust" label="Rust">
+<TabItem value="rust" label="Rust (async)">
+
+One `insert_datapoint` call per series:
+
+```rust
+let now = Utc::now();
+let values = sample()?;
+for (base, _) in METRICS {
+    api.time_series
+        .insert_datapoint(None, Some(format!("{base}_{host}")), now, values[base].to_string())
+        .await?;
+}
+```
+
+</TabItem>
+<TabItem value="rust-blocking" label="Rust (blocking)">
 
 One `insert_datapoint` call per series:
 
@@ -445,7 +541,20 @@ Exceptions still surface for non-retriable errors (e.g. a malformed request), so
 the tick wrapped in `try`/`except`.
 
 </TabItem>
-<TabItem value="rust" label="Rust">
+<TabItem value="rust" label="Rust (async)">
+
+With buffering enabled the calls return `Ok` on an outage — the datapoints are spooled
+and the program keeps ticking. Watch the spool itself to see it happen:
+
+```bash
+ls datahub-spool/    # segments appear while the API is down, drain when it's back
+```
+
+Errors still surface for non-retriable failures (e.g. a malformed request), so keep
+handling the `Result`.
+
+</TabItem>
+<TabItem value="rust-blocking" label="Rust (blocking)">
 
 With buffering enabled the calls return `Ok` on an outage — the datapoints are spooled
 and the program keeps ticking. Watch the spool itself to see it happen:
@@ -483,7 +592,14 @@ python memory_ingest.py
 ```
 
 </TabItem>
-<TabItem value="rust" label="Rust">
+<TabItem value="rust" label="Rust (async)">
+
+```bash
+cargo run
+```
+
+</TabItem>
+<TabItem value="rust-blocking" label="Rust (blocking)">
 
 ```bash
 cargo run
@@ -752,7 +868,126 @@ if __name__ == "__main__":
 ```
 
 </TabItem>
-<TabItem value="rust" label="Rust">
+<TabItem value="rust" label="Rust (async)">
+
+```rust title="src/main.rs"
+use std::collections::HashMap;
+use std::time::Duration;
+
+use chrono::Utc;
+use dataplatform_rust_sdk::datahub::DataHubApi;
+use dataplatform_rust_sdk::generic::{DataWrapper, IdAndExtId};
+use dataplatform_rust_sdk::timeseries::TimeSeries;
+use dataplatform_rust_sdk::ApiService;
+
+const INTERVAL_SECS: u64 = 3;
+
+// The five series this program owns; external ids get "_<host>" appended.
+const METRICS: [(&str, &str); 5] = [
+    ("system_memory_used", "System memory used"),
+    ("system_memory_buffered", "System memory buffered"),
+    ("system_memory_shared", "System memory shared"),
+    ("system_memory_available", "System memory available"),
+    ("system_swap_used", "System swap used"),
+];
+
+#[tokio::main]
+async fn main() {
+    // Step 1: build the client with a durable, spool-to-disk ingest buffer.
+    let mut config = DataHubApi::from_env().expect("BASE_URL and credentials must be set");
+    config
+        .enable_buffering()
+        .set_buffer_retention_secs(3600)
+        .set_buffer_dir("datahub-spool");
+    let api = ApiService::new(config);
+
+    let host = std::env::var("HOST_ID").unwrap_or_else(|_| hostname());
+
+    let mut ensured = false;
+    let mut ticker = tokio::time::interval(Duration::from_secs(INTERVAL_SECS));
+    loop {
+        ticker.tick().await;
+
+        if !ensured {
+            // API down: retry next tick — datapoints buffer meanwhile.
+            ensured = ensure_series(&api, &host).await.is_ok();
+        }
+
+        // Steps 4 & 5: send one datapoint per series. With buffering on, an
+        // outage spools to datahub-spool/ instead of failing the call.
+        match sample() {
+            Ok(values) => {
+                let now = Utc::now();
+                let mut sent = 0;
+                for (base, _) in METRICS {
+                    let ext_id = format!("{base}_{host}");
+                    match api.time_series
+                        .insert_datapoint(None, Some(ext_id), now, values[base].to_string())
+                        .await
+                    {
+                        Ok(_) => sent += 1,
+                        Err(e) => eprintln!("{now}  ingest failed: {e}"),
+                    }
+                }
+                println!("{now}  ingested {sent} datapoints");
+            }
+            Err(e) => eprintln!("sample failed: {e}"), // never kill the loop
+        }
+    }
+}
+
+/// Step 2: look up the five series by external id, create only the missing ones.
+async fn ensure_series(api: &ApiService, host: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let lookups: Vec<IdAndExtId> = METRICS.iter()
+        .map(|(base, _)| IdAndExtId::from_external_id(&format!("{base}_{host}")))
+        .collect();
+    let existing: Vec<String> = api.time_series.by_ids(&DataWrapper::from(lookups)).await?
+        .get_items().iter()
+        .map(|ts| ts.external_id.clone())
+        .collect();
+
+    for (base, name) in METRICS {
+        let ext_id = format!("{base}_{host}");
+        if existing.contains(&ext_id) {
+            continue;
+        }
+        let mut ts = TimeSeries::new(&ext_id, &format!("{name} ({host})"));
+        ts.unit = Some("bytes".into());
+        ts.value_type = "BIGINT".into();
+        api.time_series.create_one(&ts).await?;
+    }
+    Ok(())
+}
+
+/// Step 3: read /proc/meminfo and derive the five values, in bytes.
+fn sample() -> std::io::Result<HashMap<&'static str, i64>> {
+    let text = std::fs::read_to_string("/proc/meminfo")?;
+    let kb: HashMap<&str, i64> = text.lines()
+        .filter_map(|line| {
+            let (key, rest) = line.split_once(':')?;
+            let n: i64 = rest.split_whitespace().next()?.parse().ok()?;
+            Some((key, n * 1024))
+        })
+        .collect();
+    Ok(HashMap::from([
+        ("system_memory_used", kb["MemTotal"] - kb["MemFree"] - kb["Buffers"] - kb["Cached"]),
+        ("system_memory_buffered", kb["Buffers"]),
+        ("system_memory_shared", kb["Shmem"]),
+        ("system_memory_available", kb["MemAvailable"]),
+        ("system_swap_used", kb["SwapTotal"] - kb["SwapFree"]),
+    ]))
+}
+
+/// This tutorial already needs Linux for /proc/meminfo, so /etc/hostname is fine too.
+fn hostname() -> String {
+    std::fs::read_to_string("/etc/hostname")
+        .map(|s| s.trim().to_lowercase())
+        .unwrap_or_else(|_| "localhost".into())
+}
+```
+
+</TabItem>
+<TabItem value="rust-blocking" label="Rust (blocking)">
 
 ```rust title="src/main.rs"
 use std::collections::HashMap;
