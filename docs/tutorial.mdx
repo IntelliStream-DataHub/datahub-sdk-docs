@@ -8,26 +8,20 @@ import TabItem from '@theme/TabItem';
 
 # Tutorial: stream system metrics
 
-:::warning Linux required
-The sampler reads `/proc/meminfo`, which only exists on Linux — the program won't run
-as-is on FreeBSD, Solaris, macOS or Windows. Everything except step 3 still applies on
-those platforms: swap the sampler for any numbers you have and the DataHub steps stay
-the same.
-:::
-
 Build a small **metrics agent**, end to end: a program that samples this machine's
 memory every three seconds and streams it into DataHub as time-series data — and keeps
-working when the API doesn't. The same program is shown in Java, Python and Rust; pick
-your language once and every code block on the page follows.
+working when the API doesn't. It runs on Linux, macOS, and Windows. The same program is
+shown in Java, Python and Rust; pick your language once and every code block on the
+page follows.
 
 The whole flow is five steps, and each is a section below:
 
 1. **Build the client** — authenticate with a bearer token and turn on a durable,
    spool-to-disk ingest buffer.
-2. **Ensure the time series exist** — look up five series by external id and create
+2. **Ensure the time series exist** — look up three series by external id and create
    only the ones that are missing, so the program is safe to re-run.
-3. **Sample the data** — read memory usage from `/proc/meminfo` (this is just the
-   tutorial's data source — swap in your own).
+3. **Sample the data** — read memory usage via a small OS-info library (this is just
+   the tutorial's data source — swap in your own).
 4. **Ingest datapoints** — every three seconds, send one datapoint per series.
 5. **Survive outages** — when the API is unreachable, datapoints spool to disk and
    flush automatically once it recovers.
@@ -46,6 +40,11 @@ export CLIENT_SECRET="..."
 export TOKEN_URI="https://auth.intellistream.ai/oauth2/token"
 ```
 
+:::note Windows
+Setting environment variables uses different syntax: `set BASE_URL=...` (cmd.exe) or
+`$env:BASE_URL = "..."` (PowerShell), in place of `export`.
+:::
+
 If all you have is a static bearer token, that works too: set `TOKEN` instead and use
 the token variant shown in step 1. See
 [Authentication](/reference/client#authentication) for the full picture.
@@ -55,7 +54,8 @@ the token variant shown in step 1. See
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
 
-One dependency and a main class:
+One dependency and a main class — memory and swap come from a JDK-builtin API, so
+nothing extra is needed for that:
 
 ```kotlin
 // build.gradle.kts
@@ -77,8 +77,10 @@ The code below lives in `src/main/java/example/MemoryIngestTutorial.java`.
 </TabItem>
 <TabItem value="python" label="Python">
 
+`psutil` reads memory and swap portably across Linux, macOS and Windows:
+
 ```bash
-pip install datahub-sdk
+pip install datahub-sdk psutil
 ```
 
 The code below lives in a single file, `memory_ingest.py`.
@@ -86,12 +88,17 @@ The code below lives in a single file, `memory_ingest.py`.
 </TabItem>
 <TabItem value="rust" label="Rust (async)">
 
+`sysinfo` reads memory and swap portably; `hostname` reads the machine's hostname
+portably:
+
 ```toml
 # Cargo.toml
 [dependencies]
 dataplatform-rust-sdk = "0.1"
 tokio = { version = "1", features = ["full"] }
 chrono = "0.4"
+sysinfo = "0.37"
+hostname = "0.4"
 ```
 
 The code below lives in `src/main.rs`, with `#[tokio::main]` driving the async calls.
@@ -104,6 +111,8 @@ The code below lives in `src/main.rs`, with `#[tokio::main]` driving the async c
 [dependencies]
 dataplatform-rust-sdk = { version = "0.1", features = ["blocking"] }
 chrono = "0.4"
+sysinfo = "0.37"
+hostname = "0.4"
 ```
 
 The code below lives in `src/main.rs`. The `blocking` feature enables the SDK's
@@ -214,15 +223,22 @@ where the series already exist.
 
 Each external id is **namespaced by hostname** (`system_memory_used_web01`, …), so the
 same program running on several machines writes to distinct series instead of
-overwriting one another. The five series, all integer-valued in `bytes`:
+overwriting one another. The three series, all integer-valued in `bytes`:
 
 | External id | What it tracks |
 | --- | --- |
-| `system_memory_used_<host>` | Used memory (total minus free, buffers and cache) |
-| `system_memory_buffered_<host>` | Buffer memory (`Buffers`) |
-| `system_memory_shared_<host>` | Shared memory (`Shmem`) |
-| `system_memory_available_<host>` | Available memory (`MemAvailable`) |
-| `system_swap_used_<host>` | Used swap (`SwapTotal` minus `SwapFree`) |
+| `system_memory_used_<host>` | Used physical memory |
+| `system_memory_available_<host>` | Available physical memory |
+| `system_swap_used_<host>` | Used swap space |
+
+:::note Numbers aren't identical across languages
+`used`/`available` come from a different OS API per language, and those APIs don't all
+mean quite the same thing. Java's `available` is raw OS free memory; Python's and
+Rust's `available` is closer to Linux's cache-aware `MemAvailable` estimate — so on the
+same machine, Java tends to read a lower `available` (and higher `used`) than Python or
+Rust. `used + available == total` holds for Java but generally not for Python/Rust —
+that's expected, not a bug.
+:::
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -325,30 +341,26 @@ meantime aren't lost.
 
 ## Step 3 — Sample the data
 
-This step has nothing to do with the SDK — it's just where the numbers come from.
-`/proc/meminfo` reports kilobytes, so the parser converts to bytes and derives the five
-values the way `free` does. Replace this function with any data source of your own and
-the DataHub steps (1, 2, 4, 5) don't change.
+This step has nothing to do with the SDK — it's just where the numbers come from. Each
+language uses a small OS-info library to read memory and swap in one call, in bytes, so
+the same code works on Linux, macOS and Windows. Replace this function with any data
+source of your own and the DataHub steps (1, 2, 4, 5) don't change.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
 
+`com.sun.management.OperatingSystemMXBean` is built into the JDK — no dependency
+needed. There's no direct "used" getter, so it's derived as total minus free:
+
 ```java
-private static Map<String, Long> sample() throws IOException {
-    Map<String, Long> kb = new HashMap<>();
-    for (String line : Files.readAllLines(Path.of("/proc/meminfo"))) {
-        String[] parts = line.split("[:\\s]+");         // "MemTotal: 16321720 kB"
-        if (parts.length >= 2) {
-            kb.put(parts[0], Long.parseLong(parts[1]) * 1024);
-        }
-    }
+private static Map<String, Long> sample() {
+    OperatingSystemMXBean os =
+            ManagementFactory.getPlatformMXBean(OperatingSystemMXBean.class);
+
     Map<String, Long> values = new HashMap<>();
-    values.put("system_memory_used",
-            kb.get("MemTotal") - kb.get("MemFree") - kb.get("Buffers") - kb.get("Cached"));
-    values.put("system_memory_buffered", kb.get("Buffers"));
-    values.put("system_memory_shared", kb.get("Shmem"));
-    values.put("system_memory_available", kb.get("MemAvailable"));
-    values.put("system_swap_used", kb.get("SwapTotal") - kb.get("SwapFree"));
+    values.put("system_memory_used", os.getTotalMemorySize() - os.getFreeMemorySize());
+    values.put("system_memory_available", os.getFreeMemorySize());
+    values.put("system_swap_used", os.getTotalSwapSpaceSize() - os.getFreeSwapSpaceSize());
     return values;
 }
 ```
@@ -356,69 +368,53 @@ private static Map<String, Long> sample() throws IOException {
 </TabItem>
 <TabItem value="python" label="Python">
 
+`psutil.virtual_memory()` and `psutil.swap_memory()` expose `used`/`available`
+directly, no arithmetic needed:
+
 ```python
 def sample():
-    kb = {}
-    with open("/proc/meminfo") as f:
-        for line in f:                       # "MemTotal: 16321720 kB"
-            key, _, rest = line.partition(":")
-            kb[key] = int(rest.split()[0]) * 1024
+    vm = psutil.virtual_memory()
+    swap = psutil.swap_memory()
     return {
-        "system_memory_used": kb["MemTotal"] - kb["MemFree"] - kb["Buffers"] - kb["Cached"],
-        "system_memory_buffered": kb["Buffers"],
-        "system_memory_shared": kb["Shmem"],
-        "system_memory_available": kb["MemAvailable"],
-        "system_swap_used": kb["SwapTotal"] - kb["SwapFree"],
+        "system_memory_used": vm.used,
+        "system_memory_available": vm.available,
+        "system_swap_used": swap.used,
     }
 ```
 
 </TabItem>
 <TabItem value="rust" label="Rust (async)">
 
-The sampler is plain synchronous code — identical in both Rust flavors:
+The sampler is plain synchronous code — identical in both Rust flavors. `sysinfo`
+exposes `used_memory()`/`available_memory()`/`used_swap()` directly:
 
 ```rust
-fn sample() -> std::io::Result<HashMap<&'static str, i64>> {
-    let text = std::fs::read_to_string("/proc/meminfo")?;
-    let kb: HashMap<&str, i64> = text.lines()
-        .filter_map(|line| {
-            let (key, rest) = line.split_once(':')?;    // "MemTotal: 16321720 kB"
-            let n: i64 = rest.split_whitespace().next()?.parse().ok()?;
-            Some((key, n * 1024))
-        })
-        .collect();
-    Ok(HashMap::from([
-        ("system_memory_used", kb["MemTotal"] - kb["MemFree"] - kb["Buffers"] - kb["Cached"]),
-        ("system_memory_buffered", kb["Buffers"]),
-        ("system_memory_shared", kb["Shmem"]),
-        ("system_memory_available", kb["MemAvailable"]),
-        ("system_swap_used", kb["SwapTotal"] - kb["SwapFree"]),
-    ]))
+fn sample() -> HashMap<&'static str, i64> {
+    let mut sys = System::new();
+    sys.refresh_memory();
+    HashMap::from([
+        ("system_memory_used", sys.used_memory() as i64),
+        ("system_memory_available", sys.available_memory() as i64),
+        ("system_swap_used", sys.used_swap() as i64),
+    ])
 }
 ```
 
 </TabItem>
 <TabItem value="rust-blocking" label="Rust (blocking)">
 
-The sampler is plain synchronous code — identical in both Rust flavors:
+The sampler is plain synchronous code — identical in both Rust flavors. `sysinfo`
+exposes `used_memory()`/`available_memory()`/`used_swap()` directly:
 
 ```rust
-fn sample() -> std::io::Result<HashMap<&'static str, i64>> {
-    let text = std::fs::read_to_string("/proc/meminfo")?;
-    let kb: HashMap<&str, i64> = text.lines()
-        .filter_map(|line| {
-            let (key, rest) = line.split_once(':')?;    // "MemTotal: 16321720 kB"
-            let n: i64 = rest.split_whitespace().next()?.parse().ok()?;
-            Some((key, n * 1024))
-        })
-        .collect();
-    Ok(HashMap::from([
-        ("system_memory_used", kb["MemTotal"] - kb["MemFree"] - kb["Buffers"] - kb["Cached"]),
-        ("system_memory_buffered", kb["Buffers"]),
-        ("system_memory_shared", kb["Shmem"]),
-        ("system_memory_available", kb["MemAvailable"]),
-        ("system_swap_used", kb["SwapTotal"] - kb["SwapFree"]),
-    ]))
+fn sample() -> HashMap<&'static str, i64> {
+    let mut sys = System::new();
+    sys.refresh_memory();
+    HashMap::from([
+        ("system_memory_used", sys.used_memory() as i64),
+        ("system_memory_available", sys.available_memory() as i64),
+        ("system_swap_used", sys.used_swap() as i64),
+    ])
 }
 ```
 
@@ -428,7 +424,7 @@ fn sample() -> std::io::Result<HashMap<&'static str, i64>> {
 ## Step 4 — Ingest on a tick
 
 A timer fires every three seconds. Each tick samples memory and sends one datapoint per
-series — five datapoints, stamped with the same timestamp.
+series — three datapoints, stamped with the same timestamp.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -469,7 +465,7 @@ One `insert_datapoint` call per series:
 
 ```rust
 let now = Utc::now();
-let values = sample()?;
+let values = sample();
 for (base, _) in METRICS {
     api.time_series
         .insert_datapoint(None, Some(format!("{base}_{host}")), now, values[base].to_string())
@@ -484,7 +480,7 @@ One `insert_datapoint` call per series:
 
 ```rust
 let now = Utc::now();
-let values = sample()?;
+let values = sample();
 for (base, _) in METRICS {
     api.time_series
         .insert_datapoint(None, Some(format!("{base}_{host}")), now, values[base].to_string())?;
@@ -584,6 +580,8 @@ A flush re-sends buffered data, which is safe: datapoints are keyed by
 ./gradlew run
 ```
 
+On Windows, use `gradlew.bat run` instead.
+
 </TabItem>
 <TabItem value="python" label="Python">
 
@@ -608,12 +606,12 @@ cargo run
 </TabItem>
 </Tabs>
 
-On the first run the program creates the five series; on later runs they already exist
-and it goes straight to ingesting:
+On the first run the program creates the three series; on later runs they already
+exist and it goes straight to ingesting:
 
 ```
-2026-07-02T09:00:00Z  ingested 5 datapoints
-2026-07-02T09:00:03Z  ingested 5 datapoints
+2026-07-02T09:00:00Z  ingested 3 datapoints
+2026-07-02T09:00:03Z  ingested 3 datapoints
 ...
 ```
 
@@ -638,9 +636,10 @@ import ai.intellistream.datahub.sdk.ingest.IngestResult;
 import ai.intellistream.datahub.sdk.timeseries.Datapoint;
 import ai.intellistream.datahub.timeseries.Timeseries;
 
-import java.io.IOException;
+import com.sun.management.OperatingSystemMXBean;
+
+import java.lang.management.ManagementFactory;
 import java.net.InetAddress;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
@@ -657,11 +656,9 @@ public final class MemoryIngestTutorial {
 
     private record Metric(String baseId, String name) {}
 
-    /** The five series this program owns; external ids get "_<host>" appended. */
+    /** The three series this program owns; external ids get "_<host>" appended. */
     private static final List<Metric> METRICS = List.of(
             new Metric("system_memory_used", "System memory used"),
-            new Metric("system_memory_buffered", "System memory buffered"),
-            new Metric("system_memory_shared", "System memory shared"),
             new Metric("system_memory_available", "System memory available"),
             new Metric("system_swap_used", "System swap used"));
 
@@ -722,7 +719,7 @@ public final class MemoryIngestTutorial {
         }
     }
 
-    /** Step 2: look up the five series by external id, create only the missing ones. */
+    /** Step 2: look up the three series by external id, create only the missing ones. */
     private static void ensureSeries(DatahubClient client, String host) {
         if (ensured) {
             return;
@@ -750,22 +747,15 @@ public final class MemoryIngestTutorial {
         ensured = true;
     }
 
-    /** Step 3: read /proc/meminfo and derive the five values, in bytes. */
-    private static Map<String, Long> sample() throws IOException {
-        Map<String, Long> kb = new HashMap<>();
-        for (String line : Files.readAllLines(Path.of("/proc/meminfo"))) {
-            String[] parts = line.split("[:\\s]+");
-            if (parts.length >= 2) {
-                kb.put(parts[0], Long.parseLong(parts[1]) * 1024);
-            }
-        }
+    /** Step 3: sample memory and swap via the JDK's platform MXBean, in bytes. */
+    private static Map<String, Long> sample() {
+        OperatingSystemMXBean os =
+                ManagementFactory.getPlatformMXBean(OperatingSystemMXBean.class);
+
         Map<String, Long> values = new HashMap<>();
-        values.put("system_memory_used",
-                kb.get("MemTotal") - kb.get("MemFree") - kb.get("Buffers") - kb.get("Cached"));
-        values.put("system_memory_buffered", kb.get("Buffers"));
-        values.put("system_memory_shared", kb.get("Shmem"));
-        values.put("system_memory_available", kb.get("MemAvailable"));
-        values.put("system_swap_used", kb.get("SwapTotal") - kb.get("SwapFree"));
+        values.put("system_memory_used", os.getTotalMemorySize() - os.getFreeMemorySize());
+        values.put("system_memory_available", os.getFreeMemorySize());
+        values.put("system_swap_used", os.getTotalSwapSpaceSize() - os.getFreeSwapSpaceSize());
         return values;
     }
 }
@@ -780,39 +770,34 @@ import socket
 import time
 from datetime import datetime, timezone
 
+import psutil
+
 import datahub_sdk
 from datahub_sdk import DataHubClient
 
 INTERVAL_SECS = 3
 
-# The five series this program owns; external ids get "_<host>" appended.
+# The three series this program owns; external ids get "_<host>" appended.
 METRICS = {
     "system_memory_used": "System memory used",
-    "system_memory_buffered": "System memory buffered",
-    "system_memory_shared": "System memory shared",
     "system_memory_available": "System memory available",
     "system_swap_used": "System swap used",
 }
 
 
 def sample():
-    """Step 3: read /proc/meminfo and derive the five values, in bytes."""
-    kb = {}
-    with open("/proc/meminfo") as f:
-        for line in f:
-            key, _, rest = line.partition(":")
-            kb[key] = int(rest.split()[0]) * 1024
+    """Step 3: sample memory and swap via psutil, in bytes."""
+    vm = psutil.virtual_memory()
+    swap = psutil.swap_memory()
     return {
-        "system_memory_used": kb["MemTotal"] - kb["MemFree"] - kb["Buffers"] - kb["Cached"],
-        "system_memory_buffered": kb["Buffers"],
-        "system_memory_shared": kb["Shmem"],
-        "system_memory_available": kb["MemAvailable"],
-        "system_swap_used": kb["SwapTotal"] - kb["SwapFree"],
+        "system_memory_used": vm.used,
+        "system_memory_available": vm.available,
+        "system_swap_used": swap.used,
     }
 
 
 def ensure_series(client, host):
-    """Step 2: look up the five series by external id, create only the missing ones."""
+    """Step 2: look up the three series by external id, create only the missing ones."""
     wanted = {f"{base}_{host}": name for base, name in METRICS.items()}
     existing = {ts.external_id for ts in client.timeseries.by_ids(list(wanted))}
 
@@ -879,14 +864,13 @@ use dataplatform_rust_sdk::datahub::DataHubApi;
 use dataplatform_rust_sdk::generic::{DataWrapper, IdAndExtId};
 use dataplatform_rust_sdk::timeseries::TimeSeries;
 use dataplatform_rust_sdk::ApiService;
+use sysinfo::System;
 
 const INTERVAL_SECS: u64 = 3;
 
-// The five series this program owns; external ids get "_<host>" appended.
-const METRICS: [(&str, &str); 5] = [
+// The three series this program owns; external ids get "_<host>" appended.
+const METRICS: [(&str, &str); 3] = [
     ("system_memory_used", "System memory used"),
-    ("system_memory_buffered", "System memory buffered"),
-    ("system_memory_shared", "System memory shared"),
     ("system_memory_available", "System memory available"),
     ("system_swap_used", "System swap used"),
 ];
@@ -915,28 +899,24 @@ async fn main() {
 
         // Steps 4 & 5: send one datapoint per series. With buffering on, an
         // outage spools to datahub-spool/ instead of failing the call.
-        match sample() {
-            Ok(values) => {
-                let now = Utc::now();
-                let mut sent = 0;
-                for (base, _) in METRICS {
-                    let ext_id = format!("{base}_{host}");
-                    match api.time_series
-                        .insert_datapoint(None, Some(ext_id), now, values[base].to_string())
-                        .await
-                    {
-                        Ok(_) => sent += 1,
-                        Err(e) => eprintln!("{now}  ingest failed: {e}"),
-                    }
-                }
-                println!("{now}  ingested {sent} datapoints");
+        let values = sample();
+        let now = Utc::now();
+        let mut sent = 0;
+        for (base, _) in METRICS {
+            let ext_id = format!("{base}_{host}");
+            match api.time_series
+                .insert_datapoint(None, Some(ext_id), now, values[base].to_string())
+                .await
+            {
+                Ok(_) => sent += 1,
+                Err(e) => eprintln!("{now}  ingest failed: {e}"),
             }
-            Err(e) => eprintln!("sample failed: {e}"), // never kill the loop
         }
+        println!("{now}  ingested {sent} datapoints");
     }
 }
 
-/// Step 2: look up the five series by external id, create only the missing ones.
+/// Step 2: look up the three series by external id, create only the missing ones.
 async fn ensure_series(api: &ApiService, host: &str) -> Result<(), Box<dyn std::error::Error>> {
     let lookups: Vec<IdAndExtId> = METRICS.iter()
         .map(|(base, _)| IdAndExtId::from_external_id(&format!("{base}_{host}")))
@@ -959,30 +939,24 @@ async fn ensure_series(api: &ApiService, host: &str) -> Result<(), Box<dyn std::
     Ok(())
 }
 
-/// Step 3: read /proc/meminfo and derive the five values, in bytes.
-fn sample() -> std::io::Result<HashMap<&'static str, i64>> {
-    let text = std::fs::read_to_string("/proc/meminfo")?;
-    let kb: HashMap<&str, i64> = text.lines()
-        .filter_map(|line| {
-            let (key, rest) = line.split_once(':')?;
-            let n: i64 = rest.split_whitespace().next()?.parse().ok()?;
-            Some((key, n * 1024))
-        })
-        .collect();
-    Ok(HashMap::from([
-        ("system_memory_used", kb["MemTotal"] - kb["MemFree"] - kb["Buffers"] - kb["Cached"]),
-        ("system_memory_buffered", kb["Buffers"]),
-        ("system_memory_shared", kb["Shmem"]),
-        ("system_memory_available", kb["MemAvailable"]),
-        ("system_swap_used", kb["SwapTotal"] - kb["SwapFree"]),
-    ]))
+/// Step 3: sample memory and swap via sysinfo, in bytes.
+fn sample() -> HashMap<&'static str, i64> {
+    let mut sys = System::new();
+    sys.refresh_memory();
+    HashMap::from([
+        ("system_memory_used", sys.used_memory() as i64),
+        ("system_memory_available", sys.available_memory() as i64),
+        ("system_swap_used", sys.used_swap() as i64),
+    ])
 }
 
-/// This tutorial already needs Linux for /proc/meminfo, so /etc/hostname is fine too.
+/// Cross-platform hostname lookup.
 fn hostname() -> String {
-    std::fs::read_to_string("/etc/hostname")
-        .map(|s| s.trim().to_lowercase())
-        .unwrap_or_else(|_| "localhost".into())
+    hostname::get()
+        .ok()
+        .and_then(|s| s.into_string().ok())
+        .map(|s| s.to_lowercase())
+        .unwrap_or_else(|| "localhost".into())
 }
 ```
 
@@ -998,14 +972,13 @@ use dataplatform_rust_sdk::blocking;
 use dataplatform_rust_sdk::datahub::DataHubApi;
 use dataplatform_rust_sdk::generic::{DataWrapper, IdAndExtId};
 use dataplatform_rust_sdk::timeseries::TimeSeries;
+use sysinfo::System;
 
 const INTERVAL_SECS: u64 = 3;
 
-// The five series this program owns; external ids get "_<host>" appended.
-const METRICS: [(&str, &str); 5] = [
+// The three series this program owns; external ids get "_<host>" appended.
+const METRICS: [(&str, &str); 3] = [
     ("system_memory_used", "System memory used"),
-    ("system_memory_buffered", "System memory buffered"),
-    ("system_memory_shared", "System memory shared"),
     ("system_memory_available", "System memory available"),
     ("system_swap_used", "System swap used"),
 ];
@@ -1030,28 +1003,24 @@ fn main() {
 
         // Steps 4 & 5: send one datapoint per series. With buffering on, an
         // outage spools to datahub-spool/ instead of failing the call.
-        match sample() {
-            Ok(values) => {
-                let now = Utc::now();
-                let mut sent = 0;
-                for (base, _) in METRICS {
-                    let ext_id = format!("{base}_{host}");
-                    match api.time_series
-                        .insert_datapoint(None, Some(ext_id), now, values[base].to_string())
-                    {
-                        Ok(_) => sent += 1,
-                        Err(e) => eprintln!("{now}  ingest failed: {e}"),
-                    }
-                }
-                println!("{now}  ingested {sent} datapoints");
+        let values = sample();
+        let now = Utc::now();
+        let mut sent = 0;
+        for (base, _) in METRICS {
+            let ext_id = format!("{base}_{host}");
+            match api.time_series
+                .insert_datapoint(None, Some(ext_id), now, values[base].to_string())
+            {
+                Ok(_) => sent += 1,
+                Err(e) => eprintln!("{now}  ingest failed: {e}"),
             }
-            Err(e) => eprintln!("sample failed: {e}"), // never kill the loop
         }
+        println!("{now}  ingested {sent} datapoints");
         std::thread::sleep(Duration::from_secs(INTERVAL_SECS));
     }
 }
 
-/// Step 2: look up the five series by external id, create only the missing ones.
+/// Step 2: look up the three series by external id, create only the missing ones.
 fn ensure_series(api: &blocking::ApiService, host: &str) -> Result<(), Box<dyn std::error::Error>> {
     let lookups: Vec<IdAndExtId> = METRICS.iter()
         .map(|(base, _)| IdAndExtId::from_external_id(&format!("{base}_{host}")))
@@ -1074,30 +1043,24 @@ fn ensure_series(api: &blocking::ApiService, host: &str) -> Result<(), Box<dyn s
     Ok(())
 }
 
-/// Step 3: read /proc/meminfo and derive the five values, in bytes.
-fn sample() -> std::io::Result<HashMap<&'static str, i64>> {
-    let text = std::fs::read_to_string("/proc/meminfo")?;
-    let kb: HashMap<&str, i64> = text.lines()
-        .filter_map(|line| {
-            let (key, rest) = line.split_once(':')?;
-            let n: i64 = rest.split_whitespace().next()?.parse().ok()?;
-            Some((key, n * 1024))
-        })
-        .collect();
-    Ok(HashMap::from([
-        ("system_memory_used", kb["MemTotal"] - kb["MemFree"] - kb["Buffers"] - kb["Cached"]),
-        ("system_memory_buffered", kb["Buffers"]),
-        ("system_memory_shared", kb["Shmem"]),
-        ("system_memory_available", kb["MemAvailable"]),
-        ("system_swap_used", kb["SwapTotal"] - kb["SwapFree"]),
-    ]))
+/// Step 3: sample memory and swap via sysinfo, in bytes.
+fn sample() -> HashMap<&'static str, i64> {
+    let mut sys = System::new();
+    sys.refresh_memory();
+    HashMap::from([
+        ("system_memory_used", sys.used_memory() as i64),
+        ("system_memory_available", sys.available_memory() as i64),
+        ("system_swap_used", sys.used_swap() as i64),
+    ])
 }
 
-/// This tutorial already needs Linux for /proc/meminfo, so /etc/hostname is fine too.
+/// Cross-platform hostname lookup.
 fn hostname() -> String {
-    std::fs::read_to_string("/etc/hostname")
-        .map(|s| s.trim().to_lowercase())
-        .unwrap_or_else(|_| "localhost".into())
+    hostname::get()
+        .ok()
+        .and_then(|s| s.into_string().ok())
+        .map(|s| s.to_lowercase())
+        .unwrap_or_else(|| "localhost".into())
 }
 ```
 
@@ -1106,8 +1069,8 @@ fn hostname() -> String {
 
 ## Try this next
 
-- **Add a metric.** Add one entry to the metric table (e.g. `Cached`) and extend the
-  sampler — series creation and ingestion both pick it up with no other changes.
+- **Add a metric.** Add one entry to the metric table (e.g. total memory) and extend
+  the sampler — series creation and ingestion both pick it up with no other changes.
 - **Namespace by host.** Run the program on two machines (or set `HOST_ID` to two
   different values) and watch each get its own set of series.
 - **Swap the data source.** Replace the sampler with your own readings — the DataHub
