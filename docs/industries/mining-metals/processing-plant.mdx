@@ -112,6 +112,7 @@ loss.setExternalId("recovery_loss_mill1_" + System.currentTimeMillis());
 loss.setType("recovery_loss");
 loss.setStatus("open");
 loss.setMetadata(Map.of("mill", "mill_1", "recovery_pct", "88.4", "target_pct", "91.0"));
+loss.setEventTime(ZonedDateTime.now());
 client.events().create(List.of(loss));
 ```
 
@@ -122,6 +123,7 @@ client.events().create(List.of(loss));
 client.events.create([datahub_sdk.Event(
     external_id=f"recovery_loss_mill1_{int(pd.Timestamp.now().timestamp())}",
     type="recovery_loss", status="open",
+    event_time=pd.Timestamp.now(tz="UTC"),
     metadata={"mill": "mill_1", "recovery_pct": "88.4", "target_pct": "91.0"})])
 ```
 
@@ -138,6 +140,7 @@ loss.status = Some("open".into());
 loss.add_metadata("mill".into(), "mill_1".into());
 loss.add_metadata("recovery_pct".into(), "88.4".into());
 loss.add_metadata("target_pct".into(), "91.0".into());
+loss.set_event_time(Utc::now());
 api.events.create(&vec![loss]).await?;
 ```
 

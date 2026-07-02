@@ -55,6 +55,7 @@ try (var stream = client.subscriptions().listen(List.of("pharmacy_fridges"))
                 excursion.setType("cold_chain_excursion");
                 excursion.setStatus("critical");
                 excursion.setMetadata(Map.of("fridge", "fridge_pharmacy_12", "temp_c", "9.3"));
+                excursion.setEventTime(ZonedDateTime.now());
                 client.events().create(List.of(excursion));
             }
         })) {
@@ -72,6 +73,7 @@ with client.subscriptions.listen(["pharmacy_fridges"]) as listener:
             client.events.create([datahub_sdk.Event(
                 external_id=f"cold_chain_excursion_f12_{int(pd.Timestamp.now().timestamp())}",
                 type="cold_chain_excursion", status="critical",
+                event_time=pd.Timestamp.now(tz="UTC"),
                 metadata={"fridge": "fridge_pharmacy_12", "temp_c": "9.3"})])
         listener.ack([msg.message_id])
 ```
@@ -91,6 +93,7 @@ while let Some(Ok(msg)) = listener.next().await {
         excursion.status = Some("critical".into());
         excursion.add_metadata("fridge".into(), "fridge_pharmacy_12".into());
         excursion.add_metadata("temp_c".into(), "9.3".into());
+        excursion.set_event_time(Utc::now());
         api.events.create(&vec![excursion]).await?;
     }
     listener.ack(&[msg.message_id.as_str()]).await?;

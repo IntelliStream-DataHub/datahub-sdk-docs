@@ -194,6 +194,7 @@ if risk > 0.7:
     client.events.create([datahub_sdk.Event(
         external_id=f"sar_candidate_{alert}_{int(pd.Timestamp.now().timestamp())}",
         type="sar_candidate", status="open",
+        event_time=pd.Timestamp.now(tz="UTC"),
         metadata={
             "account": alert,
             "risk": f"{risk:.2f}",

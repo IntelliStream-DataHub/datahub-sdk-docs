@@ -65,6 +65,7 @@ try (var stream = client.subscriptions().listen(List.of("rig_deepwater_1"))
                 kick.setStatus("critical");
                 kick.setMetadata(Map.of("well", "well_a12", "rig", "rig_deepwater_1",
                                         "flow_delta_gpm", "18"));
+                kick.setEventTime(ZonedDateTime.now());
                 client.events().create(List.of(kick));
             }
         })) {
@@ -82,6 +83,7 @@ with client.subscriptions.listen(["rig_deepwater_1"]) as listener:
             client.events.create([datahub_sdk.Event(
                 external_id=f"kick_detected_a12_{int(pd.Timestamp.now().timestamp())}",
                 type="kick_detected", status="critical",
+                event_time=pd.Timestamp.now(tz="UTC"),
                 metadata={"well": "well_a12", "rig": "rig_deepwater_1", "flow_delta_gpm": "18"})])
         listener.ack([msg.message_id])
 ```
@@ -102,6 +104,7 @@ while let Some(Ok(msg)) = listener.next().await {
         kick.add_metadata("well".into(), "well_a12".into());
         kick.add_metadata("rig".into(), "rig_deepwater_1".into());
         kick.add_metadata("flow_delta_gpm".into(), "18".into());
+        kick.set_event_time(Utc::now());
         api.events.create(&vec![kick]).await?;
     }
     listener.ack(&[msg.message_id.as_str()]).await?;

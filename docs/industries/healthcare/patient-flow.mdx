@@ -111,6 +111,7 @@ breach.setExternalId("flow_breach_ed_" + System.currentTimeMillis());
 breach.setType("flow_breach");
 breach.setStatus("open");
 breach.setMetadata(Map.of("stage", "emergency_department", "breach_rate_pct", "22"));
+breach.setEventTime(ZonedDateTime.now());
 client.events().create(List.of(breach));
 ```
 
@@ -121,6 +122,7 @@ client.events().create(List.of(breach));
 client.events.create([datahub_sdk.Event(
     external_id=f"flow_breach_ed_{int(pd.Timestamp.now().timestamp())}",
     type="flow_breach", status="open",
+    event_time=pd.Timestamp.now(tz="UTC"),
     metadata={"stage": "emergency_department", "breach_rate_pct": "22"})])
 ```
 
@@ -136,6 +138,7 @@ breach.r#type = Some("flow_breach".into());
 breach.status = Some("open".into());
 breach.add_metadata("stage".into(), "emergency_department".into());
 breach.add_metadata("breach_rate_pct".into(), "22".into());
+breach.set_event_time(Utc::now());
 api.events.create(&vec![breach]).await?;
 ```
 

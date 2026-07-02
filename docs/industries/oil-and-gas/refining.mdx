@@ -112,6 +112,7 @@ upset.setExternalId("process_upset_cdu1_" + System.currentTimeMillis());
 upset.setType("process_upset");
 upset.setStatus("open");
 upset.setMetadata(Map.of("unit", "crude_unit_1", "tag", "column_top_temp", "value_c", "168"));
+upset.setEventTime(ZonedDateTime.now());
 client.events().create(List.of(upset));
 ```
 
@@ -122,6 +123,7 @@ client.events().create(List.of(upset));
 client.events.create([datahub_sdk.Event(
     external_id=f"process_upset_cdu1_{int(pd.Timestamp.now().timestamp())}",
     type="process_upset", status="open",
+    event_time=pd.Timestamp.now(tz="UTC"),
     metadata={"unit": "crude_unit_1", "tag": "column_top_temp", "value_c": "168"})])
 ```
 
@@ -138,6 +140,7 @@ upset.status = Some("open".into());
 upset.add_metadata("unit".into(), "crude_unit_1".into());
 upset.add_metadata("tag".into(), "column_top_temp".into());
 upset.add_metadata("value_c".into(), "168".into());
+upset.set_event_time(Utc::now());
 api.events.create(&vec![upset]).await?;
 ```
 

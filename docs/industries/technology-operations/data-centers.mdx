@@ -60,6 +60,7 @@ try (var stream = client.subscriptions().listen(List.of("hall_2_thermal"))
                 warning.setType("thermal_warning");
                 warning.setStatus("open");
                 warning.setMetadata(Map.of("rack", "rack_r14", "inlet_c", "29.4"));
+                warning.setEventTime(ZonedDateTime.now());
                 client.events().create(List.of(warning));
             }
         })) {
@@ -77,6 +78,7 @@ with client.subscriptions.listen(["hall_2_thermal"]) as listener:
             client.events.create([datahub_sdk.Event(
                 external_id=f"thermal_warning_r14_{int(pd.Timestamp.now().timestamp())}",
                 type="thermal_warning", status="open",
+                event_time=pd.Timestamp.now(tz="UTC"),
                 metadata={"rack": "rack_r14", "inlet_c": "29.4"})])
         listener.ack([msg.message_id])
 ```
@@ -96,6 +98,7 @@ while let Some(Ok(msg)) = listener.next().await {
         warning.status = Some("open".into());
         warning.add_metadata("rack".into(), "rack_r14".into());
         warning.add_metadata("inlet_c".into(), "29.4".into());
+        warning.set_event_time(Utc::now());
         api.events.create(&vec![warning]).await?;
     }
     listener.ack(&[msg.message_id.as_str()]).await?;

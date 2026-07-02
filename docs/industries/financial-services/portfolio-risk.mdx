@@ -150,6 +150,7 @@ breach.setStatus("open");
 breach.setDataSetId(deskId);
 breach.setMetadata(Map.of(
     "portfolio", "portfolio_growth", "var_1d_usd", "512340", "limit_usd", "500000"));
+breach.setEventTime(ZonedDateTime.now());
 client.events().create(List.of(breach));
 ```
 
@@ -160,6 +161,7 @@ client.events().create(List.of(breach));
 client.events.create([datahub_sdk.Event(
     external_id=f"var_limit_breach_growth_{int(pd.Timestamp.now().timestamp())}",
     type="var_limit_breach", status="open", data_set_id=desk_id,
+    event_time=pd.Timestamp.now(tz="UTC"),
     metadata={"portfolio": "portfolio_growth",
               "var_1d_usd": "512340", "limit_usd": "500000"})])
 ```
@@ -178,6 +180,7 @@ breach.data_set_id = desk_id;
 breach.add_metadata("portfolio".into(), "portfolio_growth".into());
 breach.add_metadata("var_1d_usd".into(), "512340".into());
 breach.add_metadata("limit_usd".into(), "500000".into());
+breach.set_event_time(Utc::now());
 api.events.create(&vec![breach]).await?;
 ```
 

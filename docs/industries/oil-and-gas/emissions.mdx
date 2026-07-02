@@ -113,6 +113,7 @@ exceedance.setExternalId("flaring_exceedance_north_" + System.currentTimeMillis(
 exceedance.setType("flaring_exceedance");
 exceedance.setStatus("open");
 exceedance.setMetadata(Map.of("site", "platform_north", "flared_m3", "142000", "permit_m3", "120000"));
+exceedance.setEventTime(ZonedDateTime.now());
 client.events().create(List.of(exceedance));
 ```
 
@@ -123,6 +124,7 @@ client.events().create(List.of(exceedance));
 client.events.create([datahub_sdk.Event(
     external_id=f"flaring_exceedance_north_{int(pd.Timestamp.now().timestamp())}",
     type="flaring_exceedance", status="open",
+    event_time=pd.Timestamp.now(tz="UTC"),
     metadata={"site": "platform_north", "flared_m3": "142000", "permit_m3": "120000"})])
 ```
 
@@ -139,6 +141,7 @@ exceedance.status = Some("open".into());
 exceedance.add_metadata("site".into(), "platform_north".into());
 exceedance.add_metadata("flared_m3".into(), "142000".into());
 exceedance.add_metadata("permit_m3".into(), "120000".into());
+exceedance.set_event_time(Utc::now());
 api.events.create(&vec![exceedance]).await?;
 ```
 

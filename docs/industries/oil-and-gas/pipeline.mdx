@@ -65,6 +65,7 @@ if (inflow - outflow > tolerance(inflow)) {
     leak.setStatus("critical");
     leak.setMetadata(Map.of("segment", "segment_pn_07",
                             "imbalance_m3h", String.valueOf(inflow - outflow)));
+    leak.setEventTime(ZonedDateTime.now());
     client.events().create(List.of(leak));
 }
 ```
@@ -80,6 +81,7 @@ if inflow - outflow > tolerance(inflow):
     client.events.create([datahub_sdk.Event(
         external_id=f"leak_suspected_pn07_{int(pd.Timestamp.now().timestamp())}",
         type="leak_suspected", status="critical",
+        event_time=pd.Timestamp.now(tz="UTC"),
         metadata={"segment": "segment_pn_07", "imbalance_m3h": str(inflow - outflow)})])
 ```
 
@@ -99,6 +101,7 @@ if inflow - outflow > tolerance(inflow) {
     leak.status = Some("critical".into());
     leak.add_metadata("segment".into(), "segment_pn_07".into());
     leak.add_metadata("imbalance_m3h".into(), (inflow - outflow).to_string());
+    leak.set_event_time(Utc::now());
     api.events.create(&vec![leak]).await?;
 }
 ```

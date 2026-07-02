@@ -51,6 +51,7 @@ try (var stream = client.subscriptions().listen(List.of("fleet_eta"))
                 risk.setType("delivery_at_risk");
                 risk.setStatus("open");
                 risk.setMetadata(Map.of("van", "van_22", "route", "route_oslo_e", "stops_left", "9"));
+                risk.setEventTime(ZonedDateTime.now());
                 client.events().create(List.of(risk));
             }
         })) {
@@ -68,6 +69,7 @@ with client.subscriptions.listen(["fleet_eta"]) as listener:
             client.events.create([datahub_sdk.Event(
                 external_id=f"delivery_at_risk_v22_{int(pd.Timestamp.now().timestamp())}",
                 type="delivery_at_risk", status="open",
+                event_time=pd.Timestamp.now(tz="UTC"),
                 metadata={"van": "van_22", "route": "route_oslo_e", "stops_left": "9"})])
         listener.ack([msg.message_id])
 ```
@@ -88,6 +90,7 @@ while let Some(Ok(msg)) = listener.next().await {
         risk.add_metadata("van".into(), "van_22".into());
         risk.add_metadata("route".into(), "route_oslo_e".into());
         risk.add_metadata("stops_left".into(), "9".into());
+        risk.set_event_time(Utc::now());
         api.events.create(&vec![risk]).await?;
     }
     listener.ack(&[msg.message_id.as_str()]).await?;

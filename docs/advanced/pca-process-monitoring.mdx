@@ -146,6 +146,7 @@ if t2(znew)[-1] > T2_LIMIT or spe(znew)[-1] > SPE_LIMIT:
     client.events.create([datahub_sdk.Event(
         external_id=f"process_deviation_cdu1_{int(pd.Timestamp.now().timestamp())}",
         type="process_deviation", status="open",
+        event_time=recent.index[-1],
         metadata={"unit": "crude_unit_1",
                   "t2": f"{t2(znew)[-1]:.1f}", "spe": f"{spe(znew)[-1]:.1f}",
                   "top_contributor": culprit})])

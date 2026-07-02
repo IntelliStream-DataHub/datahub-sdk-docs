@@ -59,6 +59,7 @@ try (var stream = client.subscriptions().listen(List.of("tower_a_comfort"))
                 alert.setType("comfort_alert");
                 alert.setStatus("open");
                 alert.setMetadata(Map.of("zone", "zone_l8_open_plan", "co2_ppm", "1180"));
+                alert.setEventTime(ZonedDateTime.now());
                 client.events().create(List.of(alert));
             }
         })) {
@@ -76,6 +77,7 @@ with client.subscriptions.listen(["tower_a_comfort"]) as listener:
             client.events.create([datahub_sdk.Event(
                 external_id=f"comfort_alert_l8_{int(pd.Timestamp.now().timestamp())}",
                 type="comfort_alert", status="open",
+                event_time=pd.Timestamp.now(tz="UTC"),
                 metadata={"zone": "zone_l8_open_plan", "co2_ppm": "1180"})])
         listener.ack([msg.message_id])
 ```
@@ -95,6 +97,7 @@ while let Some(Ok(msg)) = listener.next().await {
         alert.status = Some("open".into());
         alert.add_metadata("zone".into(), "zone_l8_open_plan".into());
         alert.add_metadata("co2_ppm".into(), "1180".into());
+        alert.set_event_time(Utc::now());
         api.events.create(&vec![alert]).await?;
     }
     listener.ack(&[msg.message_id.as_str()]).await?;

@@ -117,6 +117,7 @@ for asset, d in zip(assets, dist):
         client.events.create([datahub_sdk.Event(
             external_id=f"peer_outlier_{asset}_{int(pd.Timestamp.now().timestamp())}",
             type="peer_outlier", status="open",
+            event_time=pd.Timestamp.now(tz="UTC"),
             metadata={"asset": asset, "cohort": str(int(km.labels_[assets.index(asset)]))})])
 ```
 

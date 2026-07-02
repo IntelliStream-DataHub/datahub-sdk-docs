@@ -132,6 +132,7 @@ incident.setType("safety_incident");
 incident.setSubType("near_miss");
 incident.setStatus("open");
 incident.setMetadata(Map.of("zone", "zone_level_12", "category", "dropped_object"));
+incident.setEventTime(ZonedDateTime.now());
 client.events().create(List.of(incident));
 ```
 
@@ -142,6 +143,7 @@ client.events().create(List.of(incident));
 client.events.create([datahub_sdk.Event(
     external_id=f"safety_incident_l12_{int(pd.Timestamp.now().timestamp())}",
     type="safety_incident", sub_type="near_miss", status="open",
+    event_time=pd.Timestamp.now(tz="UTC"),
     metadata={"zone": "zone_level_12", "category": "dropped_object"})])
 ```
 
@@ -158,6 +160,7 @@ incident.sub_type = Some("near_miss".into());
 incident.status = Some("open".into());
 incident.add_metadata("zone".into(), "zone_level_12".into());
 incident.add_metadata("category".into(), "dropped_object".into());
+incident.set_event_time(Utc::now());
 api.events.create(&vec![incident]).await?;
 ```
 

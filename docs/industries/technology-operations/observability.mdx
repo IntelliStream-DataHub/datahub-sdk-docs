@@ -126,6 +126,7 @@ try (var stream = client.subscriptions().listen(List.of("checkout_slo"))
                 event.setType("slo_breach");
                 event.setStatus("firing");
                 event.setMetadata(Map.of("service", "service_checkout", "slo", "latency_p99"));
+                event.setEventTime(ZonedDateTime.now());
                 client.events().create(List.of(event));
             }
         })) {
@@ -143,6 +144,7 @@ with client.subscriptions.listen(["checkout_slo"]) as listener:
             client.events.create([datahub_sdk.Event(
                 external_id=f"slo_breach_checkout_{int(pd.Timestamp.now().timestamp())}",
                 type="slo_breach", status="firing",
+                event_time=pd.Timestamp.now(tz="UTC"),
                 metadata={"service": "service_checkout", "slo": "latency_p99"})])
         listener.ack([msg.message_id])
 ```
@@ -162,6 +164,7 @@ while let Some(Ok(msg)) = listener.next().await {
         event.status = Some("firing".into());
         event.add_metadata("service".into(), "service_checkout".into());
         event.add_metadata("slo".into(), "latency_p99".into());
+        event.set_event_time(Utc::now());
         api.events.create(&vec![event]).await?;
     }
     listener.ack(&[msg.message_id.as_str()]).await?;

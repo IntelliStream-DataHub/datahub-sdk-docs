@@ -153,6 +153,7 @@ if band == "critical":
     client.events.create([datahub_sdk.Event(
         external_id=f"health_critical_pump_07_{int(pd.Timestamp.now().timestamp())}",
         type="health_critical", status="open",
+        event_time=pd.Timestamp.now(tz="UTC"),
         metadata={"asset": "pump_07", "score": str(score),
                   "worst_signal": max(parts, key=parts.get)})])
 ```

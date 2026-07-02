@@ -190,6 +190,7 @@ if scores[-5:].mean() > ALARM:        # sustained, not a single spike
     client.events.create([datahub_sdk.Event(
         external_id=f"degradation_predicted_pump_07_{int(pd.Timestamp.now().timestamp())}",
         type="degradation_predicted", status="open",
+        event_time=score_index[-1],
         metadata={"asset": "pump_07", "score": f"{scores[-1]:.3f}", "model": "iforest_v1"})])
 ```
 
