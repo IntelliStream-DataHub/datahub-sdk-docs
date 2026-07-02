@@ -41,6 +41,7 @@ if (tooHot) {
     event.setType("overheat");
     event.setStatus("open");
     event.setMetadata(Map.of("series", "engine_temperature", "limit", "110"));
+    event.setEventTime(ZonedDateTime.now());
     client.events().create(List.of(event));
 }
 ```
@@ -62,6 +63,7 @@ if any(float(dp.value) > 110.0 for dp in points):
         external_id=f"overheat_press_07_{int(pd.Timestamp.now().timestamp())}",
         type="overheat",
         status="open",
+        event_time=pd.Timestamp.now(tz="UTC"),
         metadata={"series": "engine_temperature", "limit": "110"})])
 ```
 
@@ -92,6 +94,7 @@ if too_hot {
     event.status = Some("open".into());
     event.add_metadata("series".into(), "engine_temperature".into());
     event.add_metadata("limit".into(), "110".into());
+    event.set_event_time(Utc::now());
     api.events.create(&vec![event]).await?;
 }
 ```

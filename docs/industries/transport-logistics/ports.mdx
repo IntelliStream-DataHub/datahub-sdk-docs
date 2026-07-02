@@ -111,6 +111,7 @@ congestion.setExternalId("yard_congestion_b07_" + System.currentTimeMillis());
 congestion.setType("yard_congestion");
 congestion.setStatus("open");
 congestion.setMetadata(Map.of("block", "yard_block_b07", "occupancy_pct", "94"));
+congestion.setEventTime(ZonedDateTime.now());
 client.events().create(List.of(congestion));
 ```
 
@@ -121,6 +122,7 @@ client.events().create(List.of(congestion));
 client.events.create([datahub_sdk.Event(
     external_id=f"yard_congestion_b07_{int(pd.Timestamp.now().timestamp())}",
     type="yard_congestion", status="open",
+    event_time=pd.Timestamp.now(tz="UTC"),
     metadata={"block": "yard_block_b07", "occupancy_pct": "94"})])
 ```
 
@@ -136,6 +138,7 @@ congestion.r#type = Some("yard_congestion".into());
 congestion.status = Some("open".into());
 congestion.add_metadata("block".into(), "yard_block_b07".into());
 congestion.add_metadata("occupancy_pct".into(), "94".into());
+congestion.set_event_time(Utc::now());
 api.events.create(&vec![congestion]).await?;
 ```
 

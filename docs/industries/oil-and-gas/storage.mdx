@@ -64,6 +64,7 @@ if (Math.abs(unexplained) > tolerance(closing)) {
     loss.setStatus("open");
     loss.setMetadata(Map.of("tank", "tank_t_12", "unexplained_bbl",
                             String.format("%.1f", unexplained)));
+    loss.setEventTime(shiftStart);
     client.events().create(List.of(loss));
 }
 ```
@@ -84,6 +85,7 @@ if abs(unexplained) > tolerance(closing):
     client.events.create([datahub_sdk.Event(
         external_id=f"inventory_discrepancy_t12_{int(pd.Timestamp.now().timestamp())}",
         type="inventory_discrepancy", status="open",
+        event_time=shift_start,
         metadata={"tank": "tank_t_12", "unexplained_bbl": f"{unexplained:.1f}"})])
 ```
 
@@ -106,6 +108,7 @@ if unexplained.abs() > tolerance(latest("tank_t_12_volume_bbl").await?) {
     loss.status = Some("open".into());
     loss.add_metadata("tank".into(), "tank_t_12".into());
     loss.add_metadata("unexplained_bbl".into(), format!("{:.1}", unexplained));
+    loss.set_event_time(shift_start);
     api.events.create(&vec![loss]).await?;
 }
 ```

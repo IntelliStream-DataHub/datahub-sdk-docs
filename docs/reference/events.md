@@ -11,6 +11,10 @@ Record and query operational events.
 
 ## Create
 
+Every event must carry an **event time** — the moment it occurred at the source (sensor,
+PLC, upstream system). The SDK deliberately does *not* default it to "now": an event
+without it is rejected rather than silently mis-timestamped.
+
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
 
@@ -18,6 +22,7 @@ Record and query operational events.
 EventModel event = new EventModel();
 event.setExternalId("door_open");
 event.setType("alarm");
+event.setEventTime(ZonedDateTime.now());   // required: when the event occurred
 
 client.events().create(List.of(event));
 ```
@@ -26,11 +31,13 @@ client.events().create(List.of(event));
 <TabItem value="python" label="Python">
 
 ```python
+from datetime import datetime, timezone
 import datahub_sdk
 
 event = datahub_sdk.Event(
     external_id="door_open",
-    type="alarm")
+    type="alarm",
+    event_time=datetime.now(timezone.utc))  # required: when the event occurred
 
 client.events.create([event])
 ```
@@ -39,24 +46,28 @@ client.events.create([event])
 <TabItem value="rust" label="Rust">
 
 ```rust
+use chrono::Utc;
 use dataplatform_rust_sdk::events::Event;
 
 let mut event = Event::new("door_open".into());
 event.r#type = Some("alarm".into());
+event.set_event_time(Utc::now());          // required: when the event occurred
 api.events.create(&vec![event]).await?;
 ```
 
 </TabItem>
 </Tabs>
 
-:::note Event ids are client-stamped UUID v7
-`create` stamps every event that has no `id` with a time-ordered **UUID v7** before sending, and the
-server honors a client-supplied id. This makes retries idempotent: the events table is a
-`ReplacingMergeTree` ordered by `id`, so re-sending the same event (for example after a
-[buffered](./client#durable-ingest-buffering) outage) collapses to one row instead of duplicating.
-If you set the `id` yourself, use a time-ordered UUID v7 — a random v4 scatters writes across that
-sort key and hurts insert/query performance. The created event (with its id) is returned from
-`create`.
+:::note Event ids are time-ordered UUID v7
+The ingestion paths stamp every event that has no `id` with a **UUID v7** before sending —
+`create` in the Python and Rust clients, `ingest(...)` in Java (a plain Java `create` sends
+events as-is and lets the server assign ids). The server honors a client-supplied id, which is
+what makes retries idempotent: the events table is a `ReplacingMergeTree` ordered by `id`, so
+re-sending the same event (for example after a
+[buffered](./client#durable-ingest-buffering) outage) collapses to one row instead of
+duplicating. If you set the `id` yourself, use a time-ordered UUID v7 — a random v4 scatters
+writes across that sort key and hurts insert/query performance. The created event (with its
+id) is returned from `create`.
 :::
 
 ## Query

@@ -122,6 +122,7 @@ try (var stream = client.subscriptions().listen(List.of("bed_capacity"))
                 warning.setType("capacity_warning");
                 warning.setStatus("open");
                 warning.setMetadata(Map.of("ward", "ward_icu", "occupancy_pct", "96"));
+                warning.setEventTime(ZonedDateTime.now());
                 client.events().create(List.of(warning));
             }
         })) {
@@ -140,6 +141,7 @@ with client.subscriptions.listen(["bed_capacity"]) as listener:
             client.events.create([datahub_sdk.Event(
                 external_id=f"capacity_warning_icu_{int(pd.Timestamp.now().timestamp())}",
                 type="capacity_warning", status="open",
+                event_time=pd.Timestamp.now(tz="UTC"),
                 metadata={"ward": "ward_icu", "occupancy_pct": "96"})])
         listener.ack([msg.message_id])
 ```
@@ -160,6 +162,7 @@ while let Some(Ok(msg)) = listener.next().await {
         warning.status = Some("open".into());
         warning.add_metadata("ward".into(), "ward_icu".into());
         warning.add_metadata("occupancy_pct".into(), "96".into());
+        warning.set_event_time(Utc::now());
         api.events.create(&vec![warning]).await?;
     }
     listener.ack(&[msg.message_id.as_str()]).await?;

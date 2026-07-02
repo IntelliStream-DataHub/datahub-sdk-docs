@@ -173,6 +173,7 @@ event.setExternalId("feeder_overload_f12_" + System.currentTimeMillis());
 event.setType("feeder_overload");
 event.setStatus("open");
 event.setMetadata(Map.of("feeder", "feeder_f12", "peak_mw", "14.8", "rating_mw", "12.0"));
+event.setEventTime(ZonedDateTime.now());
 client.events().create(List.of(event));
 ```
 
@@ -183,6 +184,7 @@ client.events().create(List.of(event));
 client.events.create([datahub_sdk.Event(
     external_id=f"feeder_overload_f12_{int(pd.Timestamp.now().timestamp())}",
     type="feeder_overload", status="open",
+    event_time=pd.Timestamp.now(tz="UTC"),
     metadata={"feeder": "feeder_f12", "peak_mw": "14.8", "rating_mw": "12.0"})])
 ```
 
@@ -198,6 +200,7 @@ event.status = Some("open".into());
 event.add_metadata("feeder".into(), "feeder_f12".into());
 event.add_metadata("peak_mw".into(), "14.8".into());
 event.add_metadata("rating_mw".into(), "12.0".into());
+event.set_event_time(Utc::now());
 api.events.create(&vec![event]).await?;
 ```
 

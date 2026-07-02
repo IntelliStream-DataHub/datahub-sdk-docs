@@ -59,6 +59,7 @@ try (var stream = client.subscriptions().listen(List.of("tsf_instruments"))
                 alarm.setStatus(level.equals("red") ? "critical" : "warning");
                 alarm.setMetadata(Map.of("instrument", "piezometer_p14", "level", level,
                                          "pore_pressure_kpa", "186"));
+                alarm.setEventTime(ZonedDateTime.now());
                 client.events().create(List.of(alarm));
             }
         })) {
@@ -78,6 +79,7 @@ with client.subscriptions.listen(["tsf_instruments"]) as listener:
                 external_id=f"tailings_alarm_p14_{int(pd.Timestamp.now().timestamp())}",
                 type="tailings_alarm",
                 status="critical" if level == "red" else "warning",
+                event_time=pd.Timestamp.now(tz="UTC"),
                 metadata={"instrument": "piezometer_p14", "level": level,
                           "pore_pressure_kpa": "186"})])
         listener.ack([msg.message_id])
@@ -99,6 +101,7 @@ while let Some(Ok(msg)) = listener.next().await {
         alarm.add_metadata("instrument".into(), "piezometer_p14".into());
         alarm.add_metadata("level".into(), level.into());
         alarm.add_metadata("pore_pressure_kpa".into(), "186".into());
+        alarm.set_event_time(Utc::now());
         api.events.create(&vec![alarm]).await?;
     }
     listener.ack(&[msg.message_id.as_str()]).await?;

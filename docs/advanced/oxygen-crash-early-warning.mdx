@@ -124,6 +124,7 @@ if prob > 0.6:
     client.events.create([datahub_sdk.Event(
         external_id=f"oxygen_crash_predicted_h07_{int(pd.Timestamp.now().timestamp())}",
         type="oxygen_crash_predicted", status="warning",
+        event_time=latest.index[-1],
         metadata={"pen": "pen_h_07", "risk": f"{prob:.2f}", "lead_minutes": "45"})])
 ```
 

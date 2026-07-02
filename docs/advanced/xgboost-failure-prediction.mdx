@@ -167,6 +167,7 @@ if risk > 0.6:
     client.events.create([datahub_sdk.Event(
         external_id=f"failure_predicted_a12_{int(pd.Timestamp.now().timestamp())}",
         type="failure_predicted", status="open",
+        event_time=pd.Timestamp.now(tz="UTC"),
         metadata={"pump": "pump_esp_a12", "risk": f"{risk:.2f}",
                   "top_drivers": ", ".join(import_)})])
 ```

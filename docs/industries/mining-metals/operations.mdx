@@ -55,6 +55,7 @@ if (series.getDatapoints().stream().anyMatch(p -> Double.parseDouble(p.getValue(
     warning.setType("equipment_warning");
     warning.setStatus("open");
     warning.setMetadata(Map.of("unit", "truck_785", "signal", "oil_pressure"));
+    warning.setEventTime(ZonedDateTime.now());
     client.events().create(List.of(warning));
 }
 ```
@@ -68,6 +69,7 @@ if any(float(dp.value) < 250.0 for dp in points.get_datapoints()):
     client.events.create([datahub_sdk.Event(
         external_id=f"equipment_warning_785_{int(pd.Timestamp.now().timestamp())}",
         type="equipment_warning", status="open",
+        event_time=pd.Timestamp.now(tz="UTC"),
         metadata={"unit": "truck_785", "signal": "oil_pressure"})])
 ```
 
@@ -88,6 +90,7 @@ if low {
     warning.status = Some("open".into());
     warning.add_metadata("unit".into(), "truck_785".into());
     warning.add_metadata("signal".into(), "oil_pressure".into());
+    warning.set_event_time(Utc::now());
     api.events.create(&vec![warning]).await?;
 }
 ```

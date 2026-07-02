@@ -245,7 +245,8 @@ The Java `ingest` tuning knobs (Python's `insert_from_lists` and Rust's
 ```java
 long              succeeded()    // items ingested
 long              failed()       // items that could not be ingested
-boolean           isComplete()   // true when nothing failed
+long              buffered()     // items spooled to the durable buffer (0 unless buffering is on)
+boolean           isComplete()   // true when nothing failed and nothing was buffered
 List<BatchError>  errors()       // one entry per failed batch
 ```
 

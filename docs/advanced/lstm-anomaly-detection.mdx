@@ -161,6 +161,7 @@ if error[-3:].mean() > THRESHOLD:
     client.events.create([datahub_sdk.Event(
         external_id=f"kick_detected_dw1_{int(pd.Timestamp.now().timestamp())}",
         type="kick_detected", status="critical",
+        event_time=score_index[-1],
         metadata={"rig": "rig_deepwater_1", "score": f"{error[-1]:.3f}", "model": "lstm_ae_v1"})])
 ```
 

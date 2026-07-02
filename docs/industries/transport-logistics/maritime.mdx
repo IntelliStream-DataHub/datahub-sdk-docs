@@ -101,6 +101,7 @@ try (var stream = client.subscriptions().listen(List.of("reefer_fleet"))
                 excursion.setType("reefer_excursion");
                 excursion.setStatus("open");
                 excursion.setMetadata(Map.of("reefer", "reefer_msc_1182", "vessel", "vessel_nordic_star"));
+                excursion.setEventTime(ZonedDateTime.now());
                 client.events().create(List.of(excursion));
             }
         })) {
@@ -118,6 +119,7 @@ with client.subscriptions.listen(["reefer_fleet"]) as listener:
             client.events.create([datahub_sdk.Event(
                 external_id=f"reefer_excursion_1182_{int(pd.Timestamp.now().timestamp())}",
                 type="reefer_excursion", status="open",
+                event_time=pd.Timestamp.now(tz="UTC"),
                 metadata={"reefer": "reefer_msc_1182", "vessel": "vessel_nordic_star"})])
         listener.ack([msg.message_id])
 ```
@@ -137,6 +139,7 @@ while let Some(Ok(msg)) = listener.next().await {
         excursion.status = Some("open".into());
         excursion.add_metadata("reefer".into(), "reefer_msc_1182".into());
         excursion.add_metadata("vessel".into(), "vessel_nordic_star".into());
+        excursion.set_event_time(Utc::now());
         api.events.create(&vec![excursion]).await?;
     }
     listener.ack(&[msg.message_id.as_str()]).await?;

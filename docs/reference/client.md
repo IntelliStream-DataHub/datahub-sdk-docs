@@ -117,10 +117,11 @@ DatahubConfig cfg = DatahubConfig.fromVaultAppRoleEnv("datahub/sdk");          /
 ## Durable ingest buffering
 
 Optional and **off by default**. When enabled, datapoint and event ingestion that can't reach the
-API spools to disk and is flushed automatically on the next ingest call, so a transient outage
-doesn't lose data or raise. The buffer is a segmented, compressed log (gzip in Java, zstd in
-Rust/Python) bounded on two axes, either of which may be left unset; an unset axis defaults to
-**6 hours** / **5 GiB** once buffering is on:
+API — or is rejected with an auth failure (HTTP 401/403, e.g. an expired or rotated token) — spools
+to disk and is flushed automatically on the next ingest call, so neither a transient outage nor a
+credential hiccup loses data or raises. The buffer is a segmented, compressed log (gzip in Java,
+zstd in Rust/Python) bounded on two axes, either of which may be left unset; an unset axis defaults
+to **72 hours** / **5 GiB** once buffering is on:
 
 - **time** — datapoints/events older than the window are dropped.
 - **size** — when the on-disk spool exceeds the cap, the oldest segment is dropped.
@@ -135,7 +136,7 @@ into memory, and it is recovered from disk on the next start.
 DatahubClient client = DatahubClient.create(DatahubConfig.builder()
         .baseUrl("https://api.intellistream.ai")
         .token(System.getenv("TOKEN"))
-        .enableBuffering()                          // 6h / 5 GiB defaults
+        .enableBuffering()                          // 72 h / 5 GiB defaults
         // .bufferRetention(Duration.ofMinutes(60))     // override the time window
         // .bufferMaxBytes(2L * 1024 * 1024 * 1024)      // override the size cap
         // .bufferDirectory(Path.of("datahub-spool"))    // default: .datahub-spool
@@ -147,6 +148,9 @@ if (r.buffered() > 0) {
 }
 ```
 
+`fromEnv()` instead reads `BUFFER_RETENTION` (an ISO-8601 duration, e.g. `PT72H`),
+`BUFFER_MAX_BYTES` and `BUFFER_DIRECTORY` — setting either bound turns buffering on.
+
 </TabItem>
 <TabItem value="python" label="Python">
 
@@ -154,7 +158,7 @@ if (r.buffered() > 0) {
 client = DataHubClient(
     base_url="https://api.intellistream.ai",
     token="...",
-    enable_buffering=True,            # 6h / 5 GiB defaults
+    enable_buffering=True,            # 72 h / 5 GiB defaults
     buffer_retention_secs=3600,       # optional: override the time window
     buffer_max_bytes=2 * 1024**3,     # optional: override the size cap
     buffer_dir="datahub-spool",       # optional, default .datahub-spool
@@ -172,7 +176,7 @@ use dataplatform_rust_sdk::{ApiService, datahub::DataHubApi};
 
 let mut config = DataHubApi::from_env().unwrap();
 config
-    .enable_buffering()                            // 6h / 5 GiB defaults
+    .enable_buffering()                            // 72 h / 5 GiB defaults
     .set_buffer_retention_secs(3600)               // optional: override the time window
     .set_buffer_max_bytes(2 * 1024 * 1024 * 1024)  // optional: override the size cap
     .set_buffer_dir("datahub-spool");              // optional, default .datahub-spool

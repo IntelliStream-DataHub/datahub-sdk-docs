@@ -168,6 +168,7 @@ excursion.setExternalId("scrap_excursion_st07_" + System.currentTimeMillis());
 excursion.setType("scrap_excursion");
 excursion.setStatus("open");
 excursion.setMetadata(Map.of("station", "station_07", "scrap_rate_pct", "4.8", "limit_pct", "2.0"));
+excursion.setEventTime(ZonedDateTime.now());
 client.events().create(List.of(excursion));
 ```
 
@@ -178,6 +179,7 @@ client.events().create(List.of(excursion));
 client.events.create([datahub_sdk.Event(
     external_id=f"scrap_excursion_st07_{int(pd.Timestamp.now().timestamp())}",
     type="scrap_excursion", status="open",
+    event_time=pd.Timestamp.now(tz="UTC"),
     metadata={"station": "station_07", "scrap_rate_pct": "4.8", "limit_pct": "2.0"})])
 ```
 
@@ -194,6 +196,7 @@ excursion.status = Some("open".into());
 excursion.add_metadata("station".into(), "station_07".into());
 excursion.add_metadata("scrap_rate_pct".into(), "4.8".into());
 excursion.add_metadata("limit_pct".into(), "2.0".into());
+excursion.set_event_time(Utc::now());
 api.events.create(&vec![excursion]).await?;
 ```
 

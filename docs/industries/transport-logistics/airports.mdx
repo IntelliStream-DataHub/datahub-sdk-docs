@@ -53,6 +53,7 @@ try (var stream = client.subscriptions().listen(List.of("stand_b12_turnaround"))
                 risk.setType("turnaround_risk");
                 risk.setStatus("open");
                 risk.setMetadata(Map.of("flight", "flight_su204", "leg", "fuelling", "stand", "stand_b12"));
+                risk.setEventTime(ZonedDateTime.now());
                 client.events().create(List.of(risk));
             }
         })) {
@@ -70,6 +71,7 @@ with client.subscriptions.listen(["stand_b12_turnaround"]) as listener:
             client.events.create([datahub_sdk.Event(
                 external_id=f"turnaround_risk_su204_{int(pd.Timestamp.now().timestamp())}",
                 type="turnaround_risk", status="open",
+                event_time=pd.Timestamp.now(tz="UTC"),
                 metadata={"flight": "flight_su204", "leg": "fuelling", "stand": "stand_b12"})])
         listener.ack([msg.message_id])
 ```
@@ -90,6 +92,7 @@ while let Some(Ok(msg)) = listener.next().await {
         risk.add_metadata("flight".into(), "flight_su204".into());
         risk.add_metadata("leg".into(), "fuelling".into());
         risk.add_metadata("stand".into(), "stand_b12".into());
+        risk.set_event_time(Utc::now());
         api.events.create(&vec![risk]).await?;
     }
     listener.ack(&[msg.message_id.as_str()]).await?;

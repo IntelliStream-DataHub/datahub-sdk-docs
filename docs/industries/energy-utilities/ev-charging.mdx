@@ -54,6 +54,7 @@ try (var stream = client.subscriptions().listen(List.of("network_status"))
                 down.setType("charger_down");
                 down.setStatus("open");
                 down.setMetadata(Map.of("charger", "charger_oslo_14", "connector", "2"));
+                down.setEventTime(ZonedDateTime.now());
                 client.events().create(List.of(down));
             }
         })) {
@@ -71,6 +72,7 @@ with client.subscriptions.listen(["network_status"]) as listener:
             client.events.create([datahub_sdk.Event(
                 external_id=f"charger_down_oslo_14_{int(pd.Timestamp.now().timestamp())}",
                 type="charger_down", status="open",
+                event_time=pd.Timestamp.now(tz="UTC"),
                 metadata={"charger": "charger_oslo_14", "connector": "2"})])
         listener.ack([msg.message_id])
 ```
@@ -90,6 +92,7 @@ while let Some(Ok(msg)) = listener.next().await {
         down.status = Some("open".into());
         down.add_metadata("charger".into(), "charger_oslo_14".into());
         down.add_metadata("connector".into(), "2".into());
+        down.set_event_time(Utc::now());
         api.events.create(&vec![down]).await?;
     }
     listener.ack(&[msg.message_id.as_str()]).await?;

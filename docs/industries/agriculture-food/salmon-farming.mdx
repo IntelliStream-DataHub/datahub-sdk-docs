@@ -59,6 +59,7 @@ try (var stream = client.subscriptions().listen(List.of("farm_hardanger_pens"))
                 alarm.setType("low_oxygen");
                 alarm.setStatus("critical");
                 alarm.setMetadata(Map.of("pen", "pen_h_07", "do_mg_l", "5.6"));
+                alarm.setEventTime(ZonedDateTime.now());
                 client.events().create(List.of(alarm));   // triggers aeration
             }
         })) {
@@ -76,6 +77,7 @@ with client.subscriptions.listen(["farm_hardanger_pens"]) as listener:
             client.events.create([datahub_sdk.Event(
                 external_id=f"low_oxygen_h07_{int(pd.Timestamp.now().timestamp())}",
                 type="low_oxygen", status="critical",
+                event_time=pd.Timestamp.now(tz="UTC"),
                 metadata={"pen": "pen_h_07", "do_mg_l": "5.6"})])
         listener.ack([msg.message_id])
 ```
@@ -95,6 +97,7 @@ while let Some(Ok(msg)) = listener.next().await {
         alarm.status = Some("critical".into());
         alarm.add_metadata("pen".into(), "pen_h_07".into());
         alarm.add_metadata("do_mg_l".into(), "5.6".into());
+        alarm.set_event_time(Utc::now());
         api.events.create(&vec![alarm]).await?;       // triggers aeration
     }
     listener.ack(&[msg.message_id.as_str()]).await?;
