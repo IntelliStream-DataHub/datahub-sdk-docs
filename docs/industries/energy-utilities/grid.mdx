@@ -112,7 +112,7 @@ var filter = new RetrieveFilter();
 filter.setExternalId("feeder_f12_load_mw");
 filter.setStart(ZonedDateTime.now().minusDays(1));
 filter.setEnd(ZonedDateTime.now());
-filter.setAggregates(List.of("average", "max"));
+filter.setAggregates(List.of("avg", "max"));
 filter.setGranularity("1h");
 
 var request = new DataRetriever<RetrieveFilter>();
@@ -130,7 +130,7 @@ rf = datahub_sdk.RetrieveFilter(
     ts="feeder_f12_load_mw",
     start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=1),
     end=pd.Timestamp.now(tz="UTC"),
-    aggregates=["average", "max"], granularity="1h")
+    aggregates=["avg", "max"], granularity="1h")
 
 for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
     chart(dp.timestamp, dp.average, dp.max)
@@ -146,7 +146,7 @@ let filter = RetrieveFilter {
     external_id: Some("feeder_f12_load_mw".into()),
     start: Some(Utc::now() - chrono::Duration::days(1)),
     end: Some(Utc::now()),
-    aggregates: vec!["average".into(), "max".into()],
+    aggregates: vec!["avg".into(), "max".into()],
     granularity: Some("1h".into()),
     ..Default::default()
 };

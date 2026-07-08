@@ -50,7 +50,7 @@ def load(external_id, days=90):
         ts=external_id,
         start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=days),
         end=pd.Timestamp.now(tz="UTC"),
-        aggregates=["average"], granularity="5m")
+        aggregates=["avg"], granularity="5m")
     pts = client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()
     return pd.Series([float(p.value) for p in pts],
                      index=pd.to_datetime([p.timestamp for p in pts])).sort_index()

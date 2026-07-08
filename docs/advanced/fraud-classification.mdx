@@ -135,7 +135,7 @@ def behaviour_features(account_external_id, hours=24):
         pts = client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()
         return pts[-1] if pts else None
 
-    out = agg("outflow", "sum", "average")
+    out = agg("outflow", "sum", "avg")
     inn = agg("inflow", "sum")
     out_sum = float(out.sum) if out else 0.0
     in_sum  = float(inn.sum) if inn else 0.0

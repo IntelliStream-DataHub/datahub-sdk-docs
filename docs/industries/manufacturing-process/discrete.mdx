@@ -104,7 +104,7 @@ var filter = new RetrieveFilter();
 filter.setExternalId("station_07_cycle_time_s");
 filter.setStart(ZonedDateTime.now().minusHours(8));   // one shift
 filter.setEnd(ZonedDateTime.now());
-filter.setAggregates(List.of("average", "count"));
+filter.setAggregates(List.of("avg", "count"));
 filter.setGranularity("1h");
 
 var request = new DataRetriever<RetrieveFilter>();
@@ -124,7 +124,7 @@ rf = datahub_sdk.RetrieveFilter(
     ts="station_07_cycle_time_s",
     start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=8),
     end=pd.Timestamp.now(tz="UTC"),
-    aggregates=["average", "count"], granularity="1h")
+    aggregates=["avg", "count"], granularity="1h")
 
 for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
     record_hourly_performance(dp.timestamp, dp.average, dp.count)
@@ -141,7 +141,7 @@ let filter = RetrieveFilter {
     external_id: Some("station_07_cycle_time_s".into()),
     start: Some(Utc::now() - chrono::Duration::hours(8)),
     end: Some(Utc::now()),
-    aggregates: vec!["average".into(), "count".into()],
+    aggregates: vec!["avg".into(), "count".into()],
     granularity: Some("1h".into()),
     ..Default::default()
 };
@@ -212,7 +212,7 @@ import matplotlib.pyplot as plt
 
 rf = datahub_sdk.RetrieveFilter(ts="station_07_cycle_time_s",
     start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=8), end=pd.Timestamp.now(tz="UTC"),
-    aggregates=["average"], granularity="1h")
+    aggregates=["avg"], granularity="1h")
 vals = [dp.average for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()]
 plt.plot(vals); plt.title("Station 07 hourly avg cycle time (s)"); plt.show()
 ```
