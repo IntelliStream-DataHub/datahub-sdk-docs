@@ -50,7 +50,7 @@ rf = datahub_sdk.RetrieveFilter(
     ts="well_a12_oil_rate_bpd",
     start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=730),
     end=pd.Timestamp.now(tz="UTC"),
-    aggregates=["average"], granularity="1d")
+    aggregates=["avg"], granularity="1d")
 pts = client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()
 
 rate = pd.Series([float(p.value) for p in pts],
@@ -69,7 +69,7 @@ var filter = new RetrieveFilter();
 filter.setExternalId("well_a12_oil_rate_bpd");
 filter.setStart(ZonedDateTime.now().minusDays(730));
 filter.setEnd(ZonedDateTime.now());
-filter.setAggregates(List.of("average"));
+filter.setAggregates(List.of("avg"));
 filter.setGranularity("1d");
 
 var request = new DataRetriever<RetrieveFilter>();
@@ -89,7 +89,7 @@ let filter = RetrieveFilter {
     external_id: Some("well_a12_oil_rate_bpd".into()),
     start: Some(Utc::now() - chrono::Duration::days(730)),
     end: Some(Utc::now()),
-    aggregates: vec!["average".into()],
+    aggregates: vec!["avg".into()],
     granularity: Some("1d".into()),
     ..Default::default()
 };

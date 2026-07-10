@@ -134,7 +134,7 @@ import matplotlib.pyplot as plt
 
 rf = datahub_sdk.RetrieveFilter(ts="station_kirkeveien_pm25",
     start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=1), end=pd.Timestamp.now(tz="UTC"),
-    aggregates=["average"], granularity="1h")
+    aggregates=["avg"], granularity="1h")
 vals = [dp.average for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()]
 plt.plot(vals); plt.title("Kirkeveien PM2.5 (µg/m³)"); plt.show()
 ```

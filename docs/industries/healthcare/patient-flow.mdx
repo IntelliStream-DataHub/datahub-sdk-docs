@@ -46,7 +46,7 @@ var filter = new RetrieveFilter();
 filter.setExternalId("ed_time_to_bed_minutes");
 filter.setStart(ZonedDateTime.now().minusDays(1));
 filter.setEnd(ZonedDateTime.now());
-filter.setAggregates(List.of("average", "max"));
+filter.setAggregates(List.of("avg", "max"));
 filter.setGranularity("1h");
 
 var request = new DataRetriever<RetrieveFilter>();
@@ -66,7 +66,7 @@ rf = datahub_sdk.RetrieveFilter(
     ts="ed_time_to_bed_minutes",
     start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=1),
     end=pd.Timestamp.now(tz="UTC"),
-    aggregates=["average", "max"], granularity="1h")
+    aggregates=["avg", "max"], granularity="1h")
 
 for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
     track_stage("time_to_bed", dp.timestamp, dp.average)
@@ -81,7 +81,7 @@ use chrono::Utc;
 
 let filter = RetrieveFilter {
     external_id: Some("ed_time_to_bed_minutes".into()),
-    aggregates: vec!["average".into(), "max".into()],
+    aggregates: vec!["avg".into(), "max".into()],
     granularity: Some("1h".into()),
     start: Some(Utc::now() - chrono::Duration::days(1)),
     end: Some(Utc::now()),
@@ -159,7 +159,7 @@ import matplotlib.pyplot as plt
 
 rf = datahub_sdk.RetrieveFilter(ts="ed_time_to_bed_minutes",
     start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=1), end=pd.Timestamp.now(tz="UTC"),
-    aggregates=["average"], granularity="1h")
+    aggregates=["avg"], granularity="1h")
 v = [dp.average for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()]
 plt.plot(v); plt.title("ED time-to-bed (min), hourly average"); plt.show()
 ```

@@ -46,7 +46,7 @@ rf = datahub_sdk.RetrieveFilter(
     ts="feeder_f12_load_mw",
     start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=120),
     end=pd.Timestamp.now(tz="UTC"),
-    aggregates=["average"], granularity="1h")    # hourly history
+    aggregates=["avg"], granularity="1h")    # hourly history
 
 points = client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()
 demand = pd.Series([float(p.value) for p in points],
@@ -63,7 +63,7 @@ var filter = new RetrieveFilter();
 filter.setExternalId("feeder_f12_load_mw");
 filter.setStart(ZonedDateTime.now().minusDays(120));
 filter.setEnd(ZonedDateTime.now());
-filter.setAggregates(List.of("average"));
+filter.setAggregates(List.of("avg"));
 filter.setGranularity("1h");
 
 var request = new DataRetriever<RetrieveFilter>();
@@ -83,7 +83,7 @@ let filter = RetrieveFilter {
     external_id: Some("feeder_f12_load_mw".into()),
     start: Some(Utc::now() - chrono::Duration::days(120)),
     end: Some(Utc::now()),
-    aggregates: vec!["average".into()],
+    aggregates: vec!["avg".into()],
     granularity: Some("1h".into()),
     ..Default::default()
 };

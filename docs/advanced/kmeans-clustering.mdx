@@ -53,7 +53,7 @@ def signature(asset):
             end=pd.Timestamp.now(tz="UTC"),
             aggregates=list(aggs), granularity="30d")
         return client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()[-1]
-    load = agg("load_mw", "average", "max")
+    load = agg("load_mw", "avg", "max")
     return {"avg_load": float(load.average), "peak_load": float(load.max)}
 
 assets = ["pump_07", "pump_08", "pump_11", "pump_19"]   # ...your fleet
@@ -73,7 +73,7 @@ var filter = new RetrieveFilter();
 filter.setExternalId("pump_07_load_mw");
 filter.setStart(ZonedDateTime.now().minusDays(30));
 filter.setEnd(ZonedDateTime.now());
-filter.setAggregates(List.of("average", "max"));
+filter.setAggregates(List.of("avg", "max"));
 filter.setGranularity("30d");
 
 var request = new DataRetriever<RetrieveFilter>();
@@ -93,7 +93,7 @@ let filter = RetrieveFilter {
     external_id: Some("pump_07_load_mw".into()),
     start: Some(Utc::now() - chrono::Duration::days(30)),
     end: Some(Utc::now()),
-    aggregates: vec!["average".into(), "max".into()],
+    aggregates: vec!["avg".into(), "max".into()],
     granularity: Some("30d".into()),
     ..Default::default()
 };

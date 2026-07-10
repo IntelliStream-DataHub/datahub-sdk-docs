@@ -86,7 +86,7 @@ var filter = new RetrieveFilter();
 filter.setExternalId("engine_temperature");
 filter.setStart(ZonedDateTime.now().minusDays(1));
 filter.setEnd(ZonedDateTime.now());
-filter.setAggregates(List.of("average", "max"));
+filter.setAggregates(List.of("avg", "max"));
 filter.setGranularity("1h");
 
 var request = new DataRetriever<RetrieveFilter>();
@@ -106,7 +106,7 @@ rf = datahub_sdk.RetrieveFilter(
     ts="engine_temperature",
     start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=1),
     end=pd.Timestamp.now(tz="UTC"),
-    aggregates=["average", "max"],
+    aggregates=["avg", "max"],
     granularity="1h")
 
 for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
@@ -123,7 +123,7 @@ let filter = RetrieveFilter {
     external_id: Some("engine_temperature".into()),
     start: Some(Utc::now() - chrono::Duration::days(1)),
     end: Some(Utc::now()),
-    aggregates: vec!["average".into(), "max".into()],
+    aggregates: vec!["avg".into(), "max".into()],
     granularity: Some("1h".into()),
     ..Default::default()
 };
@@ -139,10 +139,11 @@ for series in result.get_items() {
 </Tabs>
 
 :::note Common aggregates
-`average`, `min`, `max`, `sum`, `count`. Granularity is a number plus a unit —
+`avg`, `min`, `max`, `sum`. Granularity is a number plus a unit —
 `30s`, `5m`, `1h`, `1d`. The Python and Rust datapoint types expose each requested
-aggregate as its own field (`dp.average`, `dp.max`, …); the Java client returns one
-value per bucket on `getValue()`.
+aggregate as its own field — `min`/`max`/`sum` by name, and `avg` read back on
+`.average` (`dp.average`, `dp.max`, …); the Java client returns one value per bucket
+on `getValue()`.
 :::
 
 ## Paging large windows

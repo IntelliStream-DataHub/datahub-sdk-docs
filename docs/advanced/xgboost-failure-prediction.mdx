@@ -50,9 +50,9 @@ def feature_row(pump, day):
             aggregates=list(aggs), granularity="7d")
         pts = client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()
         return pts[-1] if pts else None
-    ip, mt, vb = agg("intake_pressure_bar", "average", "min"), \
-                 agg("motor_temp_c", "average", "max"), \
-                 agg("vibration_mm_s", "average", "max")
+    ip, mt, vb = agg("intake_pressure_bar", "avg", "min"), \
+                 agg("motor_temp_c", "avg", "max"), \
+                 agg("vibration_mm_s", "avg", "max")
     return {
         "intake_avg": float(ip.average) if ip else np.nan,
         "intake_min": float(ip.min) if ip else np.nan,
@@ -72,7 +72,7 @@ var filter = new RetrieveFilter();
 filter.setExternalId("pump_esp_a12_motor_temp_c");
 filter.setStart(ZonedDateTime.now().minusDays(7));
 filter.setEnd(ZonedDateTime.now());
-filter.setAggregates(List.of("average", "max"));
+filter.setAggregates(List.of("avg", "max"));
 filter.setGranularity("7d");
 
 var request = new DataRetriever<RetrieveFilter>();
@@ -92,7 +92,7 @@ let filter = RetrieveFilter {
     external_id: Some("pump_esp_a12_motor_temp_c".into()),
     start: Some(Utc::now() - chrono::Duration::days(7)),
     end: Some(Utc::now()),
-    aggregates: vec!["average".into(), "max".into()],
+    aggregates: vec!["avg".into(), "max".into()],
     granularity: Some("7d".into()),
     ..Default::default()
 };

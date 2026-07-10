@@ -115,7 +115,7 @@ var filter = new RetrieveFilter();
 filter.setExternalId("turbine_t14_power_kw");
 filter.setStart(ZonedDateTime.now().minusDays(7));
 filter.setEnd(ZonedDateTime.now());
-filter.setAggregates(List.of("average"));
+filter.setAggregates(List.of("avg"));
 filter.setGranularity("1h");
 
 var request = new DataRetriever<RetrieveFilter>();
@@ -137,7 +137,7 @@ rf = datahub_sdk.RetrieveFilter(
     ts="turbine_t14_power_kw",
     start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=7),
     end=pd.Timestamp.now(tz="UTC"),
-    aggregates=["average"], granularity="1h")
+    aggregates=["avg"], granularity="1h")
 
 rated = 3500.0
 for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
@@ -155,7 +155,7 @@ let filter = RetrieveFilter {
     external_id: Some("turbine_t14_power_kw".into()),
     start: Some(Utc::now() - chrono::Duration::days(7)),
     end: Some(Utc::now()),
-    aggregates: vec!["average".into()],
+    aggregates: vec!["avg".into()],
     granularity: Some("1h".into()),
     ..Default::default()
 };
@@ -186,7 +186,7 @@ import matplotlib.pyplot as plt
 
 rf = datahub_sdk.RetrieveFilter(ts="turbine_t14_power_kw",
     start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=7), end=pd.Timestamp.now(tz="UTC"),
-    aggregates=["average"], granularity="1h")
+    aggregates=["avg"], granularity="1h")
 cf = [dp.average / 3500 for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()]
 print(f"average capacity factor: {sum(cf)/len(cf):.0%}")
 plt.plot(cf); plt.title("Turbine T14 capacity factor"); plt.show()

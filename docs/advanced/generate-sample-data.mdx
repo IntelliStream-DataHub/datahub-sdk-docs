@@ -81,9 +81,10 @@ ingest("well_a12_oil_rate_bpd", idx, rate, unit="bpd")
 
 ## C. Correlated multivariate process data, with a fault
 
-For [PCA process monitoring](/advanced/pca-process-monitoring) and the multivariate
-[LSTM autoencoder](/advanced/lstm-anomaly-detection): several sensors that move together
-normally, with a fault window where one breaks the correlation.
+For [PCA process monitoring](/advanced/pca-process-monitoring): several sensors that move
+together normally, with a fault window where one breaks the correlation. (Section J below
+reuses this exact shape with drilling names for the multivariate
+[LSTM autoencoder](/advanced/lstm-anomaly-detection).)
 
 ```python
 def correlated_process(minutes=60*24*14):
@@ -92,9 +93,12 @@ def correlated_process(minutes=60*24*14):
     top_temp = 150 + 0.4 * feed + np.random.normal(0, 0.5, minutes)        # correlated with feed
     pressure = 200 + 0.8 * feed + np.random.normal(0, 1, minutes)
     reflux   = 2.0 + 0.005 * feed + np.random.normal(0, 0.02, minutes)
+    bottom_temp = 340 + 0.6 * feed + np.random.normal(0, 0.6, minutes)     # bottoms also track feed
+    reboiler    = 30 + 0.15 * feed + np.random.normal(0, 0.3, minutes)     # reboiler duty follows feed
     top_temp[-600:] += np.linspace(0, 12, 600)            # fault: temp drifts off the relationship
     return idx, {"cdu_1_feed_bpd": feed, "cdu_1_top_temp_c": top_temp,
-                 "cdu_1_pressure_kpa": pressure, "cdu_1_reflux_ratio": reflux}
+                 "cdu_1_pressure_kpa": pressure, "cdu_1_reflux_ratio": reflux,
+                 "cdu_1_bottom_temp_c": bottom_temp, "cdu_1_reboiler_duty_gj": reboiler}
 
 idx, channels = correlated_process()
 for tag, values in channels.items():
@@ -115,7 +119,7 @@ lab = (3.0 + 0.02 * channels["cdu_1_top_temp_c"][::60]
 ingest("cdu_1_product_sulfur_ppm_lab", lab_idx, lab, unit="ppm")
 ```
 
-## E. A labelled failure history (events)
+## E. A labelled failure history (events) and the sensors leading up to it
 
 For [XGBoost failure prediction](/advanced/xgboost-failure-prediction): historical
 failures as events, so each `(asset, day)` row can be labelled.
@@ -129,12 +133,31 @@ for day_offset in (40, 95, 160, 240):                     # a few past failures
         metadata={"pump": "pump_esp_a12"})])
 ```
 
+The model reads three sensors on `pump_esp_a12`. Give each a slow degradation that ramps
+up in the fortnight before every seeded failure (and resets after the implied repair), so
+the 7-day-ahead label has real signal to learn from:
+
+```python
+days = 300
+esp_idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=days*24, freq="1h")
+n = len(esp_idx)
+stress = np.zeros(n)                                       # 0 = healthy, 1 = about to fail
+for day_offset in (40, 95, 160, 240):                     # the same failures seeded above
+    fail = n - 1 - day_offset*24
+    lo = max(fail - 14*24 + 1, 0)                          # degrade over the fortnight before
+    stress[lo:fail+1] = np.maximum(stress[lo:fail+1], np.linspace(0, 1, fail + 1 - lo))
+ingest("pump_esp_a12_intake_pressure_bar", esp_idx, 90 - 25*stress + np.random.normal(0, 1.5, n), unit="bar")
+ingest("pump_esp_a12_motor_temp_c",        esp_idx, 70 + 45*stress + np.random.normal(0, 1.0, n), unit="celsius")
+ingest("pump_esp_a12_vibration_mm_s",      esp_idx, 2.0 + 6*stress + np.abs(np.random.normal(0, 0.2, n)), unit="mm_s")
+```
+
 ## F. A small graph
 
 For the graph-feature builds ([fraud classification](/advanced/fraud-classification),
 [K-Means communities](/advanced/kmeans-clustering)): the ordinary accounts
 `account_1…7`, plus the flagged ring that fraud classification traverses from
-`account_77310`.
+`account_77310`. Fraud classification also reads each account's behavioural series
+(`<account>_inflow` / `<account>_outflow`), seeded below.
 
 ```python
 ring = ["account_77310", "account_44120", "account_61885", "account_22907"]   # a flagged ring
@@ -152,6 +175,23 @@ edges = [
     datahub_sdk.RelForm.by_external_ids("account_22907", "account_77310", "sent_to"),   # closes the ring
 ]
 client.resources.create(nodes, edges)
+```
+
+Fraud classification turns the money *in* and *out* of each account into features — a
+pass-through mule shows inflow ≈ outflow, an ordinary account doesn't. Seed both series
+for every account in the graph:
+
+```python
+hrs = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=24*7, freq="1h")
+n = len(hrs)
+profiles = {a: (50_000, 0.98) for a in ring}                          # ring mules: high volume, in≈out
+profiles.update({f"account_{i}": (np.random.uniform(2_000, 8_000),
+                                  np.random.uniform(0.3, 0.7)) for i in range(1, 8)})   # ordinary accounts
+for acct, (base, ratio) in profiles.items():
+    inflow  = np.clip(base * (1 + 0.3*np.sin(2*np.pi*np.arange(n)/24)) + np.random.normal(0, base*0.05, n), 0, None)
+    outflow = np.clip(inflow * ratio + np.random.normal(0, base*0.03, n), 0, None)      # ~ratio of it flows back out
+    ingest(f"{acct}_inflow",  hrs, inflow,  unit="usd")
+    ingest(f"{acct}_outflow", hrs, outflow, unit="usd")
 ```
 
 ## G. An electrical feeder load curve
@@ -195,26 +235,85 @@ ingest("pen_h_07_dissolved_oxygen_mg_l", idx, do, unit="mg_l")
 ingest("pen_h_07_water_temp_c", idx, temp, unit="celsius")
 ```
 
-## I. One asset's operating channels
+## I. Operating channels — one unit's regimes and a peer fleet
 
-For the [K-Means operating regimes](/advanced/kmeans-clustering): four channels for a
-single unit as it swings between idle, ramp, steady and overload.
+For [K-Means](/advanced/kmeans-clustering): four channels for `unit_3` as it swings
+between idle, ramp, steady and overload (the *operating regimes* section clusters on all
+four), plus just `load_mw` for a small pump fleet running at different duty levels (the
+*asset cohorts* section only clusters `load_mw` across the pumps).
 
 ```python
-def operating_modes(minutes=60*24*14):
+def operating_modes(asset, minutes=60*24*14, load_scale=1.0, phase=0.0):
     idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=minutes, freq="1min")
-    duty = (np.sin(2*np.pi*np.arange(minutes)/(60*8)) + 1) / 2      # 0..1 duty cycle
-    load = np.clip(duty*80 + np.random.normal(0, 3, minutes), 0, None)
+    duty = (np.sin(2*np.pi*np.arange(minutes)/(60*8) + phase) + 1) / 2      # 0..1 duty cycle
+    load = np.clip(duty*80*load_scale + np.random.normal(0, 3, minutes), 0, None)
     return idx, {
-        "unit_3_load_mw":      load,
-        "unit_3_temp_c":       120 + 0.5*load + np.random.normal(0, 2, minutes),
-        "unit_3_pressure_kpa": 180 + 0.7*load + np.random.normal(0, 3, minutes),
-        "unit_3_flow_m3h":     20 + 0.4*load + np.random.normal(0, 1, minutes),
+        f"{asset}_load_mw":      load,
+        f"{asset}_temp_c":       120 + 0.5*load + np.random.normal(0, 2, minutes),
+        f"{asset}_pressure_kpa": 180 + 0.7*load + np.random.normal(0, 3, minutes),
+        f"{asset}_flow_m3h":     20 + 0.4*load + np.random.normal(0, 1, minutes),
     }
 
-idx, channels = operating_modes()
+# unit_3: all four channels — the operating-regimes section clusters on the full state.
+idx, channels = operating_modes("unit_3")
 for tag, values in channels.items():
     ingest(tag, idx, values)
+
+# Peer fleet: the asset-cohorts section only clusters load_mw across pumps, so seed just that.
+for asset, scale, phase in [("pump_07", 0.9, 0.0), ("pump_08", 1.05, 0.4),
+                            ("pump_11", 0.6, 0.8), ("pump_19", 1.3, 1.2)]:
+    idx, channels = operating_modes(asset, load_scale=scale, phase=phase)
+    ingest(f"{asset}_load_mw", idx, channels[f"{asset}_load_mw"])
+```
+
+## J. Correlated drilling channels, with a kick
+
+For the multivariate [LSTM autoencoder](/advanced/lstm-anomaly-detection): section C's
+exact shape with drilling names — mud flow-in, flow-out, pit volume and standpipe pressure
+move together until a late **kick** (gas influx) pushes returns and pit volume up while
+standpipe pressure sags, breaking the joint pattern the autoencoder learned.
+
+```python
+def drilling_process(minutes=60*24*14):
+    idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=minutes, freq="1min")
+    flow_in   = 600 + 40*np.sin(2*np.pi*np.arange(minutes)/(60*24)) + np.random.normal(0, 4, minutes)
+    flow_out  = 590 + 0.97*(flow_in - 600) + np.random.normal(0, 4, minutes)     # returns track pumps-in
+    pit_vol   = 240 + 0.02*(flow_in - 600) + np.random.normal(0, 0.5, minutes)   # steady active pits
+    standpipe = 2800 + 3.0*(flow_in - 600) + np.random.normal(0, 15, minutes)
+    flow_out[-600:]  += np.linspace(0, 60, 600)          # kick: returns gain over flow-in
+    pit_vol[-600:]   += np.linspace(0, 8, 600)           # pit volume rises with the influx
+    standpipe[-600:] -= np.linspace(0, 120, 600)         # standpipe sags as gas lightens the column
+    return idx, {"rig_dw1_flow_in_gpm": flow_in, "rig_dw1_flow_out_gpm": flow_out,
+                 "rig_dw1_pit_volume_bbl": pit_vol, "rig_dw1_standpipe_psi": standpipe}
+
+idx, channels = drilling_process()
+for tag, values in channels.items():
+    ingest(tag, idx, values)
+```
+
+## K. Messy raw sensors to clean
+
+For the [data pipeline & lineage](/advanced/data-cleaning-lineage) build: two *raw* engine
+sensors carrying the real-world defects that pipeline exists to fix — spike outliers,
+scattered `NaN` dropouts, a longer gap and a stuck/flatline stretch. (Everything
+downstream — the `*_clean`, feature and score series — is written *by* that recipe, so
+only these raw inputs are seeded here.)
+
+```python
+def messy_sensor(hours=24*7, base=90.0, swing=8.0, noise=1.0):
+    idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=hours*60, freq="1min")
+    n = len(idx)
+    s = pd.Series(base + swing*np.sin(2*np.pi*np.arange(n)/(60*24)) + np.random.normal(0, noise, n), index=idx)
+    s.iloc[np.random.randint(0, n, n//200)] += np.random.normal(0, 12, n//200)   # spike outliers
+    s.iloc[np.random.randint(0, n, n//150)] = np.nan                             # scattered dropouts
+    gap   = np.random.randint(0, n - 240); s.iloc[gap:gap+180]     = np.nan       # a longer gap
+    stuck = np.random.randint(0, n - 240); s.iloc[stuck:stuck+120] = base         # stuck / flatline
+    return idx, s.to_numpy()
+
+idx, temp = messy_sensor(base=90, swing=8, noise=1.0)
+ingest("engine_temperature_raw", idx, temp, unit="celsius")
+idx, vib = messy_sensor(base=3.0, swing=1.2, noise=0.25)
+ingest("engine_vibration_raw", idx, vib, unit="mm_s")
 ```
 
 ---

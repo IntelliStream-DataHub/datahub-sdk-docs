@@ -46,7 +46,7 @@ client = datahub_sdk.DataHubClient.from_env()
 
 def series(external_id, start, end, granularity="5m"):
     rf = datahub_sdk.RetrieveFilter(ts=external_id, start=start, end=end,
-                                    aggregates=["average"], granularity=granularity)
+                                    aggregates=["avg"], granularity=granularity)
     pts = client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()
     return pd.Series([float(p.value) for p in pts],
                      index=pd.to_datetime([p.timestamp for p in pts])).sort_index()
@@ -69,7 +69,7 @@ var filter = new RetrieveFilter();
 filter.setExternalId("cdu_1_top_temp_c");
 filter.setStart(ZonedDateTime.parse("2026-01-01T00:00:00Z"));
 filter.setEnd(ZonedDateTime.parse("2026-06-01T00:00:00Z"));
-filter.setAggregates(List.of("average"));
+filter.setAggregates(List.of("avg"));
 filter.setGranularity("5m");
 
 var request = new DataRetriever<RetrieveFilter>();
@@ -89,7 +89,7 @@ let filter = RetrieveFilter {
     external_id: Some("cdu_1_top_temp_c".into()),
     start: Some("2026-01-01T00:00:00Z".parse().unwrap()),
     end: Some("2026-06-01T00:00:00Z".parse().unwrap()),
-    aggregates: vec!["average".into()],
+    aggregates: vec!["avg".into()],
     granularity: Some("5m".into()),
     ..Default::default()
 };

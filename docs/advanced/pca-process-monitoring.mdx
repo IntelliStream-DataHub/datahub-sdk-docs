@@ -52,7 +52,7 @@ TAGS = ["cdu_1_top_temp_c", "cdu_1_bottom_temp_c", "cdu_1_pressure_kpa",
 
 def series(tag, start, end):
     rf = datahub_sdk.RetrieveFilter(ts=tag, start=start, end=end,
-                                    aggregates=["average"], granularity="1m")
+                                    aggregates=["avg"], granularity="1m")
     pts = client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()
     return pd.Series([float(p.value) for p in pts],
                      index=pd.to_datetime([p.timestamp for p in pts])).sort_index()
@@ -74,7 +74,7 @@ var filter = new RetrieveFilter();
 filter.setExternalId("cdu_1_top_temp_c");
 filter.setStart(ZonedDateTime.parse("2026-05-01T00:00:00Z"));
 filter.setEnd(ZonedDateTime.parse("2026-05-15T00:00:00Z"));
-filter.setAggregates(List.of("average"));
+filter.setAggregates(List.of("avg"));
 filter.setGranularity("1m");
 
 var request = new DataRetriever<RetrieveFilter>();
@@ -94,7 +94,7 @@ let filter = RetrieveFilter {
     external_id: Some("cdu_1_top_temp_c".into()),
     start: Some("2026-05-01T00:00:00Z".parse().unwrap()),
     end: Some("2026-05-15T00:00:00Z".parse().unwrap()),
-    aggregates: vec!["average".into()],
+    aggregates: vec!["avg".into()],
     granularity: Some("1m".into()),
     ..Default::default()
 };

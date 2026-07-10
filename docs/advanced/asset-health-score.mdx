@@ -51,7 +51,7 @@ def latest(external_id):
         ts=external_id,
         start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(minutes=15),
         end=pd.Timestamp.now(tz="UTC"),
-        aggregates=["average"], granularity="15m")
+        aggregates=["avg"], granularity="15m")
     pts = client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()
     return float(pts[-1].value)
 
@@ -71,7 +71,7 @@ var filter = new RetrieveFilter();
 filter.setExternalId("pump_07_bearing_temp_c");
 filter.setStart(ZonedDateTime.now().minusMinutes(15));
 filter.setEnd(ZonedDateTime.now());
-filter.setAggregates(List.of("average"));
+filter.setAggregates(List.of("avg"));
 filter.setGranularity("15m");
 
 var request = new DataRetriever<RetrieveFilter>();
@@ -92,7 +92,7 @@ let filter = RetrieveFilter {
     external_id: Some("pump_07_bearing_temp_c".into()),
     start: Some(Utc::now() - chrono::Duration::minutes(15)),
     end: Some(Utc::now()),
-    aggregates: vec!["average".into()],
+    aggregates: vec!["avg".into()],
     granularity: Some("15m".into()),
     ..Default::default()
 };

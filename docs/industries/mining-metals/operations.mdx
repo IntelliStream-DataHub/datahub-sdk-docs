@@ -112,7 +112,7 @@ var filter = new RetrieveFilter();
 filter.setExternalId("crusher_01_throughput_tph");
 filter.setStart(ZonedDateTime.now().minusHours(12));
 filter.setEnd(ZonedDateTime.now());
-filter.setAggregates(List.of("average"));
+filter.setAggregates(List.of("avg"));
 filter.setGranularity("1h");
 
 var request = new DataRetriever<RetrieveFilter>();
@@ -132,7 +132,7 @@ rf = datahub_sdk.RetrieveFilter(
     ts="crusher_01_throughput_tph",
     start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=12),
     end=pd.Timestamp.now(tz="UTC"),
-    aggregates=["average"], granularity="1h")
+    aggregates=["avg"], granularity="1h")
 
 for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
     compare_to_plan(dp.timestamp, dp.average)
@@ -147,7 +147,7 @@ use chrono::Utc;
 
 let filter = RetrieveFilter {
     external_id: Some("crusher_01_throughput_tph".into()),
-    aggregates: vec!["average".into()],
+    aggregates: vec!["avg".into()],
     granularity: Some("1h".into()),
     start: Some(Utc::now() - chrono::Duration::hours(12)),
     end: Some(Utc::now()),
