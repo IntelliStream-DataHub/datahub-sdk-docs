@@ -1,29 +1,51 @@
 /* ============================================================================
-   GitBook-style skin for Docusaurus (Infima), themed with IntelliStream brand.
-   Brand palette (from intellistream.ai): teal #105984 / #005984, light blue
-   #98bbc8, peach #ffc49a.
+   GitBook-style skin for Docusaurus (Infima), themed with the IntelliStream
+   brand exactly as used on intellistream.ai.
+
+   Brand foundation copied verbatim from the site (src/main/resources/static/
+   app.css + jte/base/index.jte):
+     font      Manrope
+     primary   --is-blue   #005984
+     accent    --is-orange #f6783c  /  --is-orange-bright #ff9e63
+     support   --is-green  #169A4F  /  --is-teal #c2d5dd
+   Manrope is loaded from Google Fonts here (weights 300-800) to match the
+   site's self-hosted Manrope; swap for self-hosted woff2 if you want to drop
+   the external request.
    ========================================================================== */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono&display=swap');
 
 :root {
-  /* Brand teal as the Infima primary */
-  --ifm-color-primary: #105984;
-  --ifm-color-primary-dark: #0e5077;
-  --ifm-color-primary-darker: #0d4b70;
-  --ifm-color-primary-darkest: #0a3e5c;
-  --ifm-color-primary-light: #1a648f;
-  --ifm-color-primary-lighter: #1f6b97;
-  --ifm-color-primary-lightest: #2a7aa8;
+  /* ---- IntelliStream brand palette (verbatim from the site's app.css) ---- */
+  --is-text: #333333;
+  --is-blue: #005984;
+  --is-blue-h: #39728e;
+  --is-blue-l: #63c5f4;
+  --is-grey-bg: #f5f6f6;
+  --is-grey-text: #535554;
+  --is-green-text: #169a4f;
+  --is-green-l: #54d98c;
+  --is-darkgrey-bg: #7e878e;
+  --is-orange: #f6783c;
+  --is-orange-bright: #ff9e63;
+  --is-teal: #c2d5dd;
+  --is-dark-teal: #6b8995;
+  --is-purple: #5c3546;
 
-  --brand-teal: #105984;
-  --brand-teal-deep: #005984;
-  --brand-blue: #98bbc8;
-  --brand-peach: #ffc49a;
+  /* ---- Brand blue mapped onto Infima's primary ramp ---- */
+  --ifm-color-primary: var(--is-blue);
+  --ifm-color-primary-dark: #004f75;
+  --ifm-color-primary-darker: #004b70;
+  --ifm-color-primary-darkest: #003e5c;
+  --ifm-color-primary-light: #006394;
+  --ifm-color-primary-lighter: #006699;
+  --ifm-color-primary-lightest: #0073ad;
 
-  --ifm-font-family-base: 'Inter', system-ui, -apple-system, sans-serif;
+  /* ---- Typography: Manrope, matching the site ---- */
+  --ifm-font-family-base: 'Manrope', 'Open Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   --ifm-font-family-monospace: 'JetBrains Mono', ui-monospace, monospace;
-  --ifm-heading-color: #15303f;
-  --ifm-font-color-base: #3b454f;
+  --ifm-heading-font-weight: 800;
+  --ifm-heading-color: var(--is-blue);
+  --ifm-font-color-base: var(--is-text);
   --ifm-line-height-base: 1.72;
 
   --ifm-navbar-background-color: #ffffff;
@@ -32,22 +54,21 @@
 
   --ifm-global-radius: 10px;
   --ifm-code-border-radius: 6px;
-  --ifm-code-background: #f3f7f9;
+  --ifm-code-background: var(--is-grey-bg);
   --ifm-code-font-size: 88%;
 
   --ifm-menu-color: #5c6b75;
-  --ifm-menu-color-active: var(--brand-teal);
+  --ifm-menu-color-active: var(--is-blue);
   --ifm-menu-color-background-active: #eaf2f6;
   --ifm-toc-border-color: #e7edf0;
   --ifm-hr-border-color: #e7edf0;
-  --ifm-link-color: var(--brand-teal);
+  --ifm-link-color: var(--is-blue);
 }
 
 /* Hairline navbar, no shadow (GitBook calm); roomy logo */
 .navbar { border-bottom: 1px solid #e7edf0; box-shadow: none; }
-/* Title: light weight. Light theme = a slightly brighter teal than #105984;
-   dark theme keeps the logo's light-blue (overridden in the dark block below). */
-.navbar__title { font-weight: 300; color: #1773a3; }
+/* Title: Manrope, brand teal — on-brand but not shouting */
+.navbar__title { font-weight: 700; color: var(--is-blue); letter-spacing: -.01em; }
 .navbar__logo { height: 1.7rem; }
 
 /* Quiet sidebar tree */
@@ -55,13 +76,14 @@
 .menu__link { font-weight: 500; border-radius: 8px; }
 .menu__link--active { font-weight: 600; }
 
-/* Headings */
-.markdown h1 { font-weight: 700; letter-spacing: -.015em; }
+/* Headings — heavy & tight, the way the site sets them */
+.markdown h1 { font-weight: 800; letter-spacing: -.02em; }
 .markdown h2 {
-  font-weight: 650; letter-spacing: -.01em;
+  font-weight: 800; letter-spacing: -.015em;
   margin-top: 2.2rem; padding-bottom: .3rem;
   border-bottom: 1px solid #e7edf0;
 }
+.markdown h3 { font-weight: 700; letter-spacing: -.01em; }
 
 /* Rounded, bordered, shadowless code blocks */
 .theme-code-block,
@@ -73,17 +95,19 @@ div[class^='codeBlockContainer'] {
 
 /* Understated synced language tabs, brand-coloured when active */
 .tabs__item { font-weight: 600; color: #5c6b75; padding: .35rem .85rem; }
-.tabs__item--active { color: var(--brand-teal); border-bottom-color: var(--brand-teal); }
+.tabs__item--active { color: var(--is-blue); border-bottom-color: var(--is-blue); }
 
 /* Links + reading measure */
 .theme-doc-markdown { font-size: .95rem; }
-.markdown a { color: var(--brand-teal); text-decoration: none; }
+.markdown a { color: var(--is-blue); text-decoration: none; }
 .markdown a:hover { text-decoration: underline; }
 
-/* A touch of brand: peach accent bar on "tip" admonitions */
-.theme-admonition-tip { border-left-color: var(--brand-peach); }
+/* Brand accent: the site's orange on "tip" admonitions */
+.theme-admonition-tip { border-left-color: var(--is-orange); }
 
 [data-theme='dark'] {
+  /* Lightened brand teal so it stays legible on the dark surface
+     (the light-mode #005984 is too dark against #0e1620). */
   --ifm-color-primary: #6aa9cd;
   --ifm-color-primary-dark: #4f99c4;
   --ifm-color-primary-darker: #4291bf;
@@ -96,7 +120,7 @@ div[class^='codeBlockContainer'] {
   --ifm-code-background: #15202b;
   --ifm-heading-color: #e6eef4;
   --ifm-font-color-base: #c2ccd6;
-  /* Legible greys/teals on the dark surface (the light-mode values were too dark) */
+  /* Legible greys/teals on the dark surface */
   --ifm-menu-color: #aeb9c3;
   --ifm-menu-color-active: #79b2d4;
   --ifm-menu-color-background-active: #16242f;
@@ -105,7 +129,7 @@ div[class^='codeBlockContainer'] {
   --ifm-link-color: #79b2d4;
 }
 [data-theme='dark'] .navbar { border-bottom-color: #25313c; }
-[data-theme='dark'] .navbar__title { color: var(--brand-blue); }   /* keep light-blue title on dark */
+[data-theme='dark'] .navbar__title { color: #98bbc8; }   /* soft light-blue to match logo-dark */
 [data-theme='dark'] .markdown a { color: #79b2d4; }
 [data-theme='dark'] .markdown h2 { border-bottom-color: #25313c; }
 [data-theme='dark'] .theme-code-block,
@@ -113,6 +137,8 @@ div[class^='codeBlockContainer'] {
 /* Language tabs: legible label text on dark */
 [data-theme='dark'] .tabs__item { color: #aeb9c3; }
 [data-theme='dark'] .tabs__item--active { color: var(--ifm-color-primary); border-bottom-color: var(--ifm-color-primary); }
+/* Keep the brand orange accent on tips in dark, slightly brightened */
+[data-theme='dark'] .theme-admonition-tip { border-left-color: var(--is-orange-bright); }
 
 /* Version badge in the navbar */
 .navbar__version-badge { align-self: center; margin-right: 0.5rem; font-weight: 600; }
