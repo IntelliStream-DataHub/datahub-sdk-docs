@@ -52,6 +52,41 @@ api.time_series.create_one(&ts).await?;
 </TabItem>
 </Tabs>
 
+## Delete a series
+
+Deletes the series and its datapoints. Remove any referencing subscriptions (and edges) first, or
+the backend responds 409.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+import ai.intellistream.datahub.models.IdCollection;
+
+client.timeseries().delete(List.of(IdCollection.createFromExternalId("engine_temperature")));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+client.timeseries.delete(["engine_temperature"])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::generic::{DataWrapper, IdAndExtId};
+
+api.time_series
+    .delete(&DataWrapper::from_vec(vec![IdAndExtId::from_external_id("engine_temperature")]))
+    .await?;
+```
+
+</TabItem>
+</Tabs>
+
 ## Write datapoints
 
 A datapoint is a `(timestamp, value)` pair grouped under a series' external id.
