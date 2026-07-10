@@ -63,6 +63,13 @@ api.subscriptions.delete(&vec![IdAndExtId::from_external_id("engine_temps")]).aw
 </TabItem>
 </Tabs>
 
+:::note Dataset access control
+Creating a subscription requires **read access to every timeseries' dataset** it binds. If your
+token lacks a dataset read role for any of them, `create` fails with **HTTP 403** and nothing is
+persisted. Access is granted through the Keycloak `DATAHUB_DATASET_READ_*` (or `DATASET_ALL`) realm
+roles.
+:::
+
 ## Live delivery
 
 `listen` opens an authenticated WebSocket over one or more subscriptions. Stream messages
@@ -143,6 +150,16 @@ and `close`.
 A delivered message carries the originating subscription's external id, an opaque
 `messageId` you echo back to `ack`/`nack`, and a `payload` describing the fan-out event
 (an action — create/update/delete — plus the affected datapoints).
+
+:::note Refused subscriptions surface as errors
+Live delivery enforces the same dataset ACL: to attach a subscription you must be able to read
+**all** of its bound timeseries. A subscription you can't read (`reason: "forbidden"`) or one that
+doesn't exist (`reason: "not-found"`) is refused per-subscription — the connection stays open for
+the subscriptions that did attach. The refusal is surfaced, not swallowed: a `SubscriptionError`
+via `pollError` in Java, an `Err(ListenError::Subscription { .. })` from `next().await` in Rust, and
+an exception raised from the iterator in Python — so a refused subscription is visible instead of
+looking like an indefinitely silent stream.
+:::
 
 :::tip Acking is at-least-once
 Ack a message only after you've durably handled it. If your process dies before the ack,
