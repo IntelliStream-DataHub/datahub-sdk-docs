@@ -58,8 +58,10 @@ TOKEN=eyJhbGciOi...          # or CLIENT_ID / CLIENT_SECRET / TOKEN_URI
 ```java
 var client = DatahubClient.fromEnv();
 
-client.timeseries().create(
-    Timeseries.of("engine_temperature").unit("celsius"));
+var series = Timeseries.of("engine_temperature").name("Engine temperature");
+series.setUnit("celsius");
+series.setValueType("float");
+client.timeseries().create(series);
 
 client.timeseries().ingest(Map.of(
     "engine_temperature", List.of(
@@ -76,7 +78,7 @@ from datahub_sdk import DataHubClient
 client = DataHubClient.from_env()
 
 client.timeseries.create([
-    datahub_sdk.TimeSeries(external_id="engine_temperature", unit="celsius")])
+    datahub_sdk.TimeSeries(external_id="engine_temperature", unit="celsius", value_type="float")])
 
 client.timeseries.insert_from_lists(
     timestamps=[pd.Timestamp.now(tz="UTC")], values=[92.4], ts="engine_temperature")
@@ -92,9 +94,10 @@ use chrono::Utc;
 
 let api = create_api_service();
 
-api.time_series
-    .create_one(&TimeSeries::new("engine_temperature", "Engine temperature"))
-    .await?;
+let mut ts = TimeSeries::new("engine_temperature", "Engine temperature");
+ts.set_unit("celsius");
+ts.set_value_type("float");
+api.time_series.create_one(&ts).await?;
 api.time_series
     .insert_datapoint(None, Some("engine_temperature".into()), Utc::now(), "92.4".into())
     .await?;

@@ -51,10 +51,9 @@ type stays numeric; the unit just describes what the numbers mean.
 <TabItem value="java" label="Java">
 
 ```java
-client.timeseries().create(
-    Timeseries.of("wellhead_pressure_bar")
-        .name("Wellhead pressure")
-        .unit("bar"));
+var series = Timeseries.of("wellhead_pressure_bar").name("Wellhead pressure");
+series.setUnit("bar");
+client.timeseries().create(series);
 ```
 
 </TabItem>
@@ -104,7 +103,7 @@ UnitModel unit = client.units().byIds(List.of(lookup)).getItems().iterator().nex
 ```python
 import datahub_sdk
 
-celsius = client.units.by_external_ids("celsius")
+celsius = client.units.by_external_ids("temperature_deg_c")
 by_id = client.units.by_ids([datahub_sdk.IdCollection(id=7)])
 ```
 
@@ -114,7 +113,7 @@ by_id = client.units.by_ids([datahub_sdk.IdCollection(id=7)])
 ```rust
 use dataplatform_rust_sdk::generic::{DataWrapper, IdAndExtId};
 
-let celsius = api.units.by_external_id("celsius").await?;
+let celsius = api.units.by_external_id("temperature_deg_c").await?;
 let by_id = api.units.by_ids(&DataWrapper::from(vec![IdAndExtId::from_id(7)])).await?;
 ```
 
