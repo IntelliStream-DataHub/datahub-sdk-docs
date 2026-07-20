@@ -108,7 +108,7 @@ roots = client.files.list_root_directory()   # top of the tree
 ```rust
 let listing = api.files.list_directory_by_path("/certificates/2026").await?;
 for node in listing.get_items() {
-    println!("{}  {}  {} bytes", node.r#type, node.name, node.size.unwrap_or(0));
+    println!("{}  {}  {} bytes", node.r#type.as_deref().unwrap_or(""), node.name, node.size);
 }
 ```
 
