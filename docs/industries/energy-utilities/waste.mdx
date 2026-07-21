@@ -26,7 +26,7 @@ import datahub_sdk, pandas as pd
 
 client = datahub_sdk.DataHubClient.from_env()
 
-client.timeseries.create([datahub_sdk.TimeSeries(external_id="bin_grunerlokka_114_fill_pct", name="Bin 114 fill")])
+client.timeseries.create([datahub_sdk.TimeSeries(external_id="bin_grunerlokka_114_fill_pct", name="Bin 114 fill", unit="pct", value_type="float")])
 client.timeseries.insert_from_lists(timestamps=[pd.Timestamp.now(tz="UTC")], values=[87.0], ts="bin_grunerlokka_114_fill_pct")
 ```
 

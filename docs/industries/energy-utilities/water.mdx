@@ -29,14 +29,14 @@ import datahub_sdk, pandas as pd
 client = datahub_sdk.DataHubClient.from_env()
 
 client.resources.create(
-    [datahub_sdk.Resource(external_id=x, name=x) for x in
+    [datahub_sdk.Resource(external_id=x, name=x, labels=[x]) for x in
      ["source_lake_a", "main_trunk_north", "zone_west_12", "zone_east_07"]],
     [datahub_sdk.RelForm.by_external_ids("source_lake_a", "main_trunk_north", "feeds"),
      datahub_sdk.RelForm.by_external_ids("main_trunk_north", "zone_west_12", "feeds"),
      datahub_sdk.RelForm.by_external_ids("main_trunk_north", "zone_east_07", "feeds")])
 
 for s in ["zone_west_12_turbidity_ntu", "zone_east_07_turbidity_ntu"]:
-    client.timeseries.create([datahub_sdk.TimeSeries(external_id=s, name=s)])
+    client.timeseries.create([datahub_sdk.TimeSeries(external_id=s, name=s, unit="ntu", value_type="float")])
     client.timeseries.insert_from_lists(timestamps=[pd.Timestamp.now(tz="UTC")], values=[7.5], ts=s)
 ```
 

@@ -43,9 +43,11 @@ Each turbine reports power and wind speed continuously. Hand the readings off in
 <TabItem value="java" label="Java">
 
 ```java
-client.timeseries().create(
-    Timeseries.of("turbine_t14_power_kw").name("Turbine T14 power").unit("kw"),
-    Timeseries.of("turbine_t14_wind_ms").name("Turbine T14 wind speed").unit("m_s"));
+var power = Timeseries.of("turbine_t14_power_kw").name("Turbine T14 power");
+power.setUnit("kw");
+var wind = Timeseries.of("turbine_t14_wind_ms").name("Turbine T14 wind speed");
+wind.setUnit("m_s");
+client.timeseries().create(power, wind);
 
 client.timeseries().ingest(Map.of(
     "turbine_t14_power_kw", powerReadings,    // List<Datapoint>
@@ -155,7 +157,7 @@ let filter = RetrieveFilter {
     external_id: Some("turbine_t14_power_kw".into()),
     start: Some(Utc::now() - chrono::Duration::days(7)),
     end: Some(Utc::now()),
-    aggregates: vec!["avg".into()],
+    aggregates: Some(vec!["avg".into()]),
     granularity: Some("1h".into()),
     ..Default::default()
 };
