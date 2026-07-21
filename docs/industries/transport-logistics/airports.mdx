@@ -27,7 +27,7 @@ import datahub_sdk, pandas as pd
 
 client = datahub_sdk.DataHubClient.from_env()
 
-client.timeseries.create([datahub_sdk.TimeSeries(external_id="stand_b12_fuelling_progress", name="Stand B12 fuelling")])
+client.timeseries.create([datahub_sdk.TimeSeries(external_id="stand_b12_fuelling_progress", name="Stand B12 fuelling", unit="pct", value_type="float")])
 client.subscriptions.create([datahub_sdk.Subscription(
     external_id="stand_b12_turnaround", name="Stand B12 turnaround", timeseries=["stand_b12_fuelling_progress"])])
 client.timeseries.insert_from_lists(timestamps=[pd.Timestamp.now(tz="UTC")], values=[1.0], ts="stand_b12_fuelling_progress")
