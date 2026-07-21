@@ -7,10 +7,11 @@ title: DataHub SDK
 # DataHub SDK
 
 A thin, fast client for the **DataHub Platform** — manage resources, time-series,
-events and files, and stream live data, from your own application.
+events, files, and stream live data from your own application.
 
 The SDK is available for **Java**, **Python** and **Rust**. Pick your language once
-(top-right of any code block) and every example on the site follows you.
+(top-right of any code block) and every example on the site gives you a working
+guide in your language of choice.
 
 :::tip Five-minute start
 Head to the [Quick start](/quickstart) to create a client and write your first

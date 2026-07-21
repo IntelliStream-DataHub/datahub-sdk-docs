@@ -92,7 +92,7 @@ filter.setGranularity("1h");
 var request = new DataRetriever<RetrieveFilter>();
 request.setItems(List.of(filter));
 
-// the Java client returns one value per bucket via getValue() (average then max)
+// NOTE: Java can't read aggregate values yet — getValue() returns null here (see warning below)
 client.timeseries().retrieve(request).getItems()
     .forEach(s -> s.getDatapoints().forEach(p ->
         System.out.println(p.getTimestamp() + " = " + p.getValue())));
@@ -123,7 +123,7 @@ let filter = RetrieveFilter {
     external_id: Some("engine_temperature".into()),
     start: Some(Utc::now() - chrono::Duration::days(1)),
     end: Some(Utc::now()),
-    aggregates: vec!["avg".into(), "max".into()],
+    aggregates: Some(vec!["avg".into(), "max".into()]),
     granularity: Some("1h".into()),
     ..Default::default()
 };
@@ -142,8 +142,14 @@ for series in result.get_items() {
 `avg`, `min`, `max`, `sum`. Granularity is a number plus a unit —
 `30s`, `5m`, `1h`, `1d`. The Python and Rust datapoint types expose each requested
 aggregate as its own field — `min`/`max`/`sum` by name, and `avg` read back on
-`.average` (`dp.average`, `dp.max`, …); the Java client returns one value per bucket
-on `getValue()`.
+`.average` (`dp.average`, `dp.max`, …).
+:::
+
+:::warning Java aggregate reads
+The Java client does **not** expose aggregate values yet: `getValue()` returns `null`
+for aggregated datapoints (the server sends `avg`/`max`/… as named fields, but the Java
+datapoint type carries only `timestamp`/`value`). For now use **Python or Rust** for
+aggregates — or in Java, fetch raw datapoints and aggregate them in your application.
 :::
 
 ## Paging large windows

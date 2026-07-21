@@ -14,7 +14,8 @@ the persisted graph in one call.
 
 ## Create the graph
 
-Create the nodes and the edges between them together. Relationship-type names are
+Create the nodes and the edges between them together. Each node needs **at least one
+label** (a type such as `Plant` or `Machine`). Relationship-type names and labels are
 upper-cased by the server, and external ids are canonicalized to snake_case.
 
 <Tabs groupId="lang">
@@ -24,14 +25,17 @@ upper-cased by the server, and external ids are canonicalized to snake_case.
 ResourceForm plant = new ResourceForm();
 plant.setExternalId("plant_oslo");
 plant.setName("Oslo Plant");
+plant.setLabels(List.of("Plant"));       // at least one label is required
 
 ResourceForm line = new ResourceForm();
 line.setExternalId("line_a");
 line.setName("Assembly line A");
+line.setLabels(List.of("Line"));
 
 ResourceForm press = new ResourceForm();
 press.setExternalId("press_07");
 press.setName("Hydraulic press 07");
+press.setLabels(List.of("Machine"));
 
 RelForm plantLine = new RelForm();
 plantLine.setName("contains");
@@ -57,9 +61,9 @@ System.out.println(graph.getNodes().size() + " nodes, "
 import datahub_sdk
 
 nodes = [
-    datahub_sdk.Resource(external_id="plant_oslo", name="Oslo Plant"),
-    datahub_sdk.Resource(external_id="line_a", name="Assembly line A"),
-    datahub_sdk.Resource(external_id="press_07", name="Hydraulic press 07"),
+    datahub_sdk.Resource(external_id="plant_oslo", name="Oslo Plant", labels=["Plant"]),
+    datahub_sdk.Resource(external_id="line_a", name="Assembly line A", labels=["Line"]),
+    datahub_sdk.Resource(external_id="press_07", name="Hydraulic press 07", labels=["Machine"]),
 ]
 edges = [
     datahub_sdk.RelForm.by_external_ids("plant_oslo", "line_a", "contains"),
@@ -80,14 +84,17 @@ use dataplatform_rust_sdk::relations::RelForm;
 let mut plant = Resource::new();
 plant.external_id = "plant_oslo".into();
 plant.name = "Oslo Plant".into();
+plant.labels = Some(vec!["Plant".into()]);   // at least one label is required
 
 let mut line = Resource::new();
 line.external_id = "line_a".into();
 line.name = "Assembly line A".into();
+line.labels = Some(vec!["Line".into()]);
 
 let mut press = Resource::new();
 press.external_id = "press_07".into();
 press.name = "Hydraulic press 07".into();
+press.labels = Some(vec!["Machine".into()]);
 
 let graph = api.resources.create(
     vec![plant, line, press],

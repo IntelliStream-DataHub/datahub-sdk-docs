@@ -28,7 +28,7 @@ import datahub_sdk, numpy as np, pandas as pd
 client = datahub_sdk.DataHubClient.from_env()
 
 client.timeseries.create([datahub_sdk.TimeSeries(
-    external_id="platform_north_flare_volume_m3", name="North platform flare volume")])
+    external_id="platform_north_flare_volume_m3", name="North platform flare volume", unit="m3", value_type="float")])
 idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=30, freq="1d")
 client.timeseries.insert_from_lists(
     timestamps=idx, values=np.random.uniform(3000, 5000, 30), ts="platform_north_flare_volume_m3")
@@ -84,7 +84,7 @@ let filter = RetrieveFilter {
     external_id: Some("platform_north_flare_volume_m3".into()),
     start: Some(Utc::now() - chrono::Duration::days(30)),
     end: Some(Utc::now()),
-    aggregates: vec!["sum".into()],
+    aggregates: Some(vec!["sum".into()]),
     granularity: Some("1d".into()),
     ..Default::default()
 };

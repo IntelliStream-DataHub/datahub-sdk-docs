@@ -18,3 +18,11 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# SDK docs review workspace (local scratch)
+/review/out/
+/review/
+
+# IDE
+/.idea/
+*.iml

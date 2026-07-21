@@ -30,11 +30,11 @@ client = datahub_sdk.DataHubClient.from_env()
 
 idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=12, freq="1h")
 # measured volume falls 3000 bbl over the shift
-client.timeseries.create([datahub_sdk.TimeSeries(external_id="tank_t_12_volume_bbl", name="Tank 12 volume")])
+client.timeseries.create([datahub_sdk.TimeSeries(external_id="tank_t_12_volume_bbl", name="Tank 12 volume", unit="bbl", value_type="float")])
 client.timeseries.insert_from_lists(timestamps=idx, values=np.linspace(50000, 47000, 12), ts="tank_t_12_volume_bbl")
 # but only 2500 bbl was metered out → 500 bbl unexplained
 for s, total in [("tank_t_12_receipts_bbl", 0.0), ("tank_t_12_deliveries_bbl", 2500.0)]:
-    client.timeseries.create([datahub_sdk.TimeSeries(external_id=s, name=s)])
+    client.timeseries.create([datahub_sdk.TimeSeries(external_id=s, name=s, unit="bbl", value_type="float")])
     client.timeseries.insert_from_lists(timestamps=idx, values=np.full(12, total / 12), ts=s)
 ```
 

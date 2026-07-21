@@ -27,8 +27,10 @@ import datahub_sdk, numpy as np, pandas as pd
 
 client = datahub_sdk.DataHubClient.from_env()
 
-for s in ["wellhead_pressure_bar", "casing_temperature_c", "flow_rate_bpd", "pump_intake_pressure_bar"]:
-    client.timeseries.create([datahub_sdk.TimeSeries(external_id=s, name=s)])
+sensors = {"wellhead_pressure_bar": "bar", "casing_temperature_c": "deg_c",
+           "flow_rate_bpd": "bpd", "pump_intake_pressure_bar": "bar"}
+for s, u in sensors.items():
+    client.timeseries.create([datahub_sdk.TimeSeries(external_id=s, name=s, unit=u, value_type="float")])
 
 # intake pressure: healthy ~95 bar, then sagging below the 80-bar ESP-anomaly line
 idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=120, freq="1min")
@@ -48,14 +50,17 @@ Modeling it as a graph lets you walk from a field down to any individual sensor.
 ResourceForm field = new ResourceForm();
 field.setExternalId("field_north_sea");
 field.setName("North Sea field");
+field.setLabels(List.of("Field"));
 
 ResourceForm well = new ResourceForm();
 well.setExternalId("well_a12");
 well.setName("Well A-12");
+well.setLabels(List.of("Well"));
 
 ResourceForm pump = new ResourceForm();
 pump.setExternalId("pump_esp_a12");
 pump.setName("ESP — Well A-12");
+pump.setLabels(List.of("Pump"));
 
 RelForm fieldWell = new RelForm();
 fieldWell.setName("contains");
@@ -77,9 +82,9 @@ client.resources().create(List.of(field, well, pump), List.of(fieldWell, wellPum
 import datahub_sdk
 
 nodes = [
-    datahub_sdk.Resource(external_id="field_north_sea", name="North Sea field"),
-    datahub_sdk.Resource(external_id="well_a12", name="Well A-12"),
-    datahub_sdk.Resource(external_id="pump_esp_a12", name="ESP — Well A-12"),
+    datahub_sdk.Resource(external_id="field_north_sea", name="North Sea field", labels=["Field"]),
+    datahub_sdk.Resource(external_id="well_a12", name="Well A-12", labels=["Well"]),
+    datahub_sdk.Resource(external_id="pump_esp_a12", name="ESP — Well A-12", labels=["Pump"]),
 ]
 edges = [
     datahub_sdk.RelForm.by_external_ids("field_north_sea", "well_a12", "contains"),
@@ -98,14 +103,17 @@ use dataplatform_rust_sdk::relations::RelForm;
 let mut field = Resource::new();
 field.external_id = "field_north_sea".into();
 field.name = "North Sea field".into();
+field.labels = Some(vec!["Field".into()]);
 
 let mut well = Resource::new();
 well.external_id = "well_a12".into();
 well.name = "Well A-12".into();
+well.labels = Some(vec!["Well".into()]);
 
 let mut pump = Resource::new();
 pump.external_id = "pump_esp_a12".into();
 pump.name = "ESP — Well A-12".into();
+pump.labels = Some(vec!["Pump".into()]);
 
 api.resources.create(
     vec![field, well, pump],
