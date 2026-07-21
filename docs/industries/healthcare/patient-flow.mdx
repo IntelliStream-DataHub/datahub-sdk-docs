@@ -26,7 +26,7 @@ import datahub_sdk, numpy as np, pandas as pd
 
 client = datahub_sdk.DataHubClient.from_env()
 
-client.timeseries.create([datahub_sdk.TimeSeries(external_id="ed_time_to_bed_minutes", name="ED time to bed (min)")])
+client.timeseries.create([datahub_sdk.TimeSeries(external_id="ed_time_to_bed_minutes", name="ED time to bed (min)", unit="min", value_type="float")])
 idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=24, freq="1h")
 ttb = 90 + np.linspace(0, 120, 24) + np.random.normal(0, 10, 24)
 client.timeseries.insert_from_lists(timestamps=idx, values=ttb, ts="ed_time_to_bed_minutes")
@@ -81,7 +81,7 @@ use chrono::Utc;
 
 let filter = RetrieveFilter {
     external_id: Some("ed_time_to_bed_minutes".into()),
-    aggregates: vec!["avg".into(), "max".into()],
+    aggregates: Some(vec!["avg".into(), "max".into()]),
     granularity: Some("1h".into()),
     start: Some(Utc::now() - chrono::Duration::days(1)),
     end: Some(Utc::now()),

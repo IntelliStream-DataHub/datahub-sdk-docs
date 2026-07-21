@@ -25,11 +25,11 @@ import datahub_sdk
 
 client = datahub_sdk.DataHubClient.from_env()
 
-nodes = [datahub_sdk.Resource(external_id="model_acme_x200", name="Acme X200 infusion pump"),
-         datahub_sdk.Resource(external_id="ward_icu", name="Intensive care")]
+nodes = [datahub_sdk.Resource(external_id="model_acme_x200", name="Acme X200 infusion pump", labels=["PumpModel"]),
+         datahub_sdk.Resource(external_id="ward_icu", name="Intensive care", labels=["Ward"])]
 edges = []
 for u in ["3391", "3392", "3401"]:
-    nodes.append(datahub_sdk.Resource(external_id=f"pump_icu_{u}", name=f"Infusion pump {u}"))
+    nodes.append(datahub_sdk.Resource(external_id=f"pump_icu_{u}", name=f"Infusion pump {u}", labels=["Pump"]))
     edges += [datahub_sdk.RelForm.by_external_ids(f"pump_icu_{u}", "ward_icu", "located_in"),
               datahub_sdk.RelForm.by_external_ids(f"pump_icu_{u}", "model_acme_x200", "is_model")]
 client.resources.create(nodes, edges)
@@ -48,6 +48,7 @@ event for biomedical engineering.
 ResourceForm pump = new ResourceForm();
 pump.setExternalId("pump_icu_3391");
 pump.setName("Infusion pump 3391");
+pump.setLabels(List.of("Pump"));
 
 RelForm inWard = new RelForm();
 inWard.setName("located_in");
@@ -69,7 +70,7 @@ client.resources().create(List.of(pump), List.of(inWard, isModel));
 import datahub_sdk
 
 client.resources.create(
-    [datahub_sdk.Resource(external_id="pump_icu_3391", name="Infusion pump 3391")],
+    [datahub_sdk.Resource(external_id="pump_icu_3391", name="Infusion pump 3391", labels=["Pump"])],
     [datahub_sdk.RelForm.by_external_ids("pump_icu_3391", "ward_icu", "located_in"),
      datahub_sdk.RelForm.by_external_ids("pump_icu_3391", "model_acme_x200", "is_model")])
 ```
@@ -84,6 +85,7 @@ use dataplatform_rust_sdk::relations::RelForm;
 let mut pump = Resource::new();
 pump.external_id = "pump_icu_3391".into();
 pump.name = "Infusion pump 3391".into();
+pump.labels = Some(vec!["Pump".into()]);
 
 api.resources.create(
     vec![pump],

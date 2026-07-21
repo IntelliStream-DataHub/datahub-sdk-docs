@@ -28,7 +28,7 @@ import datahub_sdk, numpy as np, pandas as pd
 
 client = datahub_sdk.DataHubClient.from_env()
 
-client.timeseries.create([datahub_sdk.TimeSeries(external_id="ward_icu_occupancy_pct", name="ICU occupancy %")])
+client.timeseries.create([datahub_sdk.TimeSeries(external_id="ward_icu_occupancy_pct", name="ICU occupancy %", unit="pct", value_type="float")])
 client.subscriptions.create([datahub_sdk.Subscription(
     external_id="bed_capacity", name="Bed capacity", timeseries=["ward_icu_occupancy_pct"])])
 idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=60, freq="1min")
@@ -48,10 +48,12 @@ for any physical estate, which lets a ward-level alert roll up to the whole site
 ResourceForm hospital = new ResourceForm();
 hospital.setExternalId("hospital_central");
 hospital.setName("Central Hospital");
+hospital.setLabels(List.of("Hospital"));
 
 ResourceForm ward = new ResourceForm();
 ward.setExternalId("ward_icu");
 ward.setName("Intensive care");
+ward.setLabels(List.of("Ward"));
 
 RelForm contains = new RelForm();
 contains.setName("contains");
@@ -68,8 +70,8 @@ client.resources().create(List.of(hospital, ward), List.of(contains));
 import datahub_sdk
 
 client.resources.create(
-    [datahub_sdk.Resource(external_id="hospital_central", name="Central Hospital"),
-     datahub_sdk.Resource(external_id="ward_icu", name="Intensive care")],
+    [datahub_sdk.Resource(external_id="hospital_central", name="Central Hospital", labels=["Hospital"]),
+     datahub_sdk.Resource(external_id="ward_icu", name="Intensive care", labels=["Ward"])],
     [datahub_sdk.RelForm.by_external_ids("hospital_central", "ward_icu", "contains")])
 ```
 
@@ -83,10 +85,12 @@ use dataplatform_rust_sdk::relations::RelForm;
 let mut hospital = Resource::new();
 hospital.external_id = "hospital_central".into();
 hospital.name = "Central Hospital".into();
+hospital.labels = Some(vec!["Hospital".into()]);
 
 let mut ward = Resource::new();
 ward.external_id = "ward_icu".into();
 ward.name = "Intensive care".into();
+ward.labels = Some(vec!["Ward".into()]);
 
 api.resources.create(
     vec![hospital, ward],
