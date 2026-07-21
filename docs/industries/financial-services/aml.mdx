@@ -28,13 +28,13 @@ import datahub_sdk, pandas as pd
 
 client = datahub_sdk.DataHubClient.from_env()
 
-client.timeseries.create([datahub_sdk.TimeSeries(external_id="flagged_payments_feed", name="Flagged payments")])
+client.timeseries.create([datahub_sdk.TimeSeries(external_id="flagged_payments_feed", name="Flagged payments", unit="count", value_type="float")])
 client.subscriptions.create([datahub_sdk.Subscription(
     external_id="flagged_payments", name="Flagged payments", timeseries=["flagged_payments_feed"])])
 client.timeseries.insert_from_lists(timestamps=[pd.Timestamp.now(tz="UTC")], values=[1.0], ts="flagged_payments_feed")
 
 client.resources.create(
-    [datahub_sdk.Resource(external_id=f"account_{i}", name=f"Account {i}") for i in [77310, 8841, 8842, 8843]],
+    [datahub_sdk.Resource(external_id=f"account_{i}", name=f"Account {i}", labels=["Account"]) for i in [77310, 8841, 8842, 8843]],
     [datahub_sdk.RelForm.by_external_ids("account_77310", "account_8841", "sent_to"),
      datahub_sdk.RelForm.by_external_ids("account_8841", "account_8842", "sent_to"),
      datahub_sdk.RelForm.by_external_ids("account_8842", "account_8843", "sent_to"),

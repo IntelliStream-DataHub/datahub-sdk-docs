@@ -28,8 +28,9 @@ import datahub_sdk
 client = datahub_sdk.DataHubClient.from_env()
 
 client.resources.create(
-    [datahub_sdk.Resource(external_id=x, name=x) for x in
-     ["claim_88421", "claim_88455", "party_jdoe", "phone_47120099", "shop_quickfix"]],
+    [datahub_sdk.Resource(external_id=x, name=x, labels=[lbl]) for x, lbl in
+     [("claim_88421", "Claim"), ("claim_88455", "Claim"), ("party_jdoe", "Party"),
+      ("phone_47120099", "Phone"), ("shop_quickfix", "Shop")]],
     [datahub_sdk.RelForm.by_external_ids("claim_88421", "party_jdoe", "filed_by"),
      datahub_sdk.RelForm.by_external_ids("claim_88421", "shop_quickfix", "repaired_at"),
      datahub_sdk.RelForm.by_external_ids("party_jdoe", "phone_47120099", "contact_phone"),
