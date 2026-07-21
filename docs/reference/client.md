@@ -102,6 +102,122 @@ bearer token **or** OAuth2 client-credentials (the SDK fetches and refreshes the
 `fromEnv()` / `from_env()` / `create_api_service()` read these from the environment,
 falling back to a `.env` file in the working directory (real environment variables win).
 
+### Provider-specific parameters
+
+`scope` and `audience` are left out of the token request unless you set them. Keycloak wants
+neither; other providers refuse without them.
+
+| Variable | Java builder | Python kwarg | Rust setter | When you need it |
+| --- | --- | --- | --- | --- |
+| `SCOPE` | `.scope(...)` | `scope=` | `set_scope(...)` | Entra ID requires `api://<app-id-uri>/.default`. Space-separate several. |
+| `AUDIENCE` | `.audience(...)` | `audience=` | `set_audience(...)` | Auth0 requires it. Keycloak ignores it. |
+
+### Exchanging an external token (jwt-bearer)
+
+A token minted by one issuer is not accepted by an API that trusts another. To bridge them, the
+SDK can present an externally-issued JWT as an [RFC 7523](https://www.rfc-editor.org/rfc/rfc7523)
+`assertion` and exchange it for a token the API *does* accept. The common case is reaching a
+Keycloak-backed API with an **Entra ID service principal**:
+
+```
+1. client_credentials          2. jwt-bearer                 3. Bearer
+   ────────────────►              ────────────────►             ────────────────►
+   Entra token endpoint           Keycloak token endpoint       DataHub API
+   → the assertion                → the token you use
+```
+
+Setting an assertion source switches the request at `TOKEN_URI` from client-credentials to
+`jwt-bearer`. `CLIENT_ID`/`CLIENT_SECRET`/`TOKEN_URI` then describe the client performing the
+*exchange*, and the `ASSERTION_*` keys describe where the assertion comes from:
+
+| Variable | Java builder | Python kwarg | Rust setter | Meaning |
+| --- | --- | --- | --- | --- |
+| `ASSERTION` | `.assertion(...)` | `assertion=` | `set_assertion(...)` | A ready-made JWT. Never refreshed — prefer the credentials below. |
+| `ASSERTION_CLIENT_ID` / `ASSERTION_CLIENT_SECRET` / `ASSERTION_TOKEN_URI` | `.assertionCredentials(...)` | `assertion_client_id=` / `assertion_client_secret=` / `assertion_token_url=` | `set_assertion_credentials(...)` | Fetch the assertion with client credentials from another provider (all three). |
+| `ASSERTION_SCOPE` | `.assertionScope(...)` | `assertion_scope=` | `set_assertion_scope(...)` | `scope` for the assertion request. |
+| `ASSERTION_AUDIENCE` | `.assertionAudience(...)` | `assertion_audience=` | `set_assertion_audience(...)` | `audience` for the assertion request. |
+
+:::note Python names the URL parameters `*_url`
+The Python client already spells `TOKEN_URI` as `token_url`, so the assertion equivalent is
+`assertion_token_url`. The environment variables keep the `_URI` spelling in all three SDKs.
+:::
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+DatahubClient client = DatahubClient.create(DatahubConfig.builder()
+        .baseUrl("https://api.intellistream.ai")
+        // leg 2 — the confidential Keycloak client that performs the exchange
+        .clientCredentials("datahub-jwt-grant", keycloakSecret,
+                "https://keycloak.example.com/realms/datahub/protocol/openid-connect/token")
+        // leg 1 — the Entra app registration the assertion comes from
+        .assertionCredentials(entraAppId, entraSecret,
+                "https://login.microsoftonline.com/" + tenantId + "/oauth2/v2.0/token")
+        .assertionScope("api://" + entraAppId + "/.default")
+        .build());
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+client = DataHubClient(
+    "https://api.intellistream.ai",
+    # leg 2 — the confidential Keycloak client that performs the exchange
+    client_id="datahub-jwt-grant",
+    client_secret=keycloak_secret,
+    token_url="https://keycloak.example.com/realms/datahub/protocol/openid-connect/token",
+    # leg 1 — the Entra app registration the assertion comes from
+    assertion_client_id=entra_app_id,
+    assertion_client_secret=entra_secret,
+    assertion_token_url=f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token",
+    assertion_scope=f"api://{entra_app_id}/.default",
+)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+let mut api = DataHubApi::from_env()?;
+api.set_assertion_credentials(
+    &entra_app_id,
+    &entra_secret,
+    &format!("https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"),
+);
+api.set_assertion_scope(format!("api://{entra_app_id}/.default"));
+```
+
+</TabItem>
+</Tabs>
+
+Or entirely from the environment:
+
+```bash
+BASE_URL=https://api.intellistream.ai
+CLIENT_ID=datahub-jwt-grant
+CLIENT_SECRET=...
+TOKEN_URI=https://keycloak.example.com/realms/datahub/protocol/openid-connect/token
+ASSERTION_CLIENT_ID=<entra-application-id>
+ASSERTION_CLIENT_SECRET=...
+ASSERTION_TOKEN_URI=https://login.microsoftonline.com/<tenant-id>/oauth2/v2.0/token
+ASSERTION_SCOPE=api://<entra-application-id>/.default
+```
+
+The exchanged token is cached and refreshed exactly like a client-credentials one. The assertion
+itself is **never** cached — providers commonly reject a replayed assertion, so every exchange
+starts from a fresh request.
+
+:::caution Server-side setup is required
+The identity provider must be configured to trust the external issuer, and the external identity
+must map to a real user on that side. For Keycloak that means an Identity Provider with **JWT
+Authorization Grant** enabled (Keycloak 26.5+), a client with the matching capability, and a
+linked user carrying the roles and tenant claim. See `EntraID.md` in the platform repository for
+the full walkthrough, including the audience and assertion-lifetime settings that trip up a first
+attempt.
+:::
+
 ### From HashiCorp Vault (Java)
 
 The Java client can also read the same keys from a Vault KV v2 secret, with a token or
