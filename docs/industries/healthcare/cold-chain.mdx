@@ -27,7 +27,7 @@ import datahub_sdk, numpy as np, pandas as pd
 
 client = datahub_sdk.DataHubClient.from_env()
 
-client.timeseries.create([datahub_sdk.TimeSeries(external_id="fridge_pharmacy_12_temp_c", name="Pharmacy fridge 12 temp")])
+client.timeseries.create([datahub_sdk.TimeSeries(external_id="fridge_pharmacy_12_temp_c", name="Pharmacy fridge 12 temp", unit="deg_c", value_type="float")])
 client.subscriptions.create([datahub_sdk.Subscription(
     external_id="pharmacy_fridges", name="Pharmacy fridges", timeseries=["fridge_pharmacy_12_temp_c"])])
 idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=60, freq="1min")
