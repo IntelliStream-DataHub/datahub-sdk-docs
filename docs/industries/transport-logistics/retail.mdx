@@ -27,7 +27,7 @@ client = datahub_sdk.DataHubClient.from_env()
 
 region_id = client.datasets.create([datahub_sdk.Dataset(external_id="region_nordics", name="Nordics region")])[0].id
 client.timeseries.create([datahub_sdk.TimeSeries(external_id="store_oslo_01_sku_4471_sales",
-    name="Oslo-01 SKU 4471 units sold", data_set_id=region_id)])
+    name="Oslo-01 SKU 4471 units sold", unit="units", value_type="float", data_set_id=region_id)])
 idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=30, freq="1d")
 client.timeseries.insert_from_lists(timestamps=idx, values=np.random.poisson(40, 30).astype(float),
     ts="store_oslo_01_sku_4471_sales")
@@ -48,10 +48,11 @@ region.setName("Nordics region");
 long regionId = client.datasets().create(List.of(region))
     .getItems().iterator().next().getId();
 
-client.timeseries().create(
-    Timeseries.of("store_oslo_01_sku_4471_sales")
-        .name("Oslo 01 — SKU 4471 units sold")
-        .setDataSetId(regionId));
+var salesSeries = Timeseries.of("store_oslo_01_sku_4471_sales")
+    .name("Oslo 01 — SKU 4471 units sold")
+    .setDataSetId(regionId);
+salesSeries.setUnit("units");
+client.timeseries().create(salesSeries);
 ```
 
 </TabItem>
@@ -65,7 +66,7 @@ region_id = client.datasets.create([
 
 client.timeseries.create([datahub_sdk.TimeSeries(
     external_id="store_oslo_01_sku_4471_sales",
-    name="Oslo 01 — SKU 4471 units sold", data_set_id=region_id)])
+    name="Oslo 01 — SKU 4471 units sold", unit="units", value_type="float", data_set_id=region_id)])
 ```
 
 </TabItem>
@@ -82,6 +83,7 @@ let created = api.datasets.create(&vec![ds]).await?;
 let region_id = created.get_items()[0].id;
 
 let mut ts = TimeSeries::new("store_oslo_01_sku_4471_sales", "Oslo 01 — SKU 4471 units sold");
+ts.unit = Some("units".into());
 ts.data_set_id = region_id;
 api.time_series.create_one(&ts).await?;
 ```
