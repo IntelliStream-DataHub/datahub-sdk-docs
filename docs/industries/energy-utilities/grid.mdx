@@ -46,10 +46,12 @@ A region *contains* substations, a substation *contains* transformers, a transfo
 ResourceForm region = new ResourceForm();
 region.setExternalId("grid_region_east");
 region.setName("Eastern region");
+region.setLabels(List.of("Region"));
 
 ResourceForm substation = new ResourceForm();
 substation.setExternalId("substation_oslo_1");
 substation.setName("Oslo substation 1");
+substation.setLabels(List.of("Substation"));
 
 RelForm contains = new RelForm();
 contains.setName("contains");
@@ -66,8 +68,8 @@ client.resources().create(List.of(region, substation), List.of(contains));
 import datahub_sdk
 
 client.resources.create(
-    [datahub_sdk.Resource(external_id="grid_region_east", name="Eastern region"),
-     datahub_sdk.Resource(external_id="substation_oslo_1", name="Oslo substation 1")],
+    [datahub_sdk.Resource(external_id="grid_region_east", name="Eastern region", labels=["Region"]),
+     datahub_sdk.Resource(external_id="substation_oslo_1", name="Oslo substation 1", labels=["Substation"])],
     [datahub_sdk.RelForm.by_external_ids("grid_region_east", "substation_oslo_1", "contains")])
 ```
 
@@ -81,10 +83,12 @@ use dataplatform_rust_sdk::relations::RelForm;
 let mut region = Resource::new();
 region.external_id = "grid_region_east".into();
 region.name = "Eastern region".into();
+region.labels = Some(vec!["Region".into()]);
 
 let mut substation = Resource::new();
 substation.external_id = "substation_oslo_1".into();
 substation.name = "Oslo substation 1".into();
+substation.labels = Some(vec!["Substation".into()]);
 
 api.resources.create(
     vec![region, substation],
@@ -146,7 +150,7 @@ let filter = RetrieveFilter {
     external_id: Some("feeder_f12_load_mw".into()),
     start: Some(Utc::now() - chrono::Duration::days(1)),
     end: Some(Utc::now()),
-    aggregates: vec!["avg".into(), "max".into()],
+    aggregates: Some(vec!["avg".into(), "max".into()]),
     granularity: Some("1h".into()),
     ..Default::default()
 };
