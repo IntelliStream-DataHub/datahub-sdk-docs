@@ -29,8 +29,9 @@ import datahub_sdk, pandas as pd
 client = datahub_sdk.DataHubClient.from_env()
 
 client.resources.create(
-    [datahub_sdk.Resource(external_id=x, name=x, labels=[x]) for x in
-     ["source_lake_a", "main_trunk_north", "zone_west_12", "zone_east_07"]],
+    [datahub_sdk.Resource(external_id=x, name=x, labels=[lbl]) for x, lbl in
+     [("source_lake_a", "Source"), ("main_trunk_north", "Main"),
+      ("zone_west_12", "Zone"), ("zone_east_07", "Zone")]],
     [datahub_sdk.RelForm.by_external_ids("source_lake_a", "main_trunk_north", "feeds"),
      datahub_sdk.RelForm.by_external_ids("main_trunk_north", "zone_west_12", "feeds"),
      datahub_sdk.RelForm.by_external_ids("main_trunk_north", "zone_east_07", "feeds")])

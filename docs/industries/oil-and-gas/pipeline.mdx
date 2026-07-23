@@ -34,8 +34,9 @@ for s, v in [("segment_pn_07_flow_in_m3h", 1000.0), ("segment_pn_07_flow_out_m3h
 
 # the network: stations, the segment, and the valves that isolate it
 client.resources.create(
-    [datahub_sdk.Resource(external_id=x, name=x, labels=[x]) for x in
-     ["station_kollsnes", "segment_pn_07", "station_mongstad", "valve_v18", "valve_v19"]],
+    [datahub_sdk.Resource(external_id=x, name=x, labels=[lbl]) for x, lbl in
+     [("station_kollsnes", "Station"), ("segment_pn_07", "Segment"),
+      ("station_mongstad", "Station"), ("valve_v18", "Valve"), ("valve_v19", "Valve")]],
     [datahub_sdk.RelForm.by_external_ids("station_kollsnes", "segment_pn_07", "connects_to"),
      datahub_sdk.RelForm.by_external_ids("segment_pn_07", "station_mongstad", "connects_to"),
      datahub_sdk.RelForm.by_external_ids("segment_pn_07", "valve_v18", "isolated_by"),

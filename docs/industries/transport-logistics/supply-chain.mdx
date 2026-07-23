@@ -29,8 +29,9 @@ import datahub_sdk
 client = datahub_sdk.DataHubClient.from_env()
 
 client.resources.create(
-    [datahub_sdk.Resource(external_id=x, name=x, labels=[x]) for x in
-     ["lot_acme_8842", "part_bearing_55", "product_gearbox_910", "shipment_eu_2204"]],
+    [datahub_sdk.Resource(external_id=x, name=x, labels=[lbl]) for x, lbl in
+     [("lot_acme_8842", "Lot"), ("part_bearing_55", "Part"),
+      ("product_gearbox_910", "Product"), ("shipment_eu_2204", "Shipment")]],
     [datahub_sdk.RelForm.by_external_ids("lot_acme_8842", "part_bearing_55", "supplied"),
      datahub_sdk.RelForm.by_external_ids("part_bearing_55", "product_gearbox_910", "built_into"),
      datahub_sdk.RelForm.by_external_ids("product_gearbox_910", "shipment_eu_2204", "shipped_in")])

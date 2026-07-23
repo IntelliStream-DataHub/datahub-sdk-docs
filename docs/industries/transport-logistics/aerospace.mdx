@@ -27,11 +27,11 @@ import datahub_sdk
 
 client = datahub_sdk.DataHubClient.from_env()
 
-nodes = [datahub_sdk.Resource(external_id="part_type_hp_47", name="Hydraulic pump type HP-47", labels=["part_type_hp_47"])]
+nodes = [datahub_sdk.Resource(external_id="part_type_hp_47", name="Hydraulic pump type HP-47", labels=["PartType"])]
 edges = []
 for ac in ["ln_312", "ln_318", "ln_401"]:
-    nodes += [datahub_sdk.Resource(external_id=f"aircraft_{ac}", name=f"Aircraft {ac}", labels=[f"aircraft_{ac}"]),
-              datahub_sdk.Resource(external_id=f"hyd_pump_{ac}_1", name=f"Pump {ac}", labels=[f"hyd_pump_{ac}_1"])]
+    nodes += [datahub_sdk.Resource(external_id=f"aircraft_{ac}", name=f"Aircraft {ac}", labels=["Aircraft"]),
+              datahub_sdk.Resource(external_id=f"hyd_pump_{ac}_1", name=f"Pump {ac}", labels=["Pump"])]
     edges += [datahub_sdk.RelForm.by_external_ids(f"aircraft_{ac}", f"hyd_pump_{ac}_1", "contains"),
               datahub_sdk.RelForm.by_external_ids(f"hyd_pump_{ac}_1", "part_type_hp_47", "is_part_type")]
 client.resources.create(nodes, edges)
@@ -50,12 +50,12 @@ that shared node is what makes fleet-wide correlation possible.
 ResourceForm aircraft = new ResourceForm();
 aircraft.setExternalId("aircraft_ln_312");
 aircraft.setName("Aircraft LN-312");
-aircraft.setLabels(List.of("aircraft_ln_312"));
+aircraft.setLabels(List.of("Aircraft"));
 
 ResourceForm pump = new ResourceForm();
 pump.setExternalId("hyd_pump_ln_312_1");
 pump.setName("Hydraulic pump #1");
-pump.setLabels(List.of("hyd_pump_ln_312_1"));
+pump.setLabels(List.of("Pump"));
 
 // the component is an instance of a shared part type
 RelForm installed = new RelForm();
@@ -78,8 +78,8 @@ client.resources().create(List.of(aircraft, pump), List.of(installed, isType));
 import datahub_sdk
 
 client.resources.create(
-    [datahub_sdk.Resource(external_id="aircraft_ln_312", name="Aircraft LN-312", labels=["aircraft_ln_312"]),
-     datahub_sdk.Resource(external_id="hyd_pump_ln_312_1", name="Hydraulic pump #1", labels=["hyd_pump_ln_312_1"])],
+    [datahub_sdk.Resource(external_id="aircraft_ln_312", name="Aircraft LN-312", labels=["Aircraft"]),
+     datahub_sdk.Resource(external_id="hyd_pump_ln_312_1", name="Hydraulic pump #1", labels=["Pump"])],
     [datahub_sdk.RelForm.by_external_ids("aircraft_ln_312", "hyd_pump_ln_312_1", "contains"),
      datahub_sdk.RelForm.by_external_ids("hyd_pump_ln_312_1", "part_type_hp_47", "is_part_type")])
 ```
@@ -94,12 +94,12 @@ use dataplatform_rust_sdk::relations::RelForm;
 let mut aircraft = Resource::new();
 aircraft.external_id = "aircraft_ln_312".into();
 aircraft.name = "Aircraft LN-312".into();
-aircraft.labels = Some(vec!["aircraft_ln_312".into()]);
+aircraft.labels = Some(vec!["Aircraft".into()]);
 
 let mut pump = Resource::new();
 pump.external_id = "hyd_pump_ln_312_1".into();
 pump.name = "Hydraulic pump #1".into();
-pump.labels = Some(vec!["hyd_pump_ln_312_1".into()]);
+pump.labels = Some(vec!["Pump".into()]);
 
 api.resources.create(
     vec![aircraft, pump],
