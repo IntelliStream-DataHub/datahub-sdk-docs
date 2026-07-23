@@ -92,7 +92,7 @@ let filter = RetrieveFilter {
     external_id: Some("pump_07_bearing_temp_c".into()),
     start: Some(Utc::now() - chrono::Duration::minutes(15)),
     end: Some(Utc::now()),
-    aggregates: vec!["avg".into()],
+    aggregates: Some(vec!["avg".into()]),
     granularity: Some("15m".into()),
     ..Default::default()
 };
@@ -145,7 +145,7 @@ health like any other signal — and raise an event when an asset drops to `crit
 
 ```python
 client.timeseries.create([datahub_sdk.TimeSeries(
-    external_id="pump_07_health_score", name="Pump 07 health score")])
+    external_id="pump_07_health_score", name="Pump 07 health score", unit="score", value_type="float")])
 client.timeseries.insert_from_lists(
     timestamps=[pd.Timestamp.now(tz="UTC")], values=[score], ts="pump_07_health_score")
 

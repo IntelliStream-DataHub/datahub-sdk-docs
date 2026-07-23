@@ -45,8 +45,8 @@ def load(ext_id):
     return pd.Series([float(p.value) for p in pts],
                      index=pd.to_datetime([p.timestamp for p in pts])).sort_index()
 
-def store(ext_id, series, name=None):
-    client.timeseries.create([datahub_sdk.TimeSeries(external_id=ext_id, name=name or ext_id,
+def store(ext_id, series, name=None, unit="value"):
+    client.timeseries.create([datahub_sdk.TimeSeries(external_id=ext_id, name=name or ext_id, unit=unit,
                                                      description="Derived series — not a raw measurement.")])
     s = series.dropna()
     client.timeseries.insert_from_lists(timestamps=s.index, values=s.to_numpy(), ts=ext_id)

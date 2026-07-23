@@ -116,7 +116,7 @@ prob = clf.predict_proba(latest[FEATURES])[0, 1]
 
 # publish the live risk as its own series
 client.timeseries.create([datahub_sdk.TimeSeries(
-    external_id="pen_h_07_crash_risk", name="Pen H-07 oxygen-crash risk")])
+    external_id="pen_h_07_crash_risk", name="Pen H-07 oxygen-crash risk", unit="score", value_type="float")])
 client.timeseries.insert_from_lists(
     timestamps=[latest.index[-1]], values=[prob], ts="pen_h_07_crash_risk")
 

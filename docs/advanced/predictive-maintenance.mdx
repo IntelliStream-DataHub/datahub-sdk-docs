@@ -181,7 +181,7 @@ scores = anomaly_score(X_recent)
 score_index = recent.index[WINDOW::WINDOW][:len(scores)]   # timestamp each window's score
 
 client.timeseries.create([datahub_sdk.TimeSeries(
-    external_id="pump_07_vibration_anomaly", name="Pump 07 vibration anomaly score")])
+    external_id="pump_07_vibration_anomaly", name="Pump 07 vibration anomaly score", unit="score", value_type="float")])
 client.timeseries.insert_from_lists(
     timestamps=score_index, values=scores, ts="pump_07_vibration_anomaly")
 
