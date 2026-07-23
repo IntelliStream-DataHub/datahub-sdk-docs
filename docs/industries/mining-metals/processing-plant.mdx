@@ -27,7 +27,7 @@ import datahub_sdk, numpy as np, pandas as pd
 
 client = datahub_sdk.DataHubClient.from_env()
 
-client.timeseries.create([datahub_sdk.TimeSeries(external_id="mill_1_recovery_pct", name="Mill 1 recovery %")])
+client.timeseries.create([datahub_sdk.TimeSeries(external_id="mill_1_recovery_pct", name="Mill 1 recovery %", unit="pct", value_type="float")])
 idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=12, freq="1h")
 rec = np.full(12, 91.0); rec[-4:] -= np.linspace(0, 3, 4)        # dips below the 91% target
 client.timeseries.insert_from_lists(timestamps=idx, values=rec, ts="mill_1_recovery_pct")
@@ -82,7 +82,7 @@ use chrono::Utc;
 
 let filter = RetrieveFilter {
     external_id: Some("mill_1_recovery_pct".into()),
-    aggregates: vec!["avg".into()],
+    aggregates: Some(vec!["avg".into()]),
     granularity: Some("1h".into()),
     start: Some(Utc::now() - chrono::Duration::hours(12)),
     end: Some(Utc::now()),
