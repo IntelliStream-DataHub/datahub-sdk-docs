@@ -31,12 +31,13 @@ client = datahub_sdk.DataHubClient.from_env()
 util = 50 + 40 * np.clip(np.sin(np.arange(168) / 24 * 2 * np.pi), 0, 1)    # ~90% at busy hour
 idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=168, freq="1h")
 for c in ["cell_oslo_4412", "cell_oslo_4418"]:
-    client.timeseries.create([datahub_sdk.TimeSeries(external_id=f"{c}_prb_util", name=f"{c} PRB util")])
+    client.timeseries.create([datahub_sdk.TimeSeries(external_id=f"{c}_prb_util", name=f"{c} PRB util", unit="pct", value_type="float")])
     client.timeseries.insert_from_lists(timestamps=idx, values=util, ts=f"{c}_prb_util")
 
 client.resources.create(
-    [datahub_sdk.Resource(external_id=x, name=x) for x in
-     ["cell_oslo_4412", "cell_oslo_4418", "backhaul_link_88", "controller_rnc_3"]],
+    [datahub_sdk.Resource(external_id=x, name=x, labels=[lbl]) for x, lbl in
+     [("cell_oslo_4412", "Cell"), ("cell_oslo_4418", "Cell"),
+      ("backhaul_link_88", "BackhaulLink"), ("controller_rnc_3", "Controller")]],
     [datahub_sdk.RelForm.by_external_ids("cell_oslo_4412", "backhaul_link_88", "backhauled_by"),
      datahub_sdk.RelForm.by_external_ids("cell_oslo_4418", "backhaul_link_88", "backhauled_by"),
      datahub_sdk.RelForm.by_external_ids("backhaul_link_88", "controller_rnc_3", "connects_to")])
@@ -91,7 +92,7 @@ use chrono::Utc;
 
 let filter = RetrieveFilter {
     external_id: Some("cell_oslo_4412_prb_util".into()),
-    aggregates: vec!["max".into()],
+    aggregates: Some(vec!["max".into()]),
     granularity: Some("1h".into()),
     start: Some(Utc::now() - chrono::Duration::days(7)),
     end: Some(Utc::now()),
