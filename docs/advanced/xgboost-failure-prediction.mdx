@@ -92,7 +92,7 @@ let filter = RetrieveFilter {
     external_id: Some("pump_esp_a12_motor_temp_c".into()),
     start: Some(Utc::now() - chrono::Duration::days(7)),
     end: Some(Utc::now()),
-    aggregates: vec!["avg".into(), "max".into()],
+    aggregates: Some(vec!["avg".into(), "max".into()]),
     granularity: Some("7d".into()),
     ..Default::default()
 };
@@ -159,7 +159,7 @@ today = pd.DataFrame([feature_row("pump_esp_a12", pd.Timestamp.now(tz="UTC"))])
 risk = float(clf.predict_proba(today)[0, 1])
 
 client.timeseries.create([datahub_sdk.TimeSeries(
-    external_id="pump_esp_a12_failure_risk", name="ESP A-12 7-day failure risk")])
+    external_id="pump_esp_a12_failure_risk", name="ESP A-12 7-day failure risk", unit="score", value_type="float")])
 client.timeseries.insert_from_lists(
     timestamps=[pd.Timestamp.now(tz="UTC")], values=[risk], ts="pump_esp_a12_failure_risk")
 

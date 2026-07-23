@@ -93,7 +93,7 @@ let filter = RetrieveFilter {
     external_id: Some("pump_07_load_mw".into()),
     start: Some(Utc::now() - chrono::Duration::days(30)),
     end: Some(Utc::now()),
-    aggregates: vec!["avg".into(), "max".into()],
+    aggregates: Some(vec!["avg".into(), "max".into()]),
     granularity: Some("30d".into()),
     ..Default::default()
 };

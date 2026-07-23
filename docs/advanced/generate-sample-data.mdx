@@ -161,8 +161,8 @@ For the graph-feature builds ([fraud classification](/advanced/fraud-classificat
 
 ```python
 ring = ["account_77310", "account_44120", "account_61885", "account_22907"]   # a flagged ring
-nodes = ([datahub_sdk.Resource(external_id=f"account_{i}", name=f"Account {i}") for i in range(1, 8)]
-         + [datahub_sdk.Resource(external_id=a, name=a.replace("_", " ").title()) for a in ring])
+nodes = ([datahub_sdk.Resource(external_id=f"account_{i}", name=f"Account {i}", labels=["Account"]) for i in range(1, 8)]
+         + [datahub_sdk.Resource(external_id=a, name=a.replace("_", " ").title(), labels=["Account"]) for a in ring])
 edges = [
     datahub_sdk.RelForm.by_external_ids("account_1", "account_2", "sent_to"),
     datahub_sdk.RelForm.by_external_ids("account_2", "account_3", "sent_to"),

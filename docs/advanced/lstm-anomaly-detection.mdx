@@ -154,7 +154,7 @@ error = np.mean((Xr - model.predict(Xr, verbose=0)) ** 2, axis=(1, 2))
 score_index = pd.date_range(periods=len(error), end=pd.Timestamp.now(tz="UTC"), freq="1s")
 
 client.timeseries.create([datahub_sdk.TimeSeries(
-    external_id="rig_dw1_anomaly_score", name="Rig DW1 multivariate anomaly score")])
+    external_id="rig_dw1_anomaly_score", name="Rig DW1 multivariate anomaly score", unit="score", value_type="float")])
 client.timeseries.insert_from_lists(timestamps=score_index, values=error, ts="rig_dw1_anomaly_score")
 
 if error[-3:].mean() > THRESHOLD:

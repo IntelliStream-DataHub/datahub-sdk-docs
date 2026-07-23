@@ -89,7 +89,7 @@ let filter = RetrieveFilter {
     external_id: Some("cdu_1_top_temp_c".into()),
     start: Some("2026-01-01T00:00:00Z".parse().unwrap()),
     end: Some("2026-06-01T00:00:00Z".parse().unwrap()),
-    aggregates: vec!["avg".into()],
+    aggregates: Some(vec!["avg".into()]),
     granularity: Some("5m".into()),
     ..Default::default()
 };
