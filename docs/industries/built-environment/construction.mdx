@@ -27,10 +27,11 @@ import datahub_sdk, numpy as np, pandas as pd
 client = datahub_sdk.DataHubClient.from_env()
 
 client.resources.create(
-    [datahub_sdk.Resource(external_id=x, name=x) for x in ["site_harbour_tower", "zone_level_12"]],
+    [datahub_sdk.Resource(external_id=x, name=x, labels=[lbl]) for x, lbl in
+     [("site_harbour_tower", "Site"), ("zone_level_12", "Zone")]],
     [datahub_sdk.RelForm.by_external_ids("site_harbour_tower", "zone_level_12", "contains")])
 
-client.timeseries.create([datahub_sdk.TimeSeries(external_id="crane_02_hours", name="Crane 02 hours")])
+client.timeseries.create([datahub_sdk.TimeSeries(external_id="crane_02_hours", name="Crane 02 hours", unit="h", value_type="float")])
 idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=14, freq="1d")
 client.timeseries.insert_from_lists(timestamps=idx, values=np.random.uniform(4, 9, 14), ts="crane_02_hours")
 ```
@@ -47,10 +48,12 @@ a crew can find the current revision instantly. See [Attach files](/guides/attac
 ResourceForm site = new ResourceForm();
 site.setExternalId("site_harbour_tower");
 site.setName("Harbour Tower");
+site.setLabels(List.of("Site"));
 
 ResourceForm zone = new ResourceForm();
 zone.setExternalId("zone_level_12");
 zone.setName("Level 12");
+zone.setLabels(List.of("Zone"));
 
 RelForm contains = new RelForm();
 contains.setName("contains");
@@ -77,8 +80,8 @@ client.files().upload(
 import datahub_sdk
 
 client.resources.create(
-    [datahub_sdk.Resource(external_id="site_harbour_tower", name="Harbour Tower"),
-     datahub_sdk.Resource(external_id="zone_level_12", name="Level 12")],
+    [datahub_sdk.Resource(external_id="site_harbour_tower", name="Harbour Tower", labels=["Site"]),
+     datahub_sdk.Resource(external_id="zone_level_12", name="Level 12", labels=["Zone"])],
     [datahub_sdk.RelForm.by_external_ids("site_harbour_tower", "zone_level_12", "contains")])
 
 client.files.upload_file(datahub_sdk.FileUpload(
@@ -99,9 +102,11 @@ use dataplatform_rust_sdk::files::FileUpload;
 let mut site = Resource::new();
 site.external_id = "site_harbour_tower".into();
 site.name = "Harbour Tower".into();
+site.labels = Some(vec!["Site".into()]);
 let mut zone = Resource::new();
 zone.external_id = "zone_level_12".into();
 zone.name = "Level 12".into();
+zone.labels = Some(vec!["Zone".into()]);
 
 api.resources.create(
     vec![site, zone],
