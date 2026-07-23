@@ -42,9 +42,11 @@ A farm *contains* fields; each field's sensors are series.
 <TabItem value="java" label="Java">
 
 ```java
-client.timeseries().create(
-    Timeseries.of("field_north_40_soil_moisture").name("North 40 soil moisture").unit("pct"),
-    Timeseries.of("field_north_40_soil_temp_c").name("North 40 soil temperature").unit("deg_c"));
+var moisture = Timeseries.of("field_north_40_soil_moisture").name("North 40 soil moisture");
+moisture.setUnit("pct");
+var soilTemp = Timeseries.of("field_north_40_soil_temp_c").name("North 40 soil temperature");
+soilTemp.setUnit("deg_c");
+client.timeseries().create(moisture, soilTemp);
 
 client.timeseries().ingest(Map.of(
     "field_north_40_soil_moisture", moistureReadings));   // List<Datapoint>
