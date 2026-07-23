@@ -53,8 +53,10 @@ let resources = api.resources.by_ids(&vec![
 ## Create resources and relations
 
 Pass the resource forms (nodes) and the relation forms (edges); the call returns the
-created graph — nodes plus server-assigned edges. Relationship types are upper-cased by
-the server.
+created graph — nodes plus server-assigned edges. Each resource needs **at least one
+label** (a type tag such as `Plant` or `Pump`) — a node with none is rejected with
+`400 resource.needs.at.least.one.label`. Labels and relationship types are both
+upper-cased by the server.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -63,10 +65,12 @@ the server.
 ResourceForm plant = new ResourceForm();
 plant.setExternalId("plant_oslo");
 plant.setName("Oslo Plant");
+plant.setLabels(List.of("Plant"));
 
 ResourceForm pump = new ResourceForm();
 pump.setExternalId("pump_1");
 pump.setName("Pump 1");
+pump.setLabels(List.of("Pump"));
 
 RelForm contains = new RelForm();
 contains.setName("contains");
@@ -86,8 +90,8 @@ System.out.println(created.getNodes().size() + " resources, "
 ```python
 import datahub_sdk
 
-plant = datahub_sdk.Resource(external_id="plant_oslo", name="Oslo Plant")
-pump = datahub_sdk.Resource(external_id="pump_1", name="Pump 1")
+plant = datahub_sdk.Resource(external_id="plant_oslo", name="Oslo Plant", labels=["Plant"])
+pump = datahub_sdk.Resource(external_id="pump_1", name="Pump 1", labels=["Pump"])
 contains = datahub_sdk.RelForm.by_external_ids("plant_oslo", "pump_1", "contains")
 
 result = client.resources.create([plant, pump], [contains])
@@ -104,10 +108,12 @@ use dataplatform_rust_sdk::relations::RelForm;
 let mut plant = Resource::new();
 plant.external_id = "plant_oslo".into();
 plant.name = "Oslo Plant".into();
+plant.labels = Some(vec!["Plant".into()]);
 
 let mut pump = Resource::new();
 pump.external_id = "pump_1".into();
 pump.name = "Pump 1".into();
+pump.labels = Some(vec!["Pump".into()]);
 
 let contains = RelForm::by_external_ids("plant_oslo", "pump_1", "contains");
 

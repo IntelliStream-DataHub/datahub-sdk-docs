@@ -52,6 +52,60 @@ api.time_series.create_one(&ts).await?;
 </TabItem>
 </Tabs>
 
+## Value types
+
+Every series has a **value type** that decides how its datapoints are stored. Leave it
+unset and the series is floating-point (`float32`) — right for most sensor readings, so
+the create above accepts decimal values as-is. Set it explicitly when you need something
+else:
+
+| Value type | Use it for |
+| --- | --- |
+| `float32` *(default)* | Sensor readings — 32-bit precision is plenty. |
+| `float` | Double-precision floating point. |
+| `numeric` / `decimal32` | **Exact decimals** — money, lab values — stored without floating-point rounding. Pass the values as strings. |
+| `bigint` | Whole numbers (counts, integer statuses). |
+| `text` | Non-numeric string values. |
+| `mixed` | Heterogeneous values in one series. |
+
+A float written to a `bigint` series is rejected, so pick the type that matches the data.
+For a value that must reconcile exactly, use `numeric`:
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+Timeseries price = new Timeseries()
+        .setExternalId("book_value_usd")
+        .setName("Book value (USD)");
+price.setUnit("usd");
+price.setValueType("numeric");        // exact decimals, no float rounding
+
+client.timeseries().create(List.of(price));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+client.timeseries.create([datahub_sdk.TimeSeries(
+    external_id="book_value_usd", name="Book value (USD)",
+    unit="usd", value_type="numeric")])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+let mut price = TimeSeries::new("book_value_usd", "Book value (USD)");
+price.unit = Some("usd".into());
+price.value_type = "numeric".into();  // exact decimals, no float rounding
+api.time_series.create_one(&price).await?;
+```
+
+</TabItem>
+</Tabs>
+
 ## Delete a series
 
 Deletes the series and its datapoints. Remove any referencing subscriptions (and edges) first, or
