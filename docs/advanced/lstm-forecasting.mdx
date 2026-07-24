@@ -50,10 +50,10 @@ rf = datahub_sdk.RetrieveFilter(
     ts="well_a12_oil_rate_bpd",
     start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=730),
     end=pd.Timestamp.now(tz="UTC"),
-    aggregates=["avg"], granularity="1d")
+    aggregates=["avg"], granularity="1d", limit=100_000)
 pts = client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()
 
-rate = pd.Series([float(p.value) for p in pts],
+rate = pd.Series([float(p.average) for p in pts],
                  index=pd.to_datetime([p.timestamp for p in pts])).sort_index().asfreq("1d").interpolate()
 
 scaler = MinMaxScaler()
@@ -71,6 +71,7 @@ filter.setStart(ZonedDateTime.now().minusDays(730));
 filter.setEnd(ZonedDateTime.now());
 filter.setAggregates(List.of("avg"));
 filter.setGranularity("1d");
+filter.setLimit(100000);
 
 var request = new DataRetriever<RetrieveFilter>();
 request.setItems(List.of(filter));
@@ -91,6 +92,7 @@ let filter = RetrieveFilter {
     end: Some(Utc::now()),
     aggregates: Some(vec!["avg".into()]),
     granularity: Some("1d".into()),
+    limit: Some(100_000),
     ..Default::default()
 };
 let series = api.time_series
@@ -150,10 +152,10 @@ for _ in range(HORIZON):
     seq = np.append(seq[:, 1:, :], [[[nxt]]], axis=1)
 
 forecast = scaler.inverse_transform(np.array(preds).reshape(-1, 1)).ravel()
-index = pd.date_range(rate.index[-1] + pd.Timedelta(days=1), periods=HORIZON, freq="1d", tz="UTC")
+index = pd.date_range(rate.index[-1] + pd.Timedelta(days=1), periods=HORIZON, freq="1d")
 
 client.timeseries.create([datahub_sdk.TimeSeries(
-    external_id="well_a12_oil_rate_forecast", name="Well A-12 oil-rate forecast", unit="bpd")])
+    external_id="well_a12_oil_rate_forecast", name="Well A-12 oil-rate forecast", unit="bpd", value_type="float")])
 client.timeseries.insert_from_lists(
     timestamps=index, values=forecast, ts="well_a12_oil_rate_forecast")
 ```

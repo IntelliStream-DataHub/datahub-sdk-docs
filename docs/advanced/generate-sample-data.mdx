@@ -274,13 +274,13 @@ move together until a late **kick** (gas influx) pushes returns and pit volume u
 standpipe pressure sags, breaking the joint pattern the autoencoder learned.
 
 ```python
-def drilling_process(minutes=60*24*14):
-    idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=minutes, freq="1min")
-    flow_in   = 600 + 40*np.sin(2*np.pi*np.arange(minutes)/(60*24)) + np.random.normal(0, 4, minutes)
-    flow_out  = 590 + 0.97*(flow_in - 600) + np.random.normal(0, 4, minutes)     # returns track pumps-in
-    pit_vol   = 240 + 0.02*(flow_in - 600) + np.random.normal(0, 0.5, minutes)   # steady active pits
-    standpipe = 2800 + 3.0*(flow_in - 600) + np.random.normal(0, 15, minutes)
-    flow_out[-600:]  += np.linspace(0, 60, 600)          # kick: returns gain over flow-in
+def drilling_process(seconds=60*60):                     # 1 h at 1 s — the LSTM autoencoder works in seconds
+    idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=seconds, freq="1s")
+    flow_in   = 600 + 40*np.sin(2*np.pi*np.arange(seconds)/3600) + np.random.normal(0, 4, seconds)
+    flow_out  = 590 + 0.97*(flow_in - 600) + np.random.normal(0, 4, seconds)     # returns track pumps-in
+    pit_vol   = 240 + 0.02*(flow_in - 600) + np.random.normal(0, 0.5, seconds)   # steady active pits
+    standpipe = 2800 + 3.0*(flow_in - 600) + np.random.normal(0, 15, seconds)
+    flow_out[-600:]  += np.linspace(0, 60, 600)          # kick over the last 10 min: returns gain over flow-in
     pit_vol[-600:]   += np.linspace(0, 8, 600)           # pit volume rises with the influx
     standpipe[-600:] -= np.linspace(0, 120, 600)         # standpipe sags as gas lightens the column
     return idx, {"rig_dw1_flow_in_gpm": flow_in, "rig_dw1_flow_out_gpm": flow_out,
