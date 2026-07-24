@@ -161,6 +161,13 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import average_precision_score, classification_report
 
 # labelled history: [(account_external_id, was_sar), ...]
+# In production this comes from your case-management system. For the sandbox, the flagged
+# ring around account_77310 are the known SARs and the other connected accounts are cleared.
+def load_investigation_outcomes():
+    ring    = ["account_77310", "account_44120", "account_61885", "account_22907"]
+    cleared = ["account_1", "account_2", "account_3", "account_4"]
+    return [(a, True) for a in ring] + [(a, False) for a in cleared]
+
 labelled = load_investigation_outcomes()
 X = pd.DataFrame([features(acct) for acct, _ in labelled])
 y = np.array([int(was_sar) for _, was_sar in labelled])
