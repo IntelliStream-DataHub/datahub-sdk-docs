@@ -308,7 +308,8 @@ def messy_sensor(hours=24*7, base=90.0, swing=8.0, noise=1.0):
     s.iloc[np.random.randint(0, n, n//150)] = np.nan                             # scattered dropouts
     gap   = np.random.randint(0, n - 240); s.iloc[gap:gap+180]     = np.nan       # a longer gap
     stuck = np.random.randint(0, n - 240); s.iloc[stuck:stuck+120] = base         # stuck / flatline
-    return idx, s.to_numpy()
+    s = s.dropna()               # dropouts/gaps become real gaps — NaN values can't be ingested
+    return s.index, s.to_numpy()
 
 idx, temp = messy_sensor(base=90, swing=8, noise=1.0)
 ingest("engine_temperature_raw", idx, temp, unit="celsius")
