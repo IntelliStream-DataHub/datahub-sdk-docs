@@ -103,55 +103,52 @@ let series = api.time_series
 </TabItem>
 </Tabs>
 
-## 2. Frame it as sliding windows
+## 2. Frame it as input window → forecast horizon
 
-An LSTM learns "given the last *N* days, what comes next?". Slice the series into
-overlapping windows: each input is `N` days, each target is the day that follows.
+An LSTM learns "given the last `LOOKBACK` days, what do the next `HORIZON` days look
+like?". Slice the series into overlapping pairs: each input is `LOOKBACK` days, each
+target is the whole `HORIZON` that follows. Predicting the horizon in **one shot** (rather
+than one day at a time, feeding each prediction back in) avoids the error build-up that
+makes recursive forecasts drift off the trend.
 
 ```python
-LOOKBACK = 60
+LOOKBACK, HORIZON = 90, 90
 
-def windows(arr, n):
-    X = np.stack([arr[i:i+n, 0] for i in range(len(arr) - n)])
-    y = arr[n:, 0]
-    return X[..., None], y          # X shape: (samples, N, 1)
+def windows(arr, lookback, horizon):
+    X = np.stack([arr[i:i+lookback, 0]         for i in range(len(arr) - lookback - horizon)])
+    Y = np.stack([arr[i+lookback:i+lookback+horizon, 0] for i in range(len(arr) - lookback - horizon)])
+    return X[..., None], Y          # X: (samples, LOOKBACK, 1), Y: (samples, HORIZON)
 
-X, y = windows(scaled, LOOKBACK)
+X, Y = windows(scaled, LOOKBACK, HORIZON)
 split = int(len(X) * 0.85)
-Xtr, Xte, ytr, yte = X[:split], X[split:], y[:split], y[split:]
+Xtr, Xte, Ytr, Yte = X[:split], X[split:], Y[:split], Y[split:]
 ```
 
 ## 3. Train the LSTM
 
-A single LSTM layer feeding a dense output is plenty for a univariate forecast.
+A single LSTM layer feeding a dense layer with one output *per horizon step* learns the
+whole forecast at once.
 
 ```python
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense
 from tensorflow.keras.callbacks import EarlyStopping
 
-model = Sequential([LSTM(64, input_shape=(LOOKBACK, 1)), Dense(1)])
+model = Sequential([LSTM(64, input_shape=(LOOKBACK, 1)), Dense(HORIZON)])
 model.compile(optimizer="adam", loss="mse")
-model.fit(Xtr, ytr, validation_data=(Xte, yte),
-          epochs=50, batch_size=32,
-          callbacks=[EarlyStopping(patience=5, restore_best_weights=True)], verbose=0)
+model.fit(Xtr, Ytr, validation_data=(Xte, Yte),
+          epochs=60, batch_size=32,
+          callbacks=[EarlyStopping(patience=8, restore_best_weights=True)], verbose=0)
 ```
 
 ## 4. Forecast the horizon and write it back
 
-Forecast **recursively** — predict the next day, append it, slide the window forward —
-then inverse-scale and publish the forecast as its own series.
+The model outputs the whole horizon in a single call — feed it the most recent
+`LOOKBACK` days, inverse-scale the result, and publish it as its own series.
 
 ```python
-HORIZON = 90
-seq = scaled[-LOOKBACK:].reshape(1, LOOKBACK, 1)
-preds = []
-for _ in range(HORIZON):
-    nxt = model.predict(seq, verbose=0)[0, 0]
-    preds.append(nxt)
-    seq = np.append(seq[:, 1:, :], [[[nxt]]], axis=1)
-
-forecast = scaler.inverse_transform(np.array(preds).reshape(-1, 1)).ravel()
+pred = model.predict(scaled[-LOOKBACK:].reshape(1, LOOKBACK, 1), verbose=0)
+forecast = scaler.inverse_transform(pred.reshape(-1, 1)).ravel()
 index = pd.date_range(rate.index[-1] + pd.Timedelta(days=1), periods=HORIZON, freq="1d")
 
 client.timeseries.create([datahub_sdk.TimeSeries(
@@ -168,8 +165,8 @@ below its economic limit.
 
 - **Go multivariate.** Feed rate, tubing pressure and water-cut together (input shape
   `(N, 3)`) so the model uses their interaction — usually a big accuracy gain.
-- **Direct multi-step.** Predict all `HORIZON` steps at once (`Dense(HORIZON)`) to avoid
-  recursive error build-up.
+- **Encoder–decoder.** For long horizons, a seq2seq LSTM decodes the horizon internally —
+  more expressive than a single dense layer when the forecast shape is complex.
 - **Quantiles.** Train with a pinball loss for a P10/P90 band, not just a point forecast.
 
 ## Further reading
