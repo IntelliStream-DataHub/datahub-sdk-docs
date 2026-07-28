@@ -46,12 +46,12 @@ client = datahub_sdk.DataHubClient.from_env()
 
 def series(external_id, start, end, granularity="5m"):
     rf = datahub_sdk.RetrieveFilter(ts=external_id, start=start, end=end,
-                                    aggregates=["avg"], granularity=granularity)
+                                    aggregates=["avg"], granularity=granularity, limit=100_000)
     pts = client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()
-    return pd.Series([float(p.value) for p in pts],
+    return pd.Series([float(p.average) for p in pts],
                      index=pd.to_datetime([p.timestamp for p in pts])).sort_index()
 
-start, end = pd.Timestamp("2026-01-01", tz="UTC"), pd.Timestamp("2026-06-01", tz="UTC")
+start, end = pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=14), pd.Timestamp.now(tz="UTC")
 SENSORS = ["cdu_1_top_temp_c", "cdu_1_reflux_ratio", "cdu_1_feed_bpd", "cdu_1_pressure_kpa"]
 features = pd.DataFrame({s: series(s, start, end) for s in SENSORS})
 
@@ -67,10 +67,11 @@ train = features.reindex(lab.index, method="nearest").join(lab.rename("y")).drop
 // Java pulls the sensor and lab series the same way; the model below is Python.
 var filter = new RetrieveFilter();
 filter.setExternalId("cdu_1_top_temp_c");
-filter.setStart(ZonedDateTime.parse("2026-01-01T00:00:00Z"));
-filter.setEnd(ZonedDateTime.parse("2026-06-01T00:00:00Z"));
+filter.setStart(ZonedDateTime.now().minusDays(14));
+filter.setEnd(ZonedDateTime.now());
 filter.setAggregates(List.of("avg"));
 filter.setGranularity("5m");
+filter.setLimit(100000);
 
 var request = new DataRetriever<RetrieveFilter>();
 request.setItems(List.of(filter));
@@ -87,10 +88,11 @@ use chrono::Utc;
 
 let filter = RetrieveFilter {
     external_id: Some("cdu_1_top_temp_c".into()),
-    start: Some("2026-01-01T00:00:00Z".parse().unwrap()),
-    end: Some("2026-06-01T00:00:00Z".parse().unwrap()),
+    start: Some(Utc::now() - chrono::Duration::days(14)),
+    end: Some(Utc::now()),
     aggregates: Some(vec!["avg".into()]),
     granularity: Some("5m".into()),
+    limit: Some(100_000),
     ..Default::default()
 };
 let pts = api.time_series
@@ -134,7 +136,7 @@ virtual = rf.predict(recent[SENSORS])
 
 client.timeseries.create([datahub_sdk.TimeSeries(
     external_id="cdu_1_product_sulfur_ppm_soft", name="CDU-1 product sulfur (soft sensor)",
-    unit="ppm")])
+    unit="ppm", value_type="float")])
 client.timeseries.insert_from_lists(
     timestamps=recent.index, values=virtual, ts="cdu_1_product_sulfur_ppm_soft")
 ```

@@ -110,7 +110,16 @@ A row is positive if the pump failed within the next 7 days. Pull historical fai
 events and label each `(pump, day)` accordingly.
 
 ```python
-# failures: DataFrame of (pump, failed_on) from /events (type = esp_failure)
+# failures: DataFrame of (pump, failed_on), pulled from /events (type = esp_failure)
+failures = pd.DataFrame([
+    {"pump": e.metadata.get("pump"), "failed_on": pd.to_datetime(e.event_time, utc=True)}
+    for e in client.events.filter(datahub_sdk.EventFilter(
+        datahub_sdk.BasicEventFilter(type="esp_failure"), limit=1000))])
+
+# one feature row per pump per day across the history you have
+training_grid = [(p, d) for p in ["pump_esp_a12"]
+                 for d in pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=260, freq="1d")]
+
 def label(pump, day, failures):
     upcoming = failures[(failures["pump"] == pump) &
                         (failures["failed_on"] > day) &

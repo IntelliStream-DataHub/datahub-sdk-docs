@@ -40,13 +40,14 @@ client = datahub_sdk.DataHubClient.from_env()
 
 def load(ext_id):
     rf = datahub_sdk.RetrieveFilter(ts=ext_id,
-        start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=7), end=pd.Timestamp.now(tz="UTC"))
+        start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=7), end=pd.Timestamp.now(tz="UTC"), limit=100_000)
     pts = client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()
     return pd.Series([float(p.value) for p in pts],
-                     index=pd.to_datetime([p.timestamp for p in pts])).sort_index()
+                     index=pd.to_datetime([p.timestamp for p in pts], utc=True)).sort_index()
 
 def store(ext_id, series, name=None, unit="value"):
     client.timeseries.create([datahub_sdk.TimeSeries(external_id=ext_id, name=name or ext_id, unit=unit,
+                                                     value_type="float",
                                                      description="Derived series — not a raw measurement.")])
     s = series.dropna()
     client.timeseries.insert_from_lists(timestamps=s.index, values=s.to_numpy(), ts=ext_id)
@@ -94,7 +95,7 @@ same call in Java and Rust — see [model assets as a graph](/guides/model-asset
 
 ```python
 def fn(ext_id, name):
-    return datahub_sdk.Resource(external_id=ext_id, name=name, labels=["FUNCTION"])
+    return datahub_sdk.Resource(external_id=ext_id, name=name, labels=["PipelineStep"])
 
 functions = [
     fn("clean_temp_fn", "Clean temperature"),   fn("clean_vib_fn", "Clean vibration"),

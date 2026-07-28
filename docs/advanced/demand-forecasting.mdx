@@ -46,10 +46,10 @@ rf = datahub_sdk.RetrieveFilter(
     ts="feeder_f12_load_mw",
     start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=120),
     end=pd.Timestamp.now(tz="UTC"),
-    aggregates=["avg"], granularity="1h")    # hourly history
+    aggregates=["avg"], granularity="1h", limit=100_000)    # hourly history
 
 points = client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()
-demand = pd.Series([float(p.value) for p in points],
+demand = pd.Series([float(p.average) for p in points],
                    index=pd.to_datetime([p.timestamp for p in points])).sort_index()
 demand = demand.asfreq("1h").interpolate()        # regular hourly grid
 ```
@@ -65,6 +65,7 @@ filter.setStart(ZonedDateTime.now().minusDays(120));
 filter.setEnd(ZonedDateTime.now());
 filter.setAggregates(List.of("avg"));
 filter.setGranularity("1h");
+filter.setLimit(100000);
 
 var request = new DataRetriever<RetrieveFilter>();
 request.setItems(List.of(filter));
@@ -85,6 +86,7 @@ let filter = RetrieveFilter {
     end: Some(Utc::now()),
     aggregates: Some(vec!["avg".into()]),
     granularity: Some("1h".into()),
+    limit: Some(100_000),
     ..Default::default()
 };
 let history = api.time_series
@@ -161,7 +163,7 @@ for step in range(HORIZON):
 
 forecast = pd.Series(preds)
 client.timeseries.create([datahub_sdk.TimeSeries(
-    external_id="feeder_f12_load_mw_forecast", name="Feeder F12 load — 48h forecast", unit="mw")])
+    external_id="feeder_f12_load_mw_forecast", name="Feeder F12 load — 48h forecast", unit="mw", value_type="float")])
 client.timeseries.insert_from_lists(
     timestamps=forecast.index, values=forecast.to_numpy(), ts="feeder_f12_load_mw_forecast")
 ```

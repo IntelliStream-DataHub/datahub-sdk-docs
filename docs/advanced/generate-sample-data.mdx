@@ -24,7 +24,7 @@ client = datahub_sdk.DataHubClient.from_env()
 
 def ingest(external_id, index, values, unit=None, name=None):
     client.timeseries.create([datahub_sdk.TimeSeries(
-        external_id=external_id, name=name or external_id, unit=unit)])
+        external_id=external_id, name=name or external_id, unit=unit or "value", value_type="float")])
     client.timeseries.insert_from_lists(timestamps=index, values=np.asarray(values), ts=external_id)
     print(f"ingested {len(values):,} points → {external_id}")
 ```
@@ -37,7 +37,7 @@ For [predictive maintenance](/advanced/predictive-maintenance),
 then develops a fault — rising amplitude and impulsiveness over the final stretch.
 
 ```python
-def degrading_vibration(hours=24*60, fs_per_hour=3600):
+def degrading_vibration(hours=24, fs_per_hour=3600):
     n = hours * fs_per_hour
     idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=n, freq="1s")
     t = np.linspace(0, 1, n)
@@ -68,12 +68,12 @@ For [LSTM forecasting](/advanced/lstm-forecasting): a hyperbolic decline with no
 weekly wobble — the shape of a producing well's rate.
 
 ```python
-def decline_curve(days=730, qi=1200, b=0.8, d=0.0025):
+def decline_curve(days=540, qi=1200, b=0.8, d=0.006):
     idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=days, freq="1d")
     t = np.arange(days)
-    rate = qi / (1 + b * d * t) ** (1 / b)              # hyperbolic decline
+    rate = qi / (1 + b * d * t) ** (1 / b)              # hyperbolic decline (still visibly falling at the tail)
     weekly = 1 + 0.03 * np.sin(2 * np.pi * t / 7)
-    return idx, rate * weekly + np.random.normal(0, 15, days)
+    return idx, rate * weekly + np.random.normal(0, 5, days)
 
 idx, rate = decline_curve()
 ingest("well_a12_oil_rate_bpd", idx, rate, unit="bpd")
@@ -114,8 +114,9 @@ minute, plus an expensive lab measurement only once an hour that depends on them
 idx, channels = correlated_process()                      # reuse the dense sensors above
 # lab value is a (hidden) function of the sensors, sampled hourly with measurement noise
 lab_idx = idx[::60]
-lab = (3.0 + 0.02 * channels["cdu_1_top_temp_c"][::60]
-           - 0.5 * channels["cdu_1_reflux_ratio"][::60] + np.random.normal(0, 0.3, len(lab_idx)))
+lab = (5.0 + 0.05 * (channels["cdu_1_top_temp_c"][::60] - 190)      # strong, learnable dependence
+           - 2.0 * (channels["cdu_1_reflux_ratio"][::60] - 2.5)     # on the online sensors...
+           + np.random.normal(0, 0.05, len(lab_idx)))               # ...with small measurement noise
 ingest("cdu_1_product_sulfur_ppm_lab", lab_idx, lab, unit="ppm")
 ```
 
@@ -154,26 +155,22 @@ ingest("pump_esp_a12_vibration_mm_s",      esp_idx, 2.0 + 6*stress + np.abs(np.r
 ## F. A small graph
 
 For the graph-feature builds ([fraud classification](/advanced/fraud-classification),
-[K-Means communities](/advanced/kmeans-clustering)): the ordinary accounts
-`account_1…7`, plus the flagged ring that fraud classification traverses from
+[K-Means communities](/advanced/kmeans-clustering)): 30 ordinary accounts
+`account_1…30`, plus the flagged ring that fraud classification traverses from
 `account_77310`. Fraud classification also reads each account's behavioural series
 (`<account>_inflow` / `<account>_outflow`), seeded below.
 
 ```python
-ring = ["account_77310", "account_44120", "account_61885", "account_22907"]   # a flagged ring
-nodes = ([datahub_sdk.Resource(external_id=f"account_{i}", name=f"Account {i}", labels=["Account"]) for i in range(1, 8)]
-         + [datahub_sdk.Resource(external_id=a, name=a.replace("_", " ").title(), labels=["Account"]) for a in ring])
-edges = [
-    datahub_sdk.RelForm.by_external_ids("account_1", "account_2", "sent_to"),
-    datahub_sdk.RelForm.by_external_ids("account_2", "account_3", "sent_to"),
-    datahub_sdk.RelForm.by_external_ids("account_3", "account_1", "sent_to"),   # a loop
-    datahub_sdk.RelForm.by_external_ids("account_3", "account_4", "sent_to"),
-    # the flagged ring fraud-classification walks out from account_77310
-    datahub_sdk.RelForm.by_external_ids("account_77310", "account_44120", "sent_to"),
-    datahub_sdk.RelForm.by_external_ids("account_44120", "account_61885", "sent_to"),
-    datahub_sdk.RelForm.by_external_ids("account_61885", "account_22907", "sent_to"),
-    datahub_sdk.RelForm.by_external_ids("account_22907", "account_77310", "sent_to"),   # closes the ring
-]
+ring = ["account_77310", "account_44120", "account_61885", "account_22907"]   # a flagged laundering ring
+ordinary = [f"account_{i}" for i in range(1, 31)]                             # 30 ordinary accounts
+nodes = [datahub_sdk.Resource(external_id=a, name=a.replace("_", " ").title(), labels=["Account"])
+         for a in ordinary + ring]
+# ordinary accounts: an acyclic transfer web — money only flows "forward", so no loops or pass-through mules
+edges = [datahub_sdk.RelForm.by_external_ids(f"account_{i}", f"account_{i+step}", "sent_to")
+         for i in range(1, 31) for step in (1, 3) if i + step <= 30]
+# the flagged ring: a tight cycle fraud-classification walks out from account_77310 (funds loop back)
+edges += [datahub_sdk.RelForm.by_external_ids(ring[k], ring[(k+1) % len(ring)], "sent_to")
+          for k in range(len(ring))]
 client.resources.create(nodes, edges)
 ```
 
@@ -184,9 +181,9 @@ for every account in the graph:
 ```python
 hrs = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=24*7, freq="1h")
 n = len(hrs)
-profiles = {a: (50_000, 0.98) for a in ring}                          # ring mules: high volume, in≈out
-profiles.update({f"account_{i}": (np.random.uniform(2_000, 8_000),
-                                  np.random.uniform(0.3, 0.7)) for i in range(1, 8)})   # ordinary accounts
+profiles = {a: (50_000, 0.97) for a in ring}                          # ring mules: high volume, in≈out
+profiles.update({a: (np.random.uniform(2_000, 8_000),
+                     np.random.uniform(0.3, 0.6)) for a in ordinary})   # ordinary: only part flows back out
 for acct, (base, ratio) in profiles.items():
     inflow  = np.clip(base * (1 + 0.3*np.sin(2*np.pi*np.arange(n)/24)) + np.random.normal(0, base*0.05, n), 0, None)
     outflow = np.clip(inflow * ratio + np.random.normal(0, base*0.03, n), 0, None)      # ~ratio of it flows back out
@@ -225,7 +222,7 @@ def pen_oxygen(days=30):
     n = len(idx)
     temp = 12 + 2*np.sin(2*np.pi*np.arange(n)/(24*4)) + np.random.normal(0, 0.2, n)
     do   = 8.5 - 0.15*(temp - 12) + np.random.normal(0, 0.2, n)     # warmer water holds less O2
-    for start in (5*24*4, 14*24*4, 23*24*4):                        # three crash episodes
+    for start in (5*24*4, 14*24*4, 23*24*4, 27*24*4):               # crash episodes (incl. a late one)
         do[start:start+8]    -= np.linspace(0, 4, 8)
         do[start+8:start+20] -= 4
     return idx, np.clip(do, 1, None), temp
@@ -274,13 +271,13 @@ move together until a late **kick** (gas influx) pushes returns and pit volume u
 standpipe pressure sags, breaking the joint pattern the autoencoder learned.
 
 ```python
-def drilling_process(minutes=60*24*14):
-    idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=minutes, freq="1min")
-    flow_in   = 600 + 40*np.sin(2*np.pi*np.arange(minutes)/(60*24)) + np.random.normal(0, 4, minutes)
-    flow_out  = 590 + 0.97*(flow_in - 600) + np.random.normal(0, 4, minutes)     # returns track pumps-in
-    pit_vol   = 240 + 0.02*(flow_in - 600) + np.random.normal(0, 0.5, minutes)   # steady active pits
-    standpipe = 2800 + 3.0*(flow_in - 600) + np.random.normal(0, 15, minutes)
-    flow_out[-600:]  += np.linspace(0, 60, 600)          # kick: returns gain over flow-in
+def drilling_process(seconds=60*60):                     # 1 h at 1 s — the LSTM autoencoder works in seconds
+    idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=seconds, freq="1s")
+    flow_in   = 600 + 40*np.sin(2*np.pi*np.arange(seconds)/3600) + np.random.normal(0, 4, seconds)
+    flow_out  = 590 + 0.97*(flow_in - 600) + np.random.normal(0, 4, seconds)     # returns track pumps-in
+    pit_vol   = 240 + 0.02*(flow_in - 600) + np.random.normal(0, 0.5, seconds)   # steady active pits
+    standpipe = 2800 + 3.0*(flow_in - 600) + np.random.normal(0, 15, seconds)
+    flow_out[-600:]  += np.linspace(0, 60, 600)          # kick over the last 10 min: returns gain over flow-in
     pit_vol[-600:]   += np.linspace(0, 8, 600)           # pit volume rises with the influx
     standpipe[-600:] -= np.linspace(0, 120, 600)         # standpipe sags as gas lightens the column
     return idx, {"rig_dw1_flow_in_gpm": flow_in, "rig_dw1_flow_out_gpm": flow_out,
@@ -308,7 +305,8 @@ def messy_sensor(hours=24*7, base=90.0, swing=8.0, noise=1.0):
     s.iloc[np.random.randint(0, n, n//150)] = np.nan                             # scattered dropouts
     gap   = np.random.randint(0, n - 240); s.iloc[gap:gap+180]     = np.nan       # a longer gap
     stuck = np.random.randint(0, n - 240); s.iloc[stuck:stuck+120] = base         # stuck / flatline
-    return idx, s.to_numpy()
+    s = s.dropna()               # dropouts/gaps become real gaps — NaN values can't be ingested
+    return s.index, s.to_numpy()
 
 idx, temp = messy_sensor(base=90, swing=8, noise=1.0)
 ingest("engine_temperature_raw", idx, temp, unit="celsius")

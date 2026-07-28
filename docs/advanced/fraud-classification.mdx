@@ -49,8 +49,7 @@ import datahub_sdk, numpy as np, pandas as pd, networkx as nx
 client = datahub_sdk.DataHubClient.from_env()
 
 def network_of(account_external_id):
-    return client.resources.fetch_related(
-        external_id=account_external_id, depth=4, relationship_types=["sent_to"])
+    return client.resources.fetch_related(external_id=account_external_id, depth=4)
 ```
 
 </TabItem>
@@ -161,12 +160,20 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import average_precision_score, classification_report
 
 # labelled history: [(account_external_id, was_sar), ...]
+# In production this comes from your case-management system. For the sandbox, the flagged
+# ring around account_77310 are the known SARs and the other connected accounts are cleared.
+def load_investigation_outcomes():
+    ring    = ["account_77310", "account_44120", "account_61885", "account_22907"]
+    cleared = [f"account_{i}" for i in range(1, 31)]
+    return [(a, True) for a in ring] + [(a, False) for a in cleared]
+
 labelled = load_investigation_outcomes()
 X = pd.DataFrame([features(acct) for acct, _ in labelled])
 y = np.array([int(was_sar) for _, was_sar in labelled])
 
 Xtr, Xte, ytr, yte = train_test_split(X, y, test_size=0.2, stratify=y, random_state=0)
 clf = HistGradientBoostingClassifier(max_iter=300, learning_rate=0.05,
+                                     min_samples_leaf=5,      # modest labelled set — let leaves specialise
                                      class_weight="balanced").fit(Xtr, ytr)
 
 proba = clf.predict_proba(Xte)[:, 1]
