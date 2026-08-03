@@ -28,6 +28,10 @@ const config = {
         docs: {
           sidebarPath: './sidebars.js',
           routeBasePath: '/',          // docs at site root, GitBook-style
+          // Adds "Edit this page" to every doc. Docusaurus appends the file's
+          // path relative to this site directory. Note the branch here is
+          // master, unlike datahub-docs which is main.
+          editUrl: 'https://github.com/IntelliStream-DataHub/datahub-sdk-docs/edit/master/',
         },
         blog: false,                    // SDK docs site — no blog
         theme: { customCss: './src/css/custom.css' },
@@ -67,10 +71,19 @@ const config = {
         },
         items: [
           { type: 'docSidebar', sidebarId: 'tutorialSidebar', position: 'left', label: 'Docs' },
+          // Reciprocal of the "Developer & SDK docs" item in datahub-docs.
+          // Raw anchors, not `href` items. A Docusaurus <Link> treats any path
+          // starting with "/" as internal and hands the click to react-router,
+          // which pushState's the URL and then renders this site's own 404 —
+          // the href looks right in the HTML but the click never leaves the SPA.
+          { type: 'html', position: 'right', value: '<a class="navbar__item navbar__link" href="/data-platform-documentation/">Platform documentation</a>' },
           // Simple version indicator. When the docs start tracking multiple releases,
           // replace this with a docsVersionDropdown via `npm run docusaurus docs:version`.
-          { type: 'html', position: 'right', value: '<span class="badge badge--secondary navbar__version-badge">v1.0-alpha</span>' },
-          { href: 'https://git.intellistream.ai/olavgg/datahub-sdk', label: 'Source', position: 'right' },
+          { type: 'html', position: 'right', value: '<span class="badge badge--secondary navbar__version-badge">v1.0</span>' },
+          // This site's own repo, so "GitHub" is unambiguous. The old link went
+          // to the SDK code on Gitea; if a code link is wanted too it needs its
+          // own item, since the SDK spans three language repos.
+          { href: 'https://github.com/IntelliStream-DataHub/datahub-sdk-docs', label: 'GitHub', position: 'right' },
         ],
       },
       footer: {
@@ -79,6 +92,11 @@ const config = {
           { title: 'Docs', items: [
             { label: 'Quick start', to: '/quickstart' },
             { label: 'Live monitoring', to: '/guides/ingest-timeseries' },
+          ]},
+          { title: 'Elsewhere', items: [
+            { html: '<a class="footer__link-item" href="/data-platform-documentation/">Platform documentation</a>' },
+            { html: '<a class="footer__link-item" href="/">intellistream.ai</a>' },
+            { html: '<a class="footer__link-item" href="/contact-us">Contact us</a>' },
           ]},
         ],
         copyright: `Copyright © ${new Date().getFullYear()} IntelliStream.`,
