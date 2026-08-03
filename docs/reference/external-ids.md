@@ -211,15 +211,41 @@ there is no second set of rules to keep in step.
 ```json
 {
   "externalIds": ["Pump-A 01", "pump_a_02"],
+  "names": ["Pump A 01", "Pump A 02"],
   "dataSetId": 4471
 }
 ```
+
+`names` is optional and pairs with `externalIds` **by position**. Supply it when you have it:
+suggestions are derived from the name first, so an entity called `Valve pressure sensors`
+gets offered `valve_pressure_sensors`, where deriving from a broken id could only manage
+`vps`. Either omit `names` entirely or send exactly as many as there are external ids — a
+partial list is rejected rather than paired up wrongly.
 
 Two things it is good for:
 
 - validating an id as a user types it, rather than on submit;
 - answering *"what would this policy do to the ids I already have?"* before an administrator
   turns it on.
+
+### Suggestions {#suggestions}
+
+Every warning and every rejection carries a `suggestion` where one can be derived — a
+conforming external id you can offer as a one-click fix. It is **offered, never applied**:
+the platform stopped rewriting external ids, which is the whole point of this change.
+
+Two guarantees make it safe to wire straight into a form:
+
+- **A suggestion always satisfies the policy it is offered for.** It is checked against the
+  charset floor, the length bounds and the active preset before being returned, so applying
+  one cannot bounce back with a second rejection.
+- **A suggestion is never an id that is already taken** — neither one that is stored nor one
+  claimed by an earlier item in the same batch.
+
+When nothing can be derived that satisfies both, `suggestion` is absent. That is deliberate:
+an honest omission beats a confident wrong answer. In particular a near-duplicate rejection
+usually has no suggestion, because every variant of the same name folds to the same taken
+value — the `reason` names the existing id instead, since the likeliest fix is to use it.
 
 ## Findings {#findings}
 
@@ -235,7 +261,8 @@ Resolving is a judgement rather than a fix: the entity still breaks the policy, 
 decided that is acceptable. A resolved finding is not reopened when the entity is edited for
 unrelated reasons — only when the offending external id itself changes.
 
-Findings are raised for resources and data sets. Events raise none, whatever the policy says.
+Findings are raised for resources, data sets and time series — everything whose external id
+is a unique identity. Events raise none, whatever the policy says.
 
 ## Practical advice
 
