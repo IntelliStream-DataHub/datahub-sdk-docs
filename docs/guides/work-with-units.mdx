@@ -120,9 +120,11 @@ let by_id = api.units.by_ids(&DataWrapper::from(vec![IdAndExtId::from_id(7)])).a
 </TabItem>
 </Tabs>
 
-:::note Unit external ids are canonical too
-Like every external id, a unit's is snake_case — `m_s` for metres per second, `deg_c`
-for degrees Celsius. Browse the catalogue to find the exact id to reference.
+:::note Unit external ids are snake_case
+The seeded unit catalogue uses snake_case throughout — `m_s` for metres per second, `deg_c`
+for degrees Celsius — so reference them that way and browse the catalogue to find the exact
+id. That is a property of the catalogue, not a rule about external ids in general: the ones
+*you* create are [stored exactly as you send them](/reference/external-ids).
 :::
 
 See the [Units reference](/reference/units) for the full method list.

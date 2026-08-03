@@ -1,5 +1,5 @@
 ---
-sidebar_position: 2
+sidebar_position: 3
 title: Resources
 ---
 import Tabs from '@theme/Tabs';
@@ -10,9 +10,16 @@ import TabItem from '@theme/TabItem';
 Hierarchical, asset-like entities and the relationships between them. Create resources
 and the edges between them in one call; the server returns the persisted graph.
 
+A resource's `externalId` is its **identity**: unique per tenant, stored exactly as you send
+it, and compared without case. Mirror the tag your operation already maintains —
+`VAL-21-PT-1034` is stored as `VAL-21-PT-1034`, not rewritten.
+[External ids & naming →](./external-ids)
+
 ## Look up
 
-Fetch by numeric id or external id (you can mix them).
+Fetch by numeric id or external id (you can mix them). Lookup ignores case, so `pump_1` and
+`PUMP_1` resolve to the same resource; what comes back keeps the spelling it was created
+with.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -56,7 +63,14 @@ Pass the resource forms (nodes) and the relation forms (edges); the call returns
 created graph — nodes plus server-assigned edges. Each resource needs **at least one
 label** (a type tag such as `Plant` or `Pump`) — a node with none is rejected with
 `400 resource.needs.at.least.one.label`. Labels and relationship types are both
-upper-cased by the server.
+upper-cased by the server. External ids are not: they are stored verbatim.
+
+The call is **all-or-nothing**. Every external id in the batch is validated before anything
+is written, so one item rejected by the
+[naming policy](./external-ids#the-naming-policy) means nothing is created and the `400`
+names every offending item, not just the first. If the policy is set to warn instead, the
+response carries a [`warnings` array](./external-ids#warnings-on-the-response) next to
+`items`.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">

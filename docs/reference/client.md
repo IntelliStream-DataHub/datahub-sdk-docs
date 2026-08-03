@@ -369,3 +369,21 @@ match api.resources.by_ids(&vec![IdAndExtId::from_external_id("pump_1")]).await 
 limit. Each client reads them back into a native integer, so this only matters if you
 inspect raw responses.
 :::
+
+### Batch writes are all-or-nothing
+
+Every call that takes a list is validated in full before anything is written, so one bad item
+in 500 creates nothing and the error names every offending item rather than the first. Retry
+the whole batch once you have fixed them.
+
+Two responses are worth recognising by shape:
+
+- **`400` with `type: ".../errors/naming-policy"`** — one or more external ids broke the
+  configured [naming policy](./external-ids#the-naming-policy). Nothing was created; the
+  `violations` array names each one and suggests a replacement.
+- **A `warnings` array beside `items` on a `2xx`** — the write succeeded, and the ids in it
+  are in a data steward's queue. The field is absent when empty, so existing code is
+  unaffected.
+
+Both shapes, and the rules behind them, are in
+[External ids & naming](./external-ids).

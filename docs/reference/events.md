@@ -1,5 +1,5 @@
 ---
-sidebar_position: 5
+sidebar_position: 6
 title: Events
 ---
 import Tabs from '@theme/Tabs';
@@ -8,6 +8,19 @@ import TabItem from '@theme/TabItem';
 # Events
 
 Record and query operational events.
+
+:::info An event's `externalId` is a correlation key, not an identity
+This is the opposite of what it means on a resource, and it is deliberate. An event's
+external id is the **source system's key for the subject** the event is about — an order, a
+permit, a batch — so **many events share one**. "Everything that happened to `PO-4500171`"
+is one indexed lookup, and that is what makes the log an audit trail.
+
+No uniqueness is enforced, and none ever will be. Per-event identity is the event `id`
+below. Naming policies do not apply to events either; only the
+[charset floor](./external-ids#the-charset-floor) does, so `21-PT-1234` is accepted on an
+event even when a `snake_case` policy is rejecting it on resources.
+[The two contracts →](./external-ids#the-two-contracts)
+:::
 
 ## Create
 
