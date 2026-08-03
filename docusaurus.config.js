@@ -7,8 +7,11 @@ const config = {
   tagline: 'Java, Python & Rust client for the DataHub Platform',
   favicon: 'img/favicon.ico',
 
-  url: 'https://docs.intellistream.ai',
-  baseUrl: '/',
+  // Served by the intellistream-web Spring Boot app alongside the user docs at
+  // /data-platform-documentation. baseUrl is baked into every asset URL, the
+  // router basename and the search-index fetch, so it must match the mount path.
+  url: 'https://intellistream.ai',
+  baseUrl: '/sdk-documentation/',
   organizationName: 'intellistream',
   projectName: 'datahub-sdk',
   onBrokenLinks: 'warn',
@@ -52,7 +55,16 @@ const config = {
       colorMode: { respectPrefersColorScheme: true },
       navbar: {
         title: 'DataHub SDK',
-        logo: { alt: 'IntelliStream', src: 'img/logo.svg', srcDark: 'img/logo-dark.svg' },
+        // '/' is the main site root, not this site's baseUrl. That only works
+        // because src/theme/Logo is ejected to pass href through verbatim —
+        // stock Docusaurus would rewrite this to /sdk-documentation/.
+        logo: {
+          alt: 'IntelliStream',
+          src: 'img/logo.svg',
+          srcDark: 'img/logo-dark.svg',
+          href: '/',
+          target: '_self',
+        },
         items: [
           { type: 'docSidebar', sidebarId: 'tutorialSidebar', position: 'left', label: 'Docs' },
           // Simple version indicator. When the docs start tracking multiple releases,
