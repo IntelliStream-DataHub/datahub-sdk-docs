@@ -1,5 +1,5 @@
 ---
-sidebar_position: 4
+sidebar_position: 5
 title: Datasets
 ---
 import Tabs from '@theme/Tabs';
@@ -9,10 +9,15 @@ import TabItem from '@theme/TabItem';
 
 Logical groupings of resources and time-series.
 
-:::note External ids are canonicalized
-A dataset external id is normalized to snake_case (lower-cased, special characters →
-`_`), so a name of `"Plant A"` yields the external id `plant_a`. Use the canonical form
-when you look the dataset up again.
+:::note External ids are stored exactly as you send them
+The server does not rewrite a dataset external id: `Plant-A` stays `Plant-A`. Some clients
+*derive* one from the name as a convenience (the Rust `Dataset::new` below), and that
+derivation is snake_case — but it is a client-side default, not a server rule.
+
+Uniqueness and lookup both ignore case, so `plant_a` collides with `PLANT_A` and either
+spelling finds the same dataset. Datasets are also subject to the
+[naming policy](./external-ids#the-naming-policy) if an administrator has set one.
+[External ids & naming →](./external-ids)
 :::
 
 ## Create

@@ -1,5 +1,5 @@
 ---
-sidebar_position: 3
+sidebar_position: 4
 title: Time-series
 ---
 import Tabs from '@theme/Tabs';
@@ -9,6 +9,9 @@ import TabItem from '@theme/TabItem';
 
 Time-series metadata, datapoint retrieval, and datapoint ingestion (single-request or
 high-throughput).
+
+A series' `externalId` identifies it: unique per tenant, compared without case, and stored
+exactly as you send it. [External ids & naming →](./external-ids)
 
 ## Create a series
 
