@@ -72,13 +72,12 @@ const config = {
         items: [
           { type: 'docSidebar', sidebarId: 'tutorialSidebar', position: 'left', label: 'Docs' },
           // Reciprocal of the "Developer & SDK docs" item in datahub-docs.
-          // Same-domain links stay root-relative so they work on whatever host
-          // serves the build. Docusaurus would otherwise prefix a leading slash
-          // with this site's baseUrl (shouldAddBaseUrlAutomatically in Link.js),
-          // hence autoAddBaseUrl: false. data-noBrokenLinkCheck stops the link
-          // checker flagging a route that lives outside this site.
-          { href: '/data-platform-documentation/', autoAddBaseUrl: false, 'data-noBrokenLinkCheck': true, label: 'Platform documentation', position: 'right' },
-          { href: '/documentation', autoAddBaseUrl: false, 'data-noBrokenLinkCheck': true, label: 'All documentation', position: 'right' },
+          // Raw anchors, not `href` items. A Docusaurus <Link> treats any path
+          // starting with "/" as internal and hands the click to react-router,
+          // which pushState's the URL and then renders this site's own 404 —
+          // the href looks right in the HTML but the click never leaves the SPA.
+          { type: 'html', position: 'right', value: '<a class="navbar__item navbar__link" href="/data-platform-documentation/">Platform documentation</a>' },
+          { type: 'html', position: 'right', value: '<a class="navbar__item navbar__link" href="/documentation">All documentation</a>' },
           // Simple version indicator. When the docs start tracking multiple releases,
           // replace this with a docsVersionDropdown via `npm run docusaurus docs:version`.
           { type: 'html', position: 'right', value: '<span class="badge badge--secondary navbar__version-badge">v1.0</span>' },
@@ -96,10 +95,10 @@ const config = {
             { label: 'Live monitoring', to: '/guides/ingest-timeseries' },
           ]},
           { title: 'Elsewhere', items: [
-            { label: 'Platform documentation', href: '/data-platform-documentation/', autoAddBaseUrl: false, 'data-noBrokenLinkCheck': true },
-            { label: 'All documentation', href: '/documentation', autoAddBaseUrl: false, 'data-noBrokenLinkCheck': true },
-            { label: 'intellistream.ai', href: '/', autoAddBaseUrl: false, 'data-noBrokenLinkCheck': true },
-            { label: 'Contact us', href: '/contact-us', autoAddBaseUrl: false, 'data-noBrokenLinkCheck': true },
+            { html: '<a class="footer__link-item" href="/data-platform-documentation/">Platform documentation</a>' },
+            { html: '<a class="footer__link-item" href="/documentation">All documentation</a>' },
+            { html: '<a class="footer__link-item" href="/">intellistream.ai</a>' },
+            { html: '<a class="footer__link-item" href="/contact-us">Contact us</a>' },
           ]},
         ],
         copyright: `Copyright © ${new Date().getFullYear()} IntelliStream.`,
