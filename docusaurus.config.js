@@ -28,6 +28,10 @@ const config = {
         docs: {
           sidebarPath: './sidebars.js',
           routeBasePath: '/',          // docs at site root, GitBook-style
+          // Adds "Edit this page" to every doc. Docusaurus appends the file's
+          // path relative to this site directory. Note the branch here is
+          // master, unlike datahub-docs which is main.
+          editUrl: 'https://github.com/IntelliStream-DataHub/datahub-sdk-docs/edit/master/',
         },
         blog: false,                    // SDK docs site — no blog
         theme: { customCss: './src/css/custom.css' },
@@ -69,8 +73,11 @@ const config = {
           { type: 'docSidebar', sidebarId: 'tutorialSidebar', position: 'left', label: 'Docs' },
           // Simple version indicator. When the docs start tracking multiple releases,
           // replace this with a docsVersionDropdown via `npm run docusaurus docs:version`.
-          { type: 'html', position: 'right', value: '<span class="badge badge--secondary navbar__version-badge">v1.0-alpha</span>' },
-          { href: 'https://git.intellistream.ai/olavgg/datahub-sdk', label: 'Source', position: 'right' },
+          { type: 'html', position: 'right', value: '<span class="badge badge--secondary navbar__version-badge">v1.0</span>' },
+          // This site's own repo, so "GitHub" is unambiguous. The old link went
+          // to the SDK code on Gitea; if a code link is wanted too it needs its
+          // own item, since the SDK spans three language repos.
+          { href: 'https://github.com/IntelliStream-DataHub/datahub-sdk-docs', label: 'GitHub', position: 'right' },
         ],
       },
       footer: {
