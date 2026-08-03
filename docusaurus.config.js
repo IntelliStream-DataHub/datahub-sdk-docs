@@ -77,7 +77,6 @@ const config = {
           // which pushState's the URL and then renders this site's own 404 —
           // the href looks right in the HTML but the click never leaves the SPA.
           { type: 'html', position: 'right', value: '<a class="navbar__item navbar__link" href="/data-platform-documentation/">Platform documentation</a>' },
-          { type: 'html', position: 'right', value: '<a class="navbar__item navbar__link" href="/documentation">All documentation</a>' },
           // Simple version indicator. When the docs start tracking multiple releases,
           // replace this with a docsVersionDropdown via `npm run docusaurus docs:version`.
           { type: 'html', position: 'right', value: '<span class="badge badge--secondary navbar__version-badge">v1.0</span>' },
@@ -96,7 +95,6 @@ const config = {
           ]},
           { title: 'Elsewhere', items: [
             { html: '<a class="footer__link-item" href="/data-platform-documentation/">Platform documentation</a>' },
-            { html: '<a class="footer__link-item" href="/documentation">All documentation</a>' },
             { html: '<a class="footer__link-item" href="/">intellistream.ai</a>' },
             { html: '<a class="footer__link-item" href="/contact-us">Contact us</a>' },
           ]},
