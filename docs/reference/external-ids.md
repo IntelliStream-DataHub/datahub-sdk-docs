@@ -69,7 +69,8 @@ data sets**; enforcement sits on those write paths.
 
 | Preset | Accepts |
 | --- | --- |
-| `verbatim_tag` | The charset floor and nothing more. **The shipped default.** |
+| `qualified_tag` | The charset floor, plus at least 3 separator-delimited alphanumeric runs. `VAL-21-PT-1034` and `=K1-M3+B02` pass; `pump-1234` and `P-101` do not. **The shipped default, in `warn` mode.** |
+| `verbatim_tag` | The charset floor and nothing more. |
 | `snake_case` | `[a-z0-9_]+` only. |
 | `pattern` | An administrator-supplied regular expression. |
 
@@ -77,6 +78,10 @@ Each policy runs in one of two modes: **reject**, where the request fails with `
 nothing is written, or **warn**, where the request succeeds and a finding is recorded for a
 data steward. A **near-duplicate guard** runs regardless of the preset and is described
 [below](#the-near-duplicate-guard).
+
+Out of the box that means a two-part id such as `pump-1234` is **written and flagged**, not
+refused, while a near duplicate is refused outright. If you are hardening an import, treat a
+non-empty `warnings` array as work to do rather than noise.
 
 Resolution is tenant-first with a per-data-set override: a data set's own naming policy wins
 if it has one, otherwise the tenant's. The override **replaces** the tenant policy rather
