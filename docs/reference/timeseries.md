@@ -109,6 +109,70 @@ api.time_series.create_one(&price).await?;
 </TabItem>
 </Tabs>
 
+## Filter series
+
+`POST /timeseries/filter` finds series by structured criteria. Everything you supply is
+combined with AND — a series must match every criterion to be included.
+
+| Criterion | Matching |
+| --- | --- |
+| `dataSetId` | The data set **and every data set beneath it** in the data set hierarchy — a series attached to a child (or grandchild, …) data set matches too. |
+| `unit` | Case-insensitive; `%` works as a wildcard (`"cel%"`). |
+| `unitExternalId` | Exact match on the unit-catalogue external id (e.g. `temperature_deg_c`). |
+| `metadataKey` / `metadataValue` | Together: that key must carry that value. Alone: any entry with that key (or any entry with that value). |
+
+Results come newest first, capped by `limit` (default 1000, max 10000). Series in data
+sets you lack read access to are silently omitted — the result is what your token may
+see, not an error. For free-text lookups use `POST /timeseries/search` instead.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+import ai.intellistream.datahub.models.datafilters.TimeseriesFilter;
+
+TimeseriesFilter criteria = new TimeseriesFilter();
+criteria.setDataSetId(12L);      // this data set and every data set beneath it
+criteria.setUnit("celsius");
+
+DataWrapper<Timeseries> series = client.timeseries().filter(criteria);
+```
+
+Pass a `TimeseriesRetreiver` instead of the bare criteria to set an explicit `limit`.
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+form = datahub_sdk.TimeSeriesFilterForm(
+    data_set_id=12,              # this data set and every data set beneath it
+    unit="celsius",
+    limit=100)
+
+series = client.timeseries.filter(form)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::{TimeSeriesFilter, TimeSeriesFilterForm};
+
+let criteria = TimeSeriesFilter {
+    data_set_id: Some(12),       // this data set and every data set beneath it
+    unit: Some("celsius".into()),
+    ..Default::default()
+};
+let series = api.time_series.filter(&TimeSeriesFilterForm::new(criteria, Some(100))).await?;
+```
+
+</TabItem>
+</Tabs>
+
+The hierarchy expansion is what makes "master" data sets useful: filter on the top-level
+data set of a site or project and you get the series of the whole family beneath it, without
+knowing (or maintaining a list of) the sub-data sets.
+
 ## Delete a series
 
 Deletes the series and its datapoints. Remove any referencing subscriptions (and edges) first, or
