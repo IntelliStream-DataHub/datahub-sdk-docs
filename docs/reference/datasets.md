@@ -7,7 +7,10 @@ import TabItem from '@theme/TabItem';
 
 # Datasets
 
-Logical groupings of resources and time-series.
+Logical groupings of resources and time-series. Datasets can be nested (a dataset can
+belong to a parent dataset), and that hierarchy is live in queries: filtering time-series
+by a dataset also matches everything beneath it.
+[Filter series →](./timeseries#filter-series)
 
 :::note External ids are stored exactly as you send them
 The server does not rewrite a dataset external id: `Plant-A` stays `Plant-A`. Some clients
