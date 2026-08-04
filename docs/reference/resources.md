@@ -72,6 +72,19 @@ names every offending item, not just the first. If the policy is set to warn ins
 response carries a [`warnings` array](./external-ids#warnings-on-the-response) next to
 `items`.
 
+:::note Edges into datasets and time-series are validated
+Two endpoint rules apply to every edge, on create and on update (an update can retarget an
+edge or change its type):
+
+- A relation **to a dataset** must use the `BELONGS_TO` relationship type — that is the
+  relation the dataset hierarchy and membership are built from, and anything else is
+  rejected with a `400`.
+- A **dataset → time-series** edge is accepted only when the series has no dataset yet, or
+  already belongs to that very dataset (creating a series inside a dataset produces exactly
+  that membership edge). A series in a *different* dataset is rejected with a `400` — a
+  time-series has one dataset.
+:::
+
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
 

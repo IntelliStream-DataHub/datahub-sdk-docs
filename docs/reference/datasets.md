@@ -12,6 +12,11 @@ belong to a parent dataset), and that hierarchy is live in queries: filtering ti
 by a dataset also matches everything beneath it.
 [Filter series →](./timeseries#filter-series)
 
+The hierarchy is built from `BELONGS_TO` edges, and the server enforces that: a relation
+pointing at a dataset must be `BELONGS_TO`, and a dataset can only claim a time-series
+that isn't already in another dataset.
+[Edge rules →](./resources#create-resources-and-relations)
+
 :::note External ids are stored exactly as you send them
 The server does not rewrite a dataset external id: `Plant-A` stays `Plant-A`. Some clients
 *derive* one from the name as a convenience (the Rust `Dataset::new` below), and that
