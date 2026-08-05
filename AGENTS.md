@@ -14,6 +14,16 @@ npm start          # runs `docusaurus start`, serves http://localhost:3000
 `npm install` is needed the first time. To preview on the LAN, add
 `-- --host 0.0.0.0 --port 8001`.
 
+## Fonts are self-hosted
+
+Manrope and JetBrains Mono are served from our own origin, not from Google Fonts.
+They come from the `@fontsource-variable/*` packages via `src/css/fonts.css`, which
+webpack rewrites into hashed files under `build/assets/fonts/`, so the baseUrl is
+handled for you. Do not reintroduce an `@import` of a `fonts.googleapis.com` URL.
+If you add a weight or style, check the variable axis covers it (Manrope 200 to 800,
+JetBrains Mono 100 to 800) rather than reaching for the CDN. The sibling
+`../datahub-docs` site is set up the same way; keep the two in step.
+
 ## Node version gotcha (system Node is too old)
 
 This project requires **Node.js ≥ 20** (see `engines` in `package.json`), but the

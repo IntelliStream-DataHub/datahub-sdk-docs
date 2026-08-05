@@ -8,11 +8,10 @@
      primary   --is-blue   #005984
      accent    --is-orange #f6783c  /  --is-orange-bright #ff9e63
      support   --is-green  #169A4F  /  --is-teal #c2d5dd
-   Manrope is loaded from Google Fonts here (weights 300-800) to match the
-   site's self-hosted Manrope; swap for self-hosted woff2 if you want to drop
-   the external request.
+   Manrope is self-hosted, like the main site's, so a reader never fetches a
+   font from a third party. See fonts.css.
    ========================================================================== */
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono&display=swap');
+@import './fonts.css';   /* self-hosted Manrope and JetBrains Mono, see that file */
 
 :root {
   /* ---- IntelliStream brand palette (verbatim from the site's app.css) ---- */
