@@ -49,7 +49,7 @@ Whatever passes is stored **byte for byte as you sent it**. Nothing is lower-cas
 separator is rewritten, so a plant tag stays a plant tag:
 
 ```text
-VAL-21-PT-1034      ok, stored as sent
+COM-99-PT-1034      ok, stored as sent
 =K1-M3+B02          ok — an IEC 81346 designation keeps its aspect prefixes
 21_PT_1234          ok
 Pump-A 01           rejected: contains a space
@@ -69,7 +69,7 @@ data sets**; enforcement sits on those write paths.
 
 | Preset | Accepts |
 | --- | --- |
-| `qualified_tag` | The charset floor, plus at least 3 separator-delimited alphanumeric runs. `VAL-21-PT-1034` and `=K1-M3+B02` pass; `pump-1234` and `P-101` do not. **The shipped default, in `warn` mode.** |
+| `qualified_tag` | The charset floor, plus at least 3 separator-delimited alphanumeric runs. `COM-99-PT-1034` and `=K1-M3+B02` pass; `pump-1234` and `P-101` do not. **The shipped default, in `warn` mode.** |
 | `verbatim_tag` | The charset floor and nothing more. |
 | `snake_case` | `[a-z0-9_]+` only. |
 | `pattern` | An administrator-supplied regular expression. |
@@ -79,9 +79,11 @@ nothing is written, or **warn**, where the request succeeds and a finding is rec
 data steward. A **near-duplicate guard** runs regardless of the preset and is described
 [below](#the-near-duplicate-guard).
 
-Out of the box that means a two-part id such as `pump-1234` is **written and flagged**, not
-refused, while a near duplicate is refused outright. If you are hardening an import, treat a
-non-empty `warnings` array as work to do rather than noise.
+**Out of the box neither rule refuses anything.** Both ship in `warn` mode, so a two-part id
+such as `pump-1234` and a near duplicate of an existing id are each written and flagged. A
+client that never inspects the `warnings` array will therefore never notice the policy at all,
+which is the case worth designing for: on an import, treat a non-empty `warnings` array as work
+to do rather than noise.
 
 Resolution is tenant-first with a per-data-set override: a data set's own naming policy wins
 if it has one, otherwise the tenant's. The override **replaces** the tenant policy rather
@@ -100,8 +102,8 @@ correct behaviour, not a gap.
 
 ## Case: compared without it, stored with it
 
-Uniqueness on resources, data sets and time-series ignores case. Creating `val-21-pt-1034`
-when `VAL-21-PT-1034` already exists is a duplicate and comes back as **`409`**, with a
+Uniqueness on resources, data sets and time-series ignores case. Creating `com-99-pt-1034`
+when `COM-99-PT-1034` already exists is a duplicate and comes back as **`409`**, with a
 message naming the id it collides with — it is the ordinary "this external id already
 exists" path, not a naming-policy rejection.
 
@@ -199,7 +201,8 @@ incoming:  PUMP.A.01     → near duplicate
 incoming:  pump_a_02     → fine
 ```
 
-Its mode is `reject` by default and can be set to `warn`. Tenant scope is deliberate:
+Its mode is `warn` by default and can be set to `reject`, which is the setting to use once you
+are confident the two forms are never both wanted. Tenant scope is deliberate:
 uniqueness is already tenant-wide, and two spellings of one tag cannot both be *the*
 identifier for one asset even when they arrive through different data sets.
 
