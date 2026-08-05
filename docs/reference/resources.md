@@ -12,7 +12,7 @@ and the edges between them in one call; the server returns the persisted graph.
 
 A resource's `externalId` is its **identity**: unique per tenant, stored exactly as you send
 it, and compared without case. Mirror the tag your operation already maintains —
-`VAL-21-PT-1034` is stored as `VAL-21-PT-1034`, not rewritten.
+`COM-99-PT-1034` is stored as `COM-99-PT-1034`, not rewritten.
 [External ids & naming →](./external-ids)
 
 ## Look up
