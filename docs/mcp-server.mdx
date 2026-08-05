@@ -1,0 +1,198 @@
+---
+sidebar_position: 4
+title: MCP server
+description: Connect an AI agent to DataHub over the Model Context Protocol - endpoint, authentication, the 36 tools the server exposes, and the limits worth knowing before you ship one.
+---
+
+# MCP server
+
+DataHub ships an [MCP](https://modelcontextprotocol.io/) server, so an agent can work against
+your data model directly instead of you hand-writing an integration layer for it. It exposes
+**36 tools** across datasets, resources, relationships, timeseries, events, labels and units.
+
+The important part is what it *isn't*: the MCP endpoint is an ordinary Spring MVC endpoint on
+the same security chain as the REST API. There is no separate agent door, no service account
+with blanket access, and no MCP-specific bypass. An agent sees exactly what the identity in
+its token is allowed to see.
+
+## Endpoint
+
+| | |
+| --- | --- |
+| Path | `/mcp` (set by `spring.ai.mcp.server.base-url`) |
+| Transport | Streamable HTTP, Spring AI WebMVC |
+| Protocol mode | `STATELESS` |
+| Server version | `1.0.0` |
+
+## Authentication
+
+Identical to every other call in this documentation: an OAuth2 Bearer JWT in the
+`Authorization` header, on each request.
+
+```http
+POST /mcp HTTP/1.1
+Host: api.intellistream.ai
+Authorization: Bearer <your-jwt>
+Content-Type: application/json
+```
+
+Three things are checked before any tool body runs:
+
+1. **Signature and issuer**, by the same `JwtDecoder` the REST API uses.
+2. **The `DATAHUB_ACCESS` role.** Every non-public endpoint requires `ROLE_DATAHUB_ACCESS`,
+   not merely a valid token. A token with a good organization claim but without this role
+   authenticates and can then read and mutate nothing.
+3. **Tenant.** The `organization.*.id` claim populates the tenant context through the same
+   `OrganizationValidator` used for REST, so an agent cannot reach another tenant's data
+   even by asking for an id it happens to know.
+
+The practical consequence, and the reason this design is worth the trouble: **an agent
+inherits the permissions of whoever it is acting for.** If you want an agent that can read
+but not write, issue it a token that can read but not write. There is no second permission
+model to keep in sync.
+
+## Connecting a client
+
+Any MCP client that speaks streamable HTTP and can attach a bearer token will work. A typical
+client entry:
+
+```json
+{
+  "mcpServers": {
+    "datahub": {
+      "type": "http",
+      "url": "https://api.intellistream.ai/mcp",
+      "headers": {
+        "Authorization": "Bearer ${DATAHUB_TOKEN}"
+      }
+    }
+  }
+}
+```
+
+Tokens are short-lived. For anything long-running, refresh through your IdP and update the
+header rather than pinning a token into a config file.
+
+## The tools
+
+Named `<domain>_<action>` in snake_case, deliberately, so the listing reads the same to you
+and to the model.
+
+### Datasets
+
+| Tool | What it does |
+| --- | --- |
+| `dataset_list` | List datasets visible to the caller. The catalogue is usually small |
+| `dataset_search` | Full-text search, returns ids needed by `timeseries_create` |
+| `dataset_create` | Create one dataset, returns the server-assigned id |
+| `dataset_update` | Update one dataset by id. Only provided fields change |
+| `dataset_delete` | Delete by id or externalId. Does **not** cascade to members |
+
+### Resources
+
+A resource is any node in the graph that is not a dataset or a timeseries: equipment, work
+items, documents.
+
+| Tool | What it does |
+| --- | --- |
+| `resource_search` | Full-text search over name, description and metadata |
+| `resource_get` | Fetch one or more by id or externalId |
+| `resource_create` | Create one node. At least one label is required |
+| `resource_update` | Update common fields by id |
+| `resource_delete` | Delete by id or externalId. Connected edges go with it |
+| `resource_fetch_related` | Walk outward and return the connected neighbourhood |
+
+`resource_fetch_related` is the one to reach for when a question is really about context:
+it returns the neighbourhood in a single call rather than making the agent traverse edge by
+edge, which is both slower and worse for the context window.
+
+### Relationships
+
+| Tool | What it does |
+| --- | --- |
+| `edge_list_types` | List relationship types for the tenant, e.g. `PROCESSED_BY` |
+| `edge_create_type` | Create a type. Coerced to `SCREAMING_SNAKE_CASE` server-side |
+| `edge_create` | Connect two existing nodes, by externalId or numeric id |
+| `edge_get` | Fetch a single edge by numeric id |
+| `edge_delete` | Delete edges by id. Nodes on either side are untouched |
+
+### Timeseries
+
+| Tool | What it does |
+| --- | --- |
+| `timeseries_list` | Browse when you do not yet have a search term |
+| `timeseries_search` | Full-text search over name, description and metadata |
+| `timeseries_get` | Look up by externalId or numeric id |
+| `timeseries_create` | Create one timeseries, returns the assigned id |
+| `timeseries_update` | Update common fields by id |
+| `timeseries_delete` | Delete the definition. Existing datapoints are not removed |
+| `timeseries_get_latest` | Most recent datapoint, for "what is it reading now?" |
+| `timeseries_fetch_datapoints` | History between two ISO-8601 timestamps |
+| `timeseries_send_datapoint` | Append a single datapoint |
+
+### Events
+
+| Tool | What it does |
+| --- | --- |
+| `event_search` | Full-text search, returns compact events |
+| `event_filter` | Structured query by time range or exact field values |
+| `event_get` | Full detail for specific events by externalId and/or UUID |
+| `event_create` | Record something that happened: an alarm, a state transition |
+| `event_update` | Update common fields by id or externalId |
+| `event_delete` | Delete by externalId and/or UUID, many in one call |
+
+Use `event_filter` rather than `event_search` for anything time-bounded or exact. Search is
+for when the agent only has words to go on.
+
+### Labels and units
+
+| Tool | What it does |
+| --- | --- |
+| `label_list` | List tenant labels, e.g. `PRODUCTION` |
+| `label_create` | Create one label, coerced to `SCREAMING_SNAKE_CASE` |
+| `label_update` | Update description, i18n code or colour by id |
+| `unit_list` | Units of measure known to DataHub, e.g. Celsius |
+| `unit_get` | Look up one unit by externalId, e.g. `celsius` |
+
+## How results are shaped
+
+The server is written for a reader with a finite context window, which is not something the
+REST wire contract has to care about.
+
+- **Nothing empty is sent.** Every tool serializes with `NON_EMPTY` inclusion, so nulls,
+  empty collections and empty strings never reach the model. The REST DTOs keep their own
+  `ALWAYS` contract, unchanged.
+- **List and search return lean projections.** `LeanResource`, `LeanTimeseries` and friends
+  drop audit timestamps, empty metadata and embedded edge lists. Call the matching `*_get`
+  when the agent actually needs the full record, or `resource_fetch_related` for edges.
+- **Timestamps are ISO-8601 strings**, matching the REST API, so a value reads the same
+  whichever way the agent reached it.
+
+The pattern to encourage in your prompts: search or list to find candidates, then fetch
+detail for the few that matter. An agent that opens with a full listing burns its context on
+records it will not use.
+
+## Limits worth knowing
+
+**The server does not ask permission.** It runs in `STATELESS` mode, which has no
+elicitation: a tool cannot open a channel back to the user to confirm a mutating action.
+`resource_delete`, `event_delete` and `timeseries_send_datapoint` execute the moment they are
+called. If your agent should pause for a human before it writes, **that gate belongs in the
+agent you build**, not in the server. Give the agent a read-only token if it has no business
+writing at all.
+
+**Deletes do not cascade.** Deleting a dataset leaves its resources and timeseries in place;
+deleting a timeseries leaves its datapoints. This is deliberate, but it means an agent
+tidying up will need more than one call, and a half-finished tidy leaves orphans.
+
+**Name coercion is server-side.** Relationship types and labels are normalised to
+`SCREAMING_SNAKE_CASE`, so `derived from` becomes `DERIVED_FROM`. Agents that construct a
+name and then search for the string they constructed will miss.
+
+## Adding a tool
+
+Annotate a public method on a Spring bean in the `mcp.tools` package with `@Tool`, reference
+`McpResultConverter` from it, and register the bean in the `ToolCallbackProvider`. If it is
+not registered there, the server does not advertise it. Spring AI builds the schema from the
+parameter types and the `@ToolParam` descriptions, so those descriptions are what the model
+reads: write them for the model, not for a colleague.
