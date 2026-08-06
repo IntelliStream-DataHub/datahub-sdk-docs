@@ -257,20 +257,113 @@ value — the `reason` names the existing id instead, since the likeliest fix is
 
 ## Findings {#findings}
 
-Every warning is persisted, so warn means *allowed and in the steward's queue*, not *allowed
+Every warning is recorded, so warn means *allowed and in the steward's queue*, not *allowed
 and forgotten*.
 
+**A finding is an event** — and more precisely, a *stream* of events. There is no findings
+endpoint: findings are stored, filtered and resolved as ordinary events, so everything you
+already use for events works on them.
+
+Nothing is ever updated in place. Raising a finding appends an `OPEN` event; resolving it
+appends a `RESOLVED` event carrying the **same `externalId`**. A finding's current state is not
+stored — you derive it: take every event sharing that external id, order by `eventTime`
+ascending, and the last one wins.
+
+Read the queue by filtering events on the finding type:
+
 ```http
-GET  /policies/findings                  # filter by policy, data set, open vs resolved
-POST /policies/findings/{id}/resolve
+POST /events/filter
+{
+  "filter": {
+    "type": "policy_finding",
+    "subType": "naming_snake_case",     // which policy fired; omit for all
+    "dataSetIds": [{ "id": 42 }]
+  },
+  "sort": { "property": ["eventTime"], "order": "asc" },
+  "limit": 200
+}
 ```
 
+:::caution Do not filter on `status`
+A stored `OPEN` event means *this was raised*, not *this is outstanding*. Filtering the query on
+`status: "OPEN"` would return the raise of every finding that has since been resolved. Fetch the
+stream and fold it — that is what "the last event wins" means in practice.
+
+Order ascending for the same reason: replaying out of order lets a stale `OPEN` overwrite the
+`RESOLVED` that followed it.
+:::
+
+Each finding event carries:
+
+| Field | What it holds |
+|---|---|
+| `externalId` | The finding this event belongs to — the correlation key you fold on |
+| `subType` | The policy that fired, by external id |
+| `source` | `datahub_policy_<policy>` |
+| `description` | What is wrong, in words |
+| `relatedResourceIds` | The entity the finding is about |
+| `dataSetId` | That entity's data set |
+| `eventTime` | When this happened |
+| `status` | `OPEN` or `RESOLVED` — what *this event* asserts |
+| `metadata.offendingValue` | The external id that tripped the policy |
+| `metadata.suggestion` | A conforming alternative, when one could be derived |
+| `metadata.raisedBy` | Subject of whoever wrote the offending value |
+
+Resolve one by appending a `RESOLVED` event that names the same finding:
+
+```http
+POST /events/create
+{
+  "items": [{
+    "externalId": "policy_finding_naming_snake_case_42",   // the finding's externalId, unchanged
+    "type": "policy_finding",
+    "subType": "naming_snake_case",
+    "status": "RESOLVED",
+    "eventTime": "2026-08-06T11:02:00Z",
+    "relatedResourceIds": [42],
+    "dataSetId": 7
+  }]
+}
+```
+
+Copy `dataSetId` and `relatedResourceIds` from the raise. The resolve has to come back from the
+same filtered query the raise does, or a queue narrowed to one data set sees the complaint and
+misses the answer to it. Resolving therefore needs write access to that data set.
+
 Resolving is a judgement rather than a fix: the entity still breaks the policy, someone has
-decided that is acceptable. A resolved finding is not reopened when the entity is edited for
-unrelated reasons — only when the offending external id itself changes.
+decided that is acceptable. Because it is appended rather than edited, it does not erase the
+raise it answers — the finding's history stays readable.
+
+**Reopening needs no special rule.** If the external id later changes to another non-conforming
+value, the policy appends a fresh `OPEN` after the `RESOLVED`, and the replay says open again.
+
+**Raising is idempotent.** Re-evaluating an entity whose external id has not changed collapses
+onto the raise already stored, so an entity written a thousand times contributes one `OPEN`
+event, not a thousand.
 
 Findings are raised for resources, data sets and time series — everything whose external id
-is a unique identity. Events raise none, whatever the policy says.
+is a unique identity. Events raise none, whatever the policy says; a finding being an event
+does not change that.
+
+### Paging the queue {#findings-paging}
+
+Findings from a bulk import arrive in the thousands, so page with a cursor rather than an
+offset — `<eventTime epoch millis>_<id>`, from the last event you saw — and keep folding into the
+same state as pages arrive: a `RESOLVED` on page 3 closes a finding whose `OPEN` came on page 1:
+
+```http
+POST /events/filter
+{
+  "filter": { "type": "policy_finding", "status": "OPEN" },
+  "sort": { "property": ["eventTime"], "order": "asc" },
+  "cursor": "1754476522104_0195f3a2-4c1b-7f9e-9c3a-1b2d4e6f8a90",
+  "limit": 200
+}
+```
+
+Both halves of the cursor are required. Event times are not unique — an import lands thousands
+of findings in the same millisecond — so a cursor on the timestamp alone would either skip that
+group or repeat it forever. A short page is the last page.
 
 ## Practical advice
 
