@@ -15,11 +15,40 @@ it, and compared without case. Mirror the tag your operation already maintains �
 `COM-99-PT-1034` is stored as `COM-99-PT-1034`, not rewritten.
 [External ids & naming →](./external-ids)
 
+## The resource body {#body}
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `id` | number | Server-assigned. Crosses the wire as a JSON string — see the note below. |
+| `externalId` | string, 3–256 | **Required.** Unique per tenant, stored verbatim, matched case-insensitively. |
+| `name` | string, 3–512 | **Required.** What a human calls it. This is the field [search](#search) reads. |
+| `labels` | string[] | **Required, at least one.** The type tags (`Pump`, `Plant`). Upper-cased by the server. |
+| `description` | string | Prose. |
+| `metadata` | map&lt;string, string&gt; | Flat key/value, filterable by exact match. |
+| `source` | string, 2–128 | The upstream system of record this came from (`SAP`, a historian, a file drop). |
+| `dataSetId` | number | The data set the resource belongs to. |
+| `geoLocation` | GeoJSON geometry | `Point`, `Polygon`, … Validated on write; stored verbatim. |
+| `isRoot` | boolean | Whether the resource is a navigation root. Deletes are checked against reachability from a root — see [Delete](#delete). |
+| `relatedResources` | object[] | Read-only view of the graph: `{ id, externalId, relationshipType, direction }` per connected node. Populated where the graph is loaded, empty otherwise. |
+| `createdTime`, `lastUpdatedTime` | epoch millis | Server-set. |
+
+Labels are how the platform types a node. The type-label (`ASSET`, `TIMESERIES`, `DATASET`,
+`POLICY`, `FUNCTION`) is what the create pipeline reads to decide which kind of entity to
+build, and free-form labels ride alongside it. That is also why one `/resources/create` call
+can hold a mix of node types — a time-series next to an asset — rather than needing one
+endpoint per type.
+
+:::note Numeric ids cross the wire as JSON strings
+`id` and `dataSetId` serialize as `"5677892"`, not `5677892` — ids can exceed the 53-bit
+integer a JSON number is safe for in JavaScript. The clients parse them back for you.
+:::
+
 ## Look up
 
 Fetch by numeric id or external id (you can mix them). Lookup ignores case, so `pump_1` and
 `PUMP_1` resolve to the same resource; what comes back keeps the spelling it was created
-with.
+with. Identifiers that match nothing are **silently omitted** rather than erroring, so
+compare the returned items against what you asked for when a miss matters.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -57,7 +86,7 @@ let resources = api.resources.by_ids(&vec![
 </TabItem>
 </Tabs>
 
-## Create resources and relations
+## Create resources and relations {#create-resources-and-relations}
 
 Pass the resource forms (nodes) and the relation forms (edges); the call returns the
 created graph — nodes plus server-assigned edges. Each resource needs **at least one
@@ -71,6 +100,12 @@ is written, so one item rejected by the
 names every offending item, not just the first. If the policy is set to warn instead, the
 response carries a [`warnings` array](./external-ids#warnings-on-the-response) next to
 `items`.
+
+A relation may reference a node being created in the same request by its `externalId`, or
+point at one that already exists. An edge whose endpoint is neither is a `400` naming the
+endpoint it could not resolve. Re-using an `externalId` that already exists in the tenant is
+a `409` whose `duplicated` list names which ones — use [update](#update) to change the
+existing resource instead.
 
 :::note Edges into datasets and time-series are validated
 Two endpoint rules apply to every edge, on create and on update (an update can retarget an
@@ -150,9 +185,84 @@ let created = api.resources.create(vec![plant, pump], vec![contains]).await?;
 </TabItem>
 </Tabs>
 
-## Search
+An edge comes back as a `Relation` — `{ id, start, end, type, description, metadata }`,
+where `start` and `end` are the numeric ids of the two nodes. That is why you send
+`fromExternalId`/`toExternalId` but read `start`/`end`: the write side speaks in your
+identifiers, the read side in the graph's.
 
-Free-text / fuzzy search across resources.
+## Filter
+
+`POST /resources/filter` finds resources by structured criteria. Everything you supply is
+combined with **AND**.
+
+| Field | Matching |
+| --- | --- |
+| `name` | Case-insensitive **substring**. `%` works as a wildcard (`"pipe%"`). |
+| `source` | Case-insensitive substring. |
+| `externalId` | Exact (case-insensitive). |
+| `id` | Exact numeric id. |
+| `isRoot` | `true` or `false`. |
+| `dataSetIds` | Resources in any of these data sets. |
+| `metadata` | Every key/value given must be present on the resource. |
+| `createdTime`, `lastUpdatedTime` | `{ "min": …, "max": … }`, ISO-8601, both bounds inclusive. |
+
+```json
+{
+  "limit": 100,
+  "filter": {
+    "name": "pipe%",
+    "dataSetIds": [{ "id": 12 }],
+    "metadata": { "work_order": "wo-sap-12344" },
+    "createdTime": { "min": "2026-01-01T00:00:00Z" }
+  }
+}
+```
+
+`limit` defaults to **1 000** and is capped at **10 000**; a zero, negative or null value
+falls back to the default rather than returning nothing.
+
+:::caution `dataSetIds` here takes ids only
+On a resource filter each entry is `{"id": 12}` — an `externalId` is not accepted, unlike
+the [event filter](./events#filtering), where either works. Resolve the data set's external
+id to its numeric id first.
+:::
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+ResourceRetreiver retriever = new ResourceRetreiver();
+retriever.setLimit(100);
+retriever.getFilter().setName("pipe%");
+retriever.getFilter().setMetadata(Map.of("work_order", "wo-sap-12344"));
+
+DataWrapper<Resource> matches = client.resources().filter(retriever);
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+Not wrapped yet — call `POST /resources/filter` directly, or use
+[`search`](#search) when a free-text query will do.
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+Not wrapped yet — call `POST /resources/filter` directly, or use
+[`search`](#search) when a free-text query will do.
+
+</TabItem>
+</Tabs>
+
+## Search {#search}
+
+Free-text search across resource **names**. Matching is fuzzy and word-aware: search `pipe`
+and you also get `pipes`, `piping`, and multi-word names containing the term. Results are
+ordered by relevance, not alphabetically.
+
+A search body may carry the same `filter` block as `POST /resources/filter`, so a free-text
+query can be narrowed to a data set or a metadata value. `limit` is capped at **1 000** here,
+lower than the 10 000 of `filter`, and `query` must be 3–140 characters.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -163,8 +273,6 @@ search.setLimit(10);
 search.getSearch().setQuery("pump");
 DataWrapper<Resource> matches = client.resources().search(search);
 ```
-
-Use `filter(new ResourceRetreiver())` for structured filters (labels, metadata, parent).
 
 </TabItem>
 <TabItem value="python" label="Python">
@@ -191,9 +299,89 @@ let matches = api.resources.search(&form).await?;
 </TabItem>
 </Tabs>
 
-## Delete
+Reach for `filter` instead whenever the question is structured — an exact external id, a
+metadata value, a data set, a time range. It is faster and its results are predictable.
 
-Delete by id or external id; returns the removed graph.
+## Update {#update}
+
+`POST /resources/update` changes fields on resources and relations that already exist.
+Identify each node by `id` or `externalId`, each relation by `id`, and name only what you
+want changed — anything you leave out keeps its current value.
+
+Each field is an object carrying a verb rather than a bare value, which is what lets "clear
+this" be said distinctly from "leave it alone":
+
+| Verb | Applies to | Effect |
+| --- | --- | --- |
+| `set` | every field | Replace the value. |
+| `setNull: true` | nullable fields | Clear the value. |
+| `add` | `metadata`, `labels` | Merge entries in, keeping the rest. |
+| `remove` | `metadata`, `labels` | Take entries out, keeping the rest. |
+
+```json
+{
+  "nodes": [
+    {
+      "externalId": "klp_pipe_ws_a1212_dl",
+      "update": {
+        "name": { "set": "klp pipe ws-a1212-dl (renamed)" },
+        "metadata": { "add": { "inspected_by": "olav" } },
+        "labels": { "add": ["CRITICAL"] }
+      }
+    }
+  ],
+  "relations": []
+}
+```
+
+Updatable node fields are `externalId`, `name`, `description`, `source`, `dataSetId`,
+`metadata`, `labels` and `geoLocation`. On a relation they are `start`, `end`,
+`fromExternalId`, `toExternalId`, `relationship`, `relationshipId`, `description` and
+`metadata` — so an edge can be retargeted or retyped in place, subject to the same
+[endpoint rules](#create-resources-and-relations) as a create.
+
+Sending both `set` and `setNull` for one field is a `400`: the request is contradictory, so
+it is refused rather than resolved by precedence. Changing `externalId` runs it past the
+[naming policy](./external-ids#the-naming-policy), which reports violations per item in an
+RFC 9457 problem response. The whole batch is **all-or-nothing**.
+
+:::caution A `409` means someone else got there first
+Updates are guarded by optimistic locking. If another request changed or deleted the
+resource while yours was in flight, you get a `409` with `"cause": "concurrency"` and
+**nothing was written** — no partial application to unpick. Re-read the resource with
+`byIds` and retry the update against fresh state.
+
+This is worth designing for rather than retrying blindly: two writers doing
+`metadata: { add: … }` can both succeed after a re-read, whereas two doing
+`metadata: { set: … }` will keep clobbering each other however many times you retry.
+:::
+
+Update is not wrapped by any client yet — call the endpoint directly. The Rust client's
+`ResourceService::update` is a `todo!()` stub and **panics** if called.
+
+## Delete {#delete}
+
+Delete by id or external id; unknown identifiers are silently skipped. A successful delete
+returns `204` with no body, and deleting something already gone is a no-op — so a retried
+delete needs no bookkeeping.
+
+Deleting a resource takes **all** of its relationships with it, inbound and outbound. That is
+where the one real constraint comes from:
+
+:::caution The graph must stay connected
+A delete is rejected with `400` if it would leave any surviving resource unreachable from a
+root resource — that is, if it would strand part of the graph. The response names the
+resources that would be stranded, so the fix is either to include them in the same delete or
+to re-attach them through another path first.
+
+Delete a mid-level node in a hierarchy and this is what you will hit: removing a plant that
+holds twenty pumps takes the edges to those pumps with it, stranding all twenty. The check
+is what stops a routine cleanup from quietly orphaning half a site.
+:::
+
+A single safety-check failure rolls the whole batch back — nothing is deleted unless
+everything can be. As with update, a concurrent modification surfaces as a `409` with
+nothing removed.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -227,6 +415,19 @@ their `labels`. Traversal is **undirected** and bounded by `depth` (`-1` = the w
 connected component), optionally filtered to specific relationship types. Use it for
 relationship reasoning — root-cause correlation, blast radius — that a flat lookup
 can't do. See [Correlate alarms with the graph](/guides/correlate-alarms).
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `id` / `externalId` | — | Where to start. Supply exactly one. |
+| `depth` | `-1` | Hops to follow. `-1` loads the entire connected component. |
+| `relationshipTypes` | all | Which edge types the walk may follow. |
+| `excludedLabels` | none | Labels the walk neither passes through nor returns — e.g. `["POLICY"]` to keep governance nodes out of an asset view. |
+| `limit` | `5000` | Safety cap on nodes loaded. When the component is bigger, the nearest `limit` nodes come back. |
+
+That `limit` is the one to watch: it is a silent truncation, not an error. On a densely
+connected site an unbounded `depth` will hit 5 000 nodes long before it runs out of graph,
+and what you get back is a *neighbourhood*, not the component you asked for. Bound `depth`
+to 1–3 unless you know the graph is sparse.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -276,3 +477,87 @@ for node in net.nodes() {
 
 </TabItem>
 </Tabs>
+
+### The nearest N of a kind {#fetch-nearest}
+
+`POST /resources/fetch-nearest` answers a question `fetchRelated` cannot: *the ten nearest
+time-series to this pump*. It walks breadth-first and caps on the number of **matching
+end-nodes**, not on hops or total nodes — so "the 10 nearest `TIMESERIES`" is exactly ten
+however many intermediate nodes lie between them. You get those nodes plus the sub-graph
+connecting them back to the start.
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `id` | — | Where to start. **Numeric id only** — see below. |
+| `endLabels` | — | Labels that qualify as a match, e.g. `["TIMESERIES"]`. The walk continues past them. |
+| `limit` | `10` | How many matching end-nodes to return. |
+| `relationshipTypes` | all | Which edge types the walk may follow. |
+| `excludedLabels` | none | Labels never traversed or returned. |
+
+That is the difference worth internalising: with `fetchRelated` you pick a radius and find
+out what is inside it, which on an unfamiliar graph is a guess. With `fetch-nearest` you name
+what you are looking for and how many you want, and the radius follows.
+
+:::caution `externalId` is accepted but not read
+The request form carries an `externalId` field, but this endpoint starts from `id` only —
+sending an external id alone gets you a `404`. Resolve it to a numeric id with `byIds` first.
+`fetchRelated` takes either.
+:::
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+FetchNearestResourcesForm form = new FetchNearestResourcesForm();
+form.setId(5677892L);                       // numeric id, not external id
+form.setEndLabels(List.of("TIMESERIES"));
+form.setLimit(10);
+form.setExcludedLabels(List.of("POLICY"));
+
+ResourceNetwork nearest = client.resources().fetchNearest(form);
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+Not wrapped yet — call `POST /resources/fetch-nearest` directly:
+
+```json
+{
+  "id": 5677892,
+  "endLabels": ["TIMESERIES"],
+  "limit": 10,
+  "excludedLabels": ["POLICY"]
+}
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+Not wrapped yet — call `POST /resources/fetch-nearest` directly:
+
+```json
+{
+  "id": 5677892,
+  "endLabels": ["TIMESERIES"],
+  "limit": 10,
+  "excludedLabels": ["POLICY"]
+}
+```
+
+</TabItem>
+</Tabs>
+
+## What each client covers {#client-coverage}
+
+| Operation | Java | Python | Rust |
+| --- | --- | --- | --- |
+| Get by numeric id | `resources().getById` | HTTP | HTTP |
+| Look up by id / external id | `resources().byIds` | `resources.by_ids` | `resources.by_ids` |
+| Create | `resources().create` | `resources.create` | `resources.create` |
+| Delete | `resources().delete` | `resources.delete` | `resources.delete` |
+| Search | `resources().search` | `resources.search` | `resources.search` |
+| Filter | `resources().filter` | HTTP | HTTP |
+| Traverse (`fetch-related`) | `resources().fetchRelated` | `resources.fetch_related` | `resources.fetch_related` |
+| Nearest N (`fetch-nearest`) | `resources().fetchNearest` | HTTP | HTTP |
+| Update | HTTP | HTTP | HTTP (`update` is a `todo!()` stub — it panics) |
