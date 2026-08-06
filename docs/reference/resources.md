@@ -242,14 +242,28 @@ DataWrapper<Resource> matches = client.resources().filter(retriever);
 </TabItem>
 <TabItem value="python" label="Python">
 
-Not wrapped yet — call `POST /resources/filter` directly, or use
-[`search`](#search) when a free-text query will do.
+```python
+matches = client.resources.filter(
+    name="pipe%",
+    metadata={"work_order": "wo-sap-12344"},
+    data_set_ids=[12],
+    limit=100)
+```
 
 </TabItem>
 <TabItem value="rust" label="Rust">
 
-Not wrapped yet — call `POST /resources/filter` directly, or use
-[`search`](#search) when a free-text query will do.
+```rust
+use dataplatform_rust_sdk::resources::{IdObject, ResourceFilter, ResourceRetreiver};
+
+let retriever = ResourceRetreiver::new(ResourceFilter {
+    name: Some("pipe%".into()),
+    data_set_ids: Some(vec![IdObject::new(12)]),
+    ..Default::default()
+}).with_limit(100);
+
+let matches = api.resources.filter(&retriever).await?;
+```
 
 </TabItem>
 </Tabs>
@@ -356,8 +370,9 @@ This is worth designing for rather than retrying blindly: two writers doing
 `metadata: { set: … }` will keep clobbering each other however many times you retry.
 :::
 
-Update is not wrapped by any client yet — call the endpoint directly. The Rust client's
-`ResourceService::update` is a `todo!()` stub and **panics** if called.
+All three clients wrap this: `resources().update(nodes, relations)` in Java,
+`resources.update([...])` in Python, and `resources.update(&updates)` in Rust, each taking the
+per-entry update forms above.
 
 ## Delete {#delete}
 
@@ -520,29 +535,25 @@ ResourceNetwork nearest = client.resources().fetchNearest(form);
 </TabItem>
 <TabItem value="python" label="Python">
 
-Not wrapped yet — call `POST /resources/fetch-nearest` directly:
-
-```json
-{
-  "id": 5677892,
-  "endLabels": ["TIMESERIES"],
-  "limit": 10,
-  "excludedLabels": ["POLICY"]
-}
+```python
+nearest = client.resources.fetch_nearest(
+    5677892,                       # numeric id, not external id
+    end_labels=["TIMESERIES"],
+    limit=10,
+    excluded_labels=["POLICY"])
 ```
 
 </TabItem>
 <TabItem value="rust" label="Rust">
 
-Not wrapped yet — call `POST /resources/fetch-nearest` directly:
+```rust
+use dataplatform_rust_sdk::resources::FetchNearestResourcesForm;
 
-```json
-{
-  "id": 5677892,
-  "endLabels": ["TIMESERIES"],
-  "limit": 10,
-  "excludedLabels": ["POLICY"]
-}
+let nearest = api.resources.fetch_nearest(
+    &FetchNearestResourcesForm::from_id(5677892)   // numeric id, not external id
+        .with_end_labels(vec!["TIMESERIES".into()])
+        .with_limit(10)
+        .with_excluded_labels(vec!["POLICY".into()])).await?;
 ```
 
 </TabItem>
@@ -552,12 +563,12 @@ Not wrapped yet — call `POST /resources/fetch-nearest` directly:
 
 | Operation | Java | Python | Rust |
 | --- | --- | --- | --- |
-| Get by numeric id | `resources().getById` | HTTP | HTTP |
+| Get by numeric id | `resources().getById` | `resources.get_by_id` | `resources.get_by_id` |
 | Look up by id / external id | `resources().byIds` | `resources.by_ids` | `resources.by_ids` |
 | Create | `resources().create` | `resources.create` | `resources.create` |
+| Update | `resources().update` | `resources.update` | `resources.update` |
 | Delete | `resources().delete` | `resources.delete` | `resources.delete` |
 | Search | `resources().search` | `resources.search` | `resources.search` |
-| Filter | `resources().filter` | HTTP | HTTP |
+| Filter | `resources().filter` | `resources.filter` | `resources.filter` |
 | Traverse (`fetch-related`) | `resources().fetchRelated` | `resources.fetch_related` | `resources.fetch_related` |
-| Nearest N (`fetch-nearest`) | `resources().fetchNearest` | HTTP | HTTP |
-| Update | HTTP | HTTP | HTTP (`update` is a `todo!()` stub — it panics) |
+| Nearest N (`fetch-nearest`) | `resources().fetchNearest` | `resources.fetch_nearest` | `resources.fetch_nearest` |

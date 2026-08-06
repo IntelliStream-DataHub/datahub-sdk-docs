@@ -331,6 +331,192 @@ and gets slower the further you page. Page 400 costs what page 1 costs. The trad
 there is no random access: you walk forward from where you were and cannot jump to page 7.
 A short page is the last page.
 
+All three clients can sort and page. Rather than assembling `<millis>_<id>` yourself, take it
+from the last event of the page you just read:
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+retriever.setCursor(last.getEventTime().toInstant().toEpochMilli() + "_" + last.getId());
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+filter.cursor = page[-1].page_cursor
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+if let Some(cursor) = last.page_cursor() { filter.set_cursor(cursor); }
+```
+
+</TabItem>
+</Tabs>
+
+## Policy findings {#policy-findings}
+
+A **policy finding** — a naming-policy violation that was allowed through and recorded for a
+steward — is an ordinary event. There is no findings endpoint and no findings client: they are
+written to the event store like anything else, so everything on this page already works on
+them.
+
+The encoding is a wire contract, so you can read findings without a policy-aware client:
+
+| Field | Holds |
+| --- | --- |
+| `type` | Always `policy_finding`. Matched exactly, never by prefix — this is the one filter separating findings from the tenant's real events. |
+| `subType` | Which policy fired, by its external id. |
+| `source` | `datahub_policy_<policy external id>`, truncated to 128 characters. |
+| `externalId` | `policy_finding_<policy external id>_<node id>` — the correlation key every event in one finding's lifecycle shares. |
+| `status` | `OPEN` or `RESOLVED` — what *this event* asserts, not the finding's current state. |
+| `description` | What is wrong, in words. |
+| `relatedResourceIds` | The entity the finding is about. |
+| `dataSetId` | That entity's data set. |
+| `metadata` | `offendingValue`, `suggestion` (when one could be derived), `raisedBy`. |
+
+Note the external id is keyed on the entity's **node id**, not its external id. The external
+id is the offending value here — the thing a steward is most likely to change — and keying on
+it would mean renaming a resource silently abandoned its finding and started a second stream.
+
+### Fetch the queue
+
+Filter on the type, ascending by `eventTime`, and page with [`after`](#paging):
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+EventRetreiver retriever = new EventRetreiver();
+retriever.getFilter().setType("policy_finding");
+retriever.getFilter().setSubType("naming_snake_case");   // one policy; omit for all
+retriever.setLimit(200);
+retriever.getSort().setProperty(List.of("eventTime"));
+retriever.getSort().setOrder("asc");
+
+DataWrapper<EventModel> findings = client.events().filter(retriever);
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+filter = datahub_sdk.EventFilter(
+    basic_filter=datahub_sdk.BasicEventFilter(
+        type="policy_finding",
+        sub_type="naming_snake_case"),   # one policy; omit for all
+    limit=200)
+
+findings = client.events.filter(filter)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::filters::{BasicEventFilter, EventFilter};
+
+let filter = EventFilter::default()
+    .set_filter(BasicEventFilter {
+        r#type: Some("policy_finding".into()),
+        sub_type: Some("naming_snake_case".into()),   // one policy; omit for all
+        ..Default::default()
+    })
+    .set_limit(200)
+    .build();
+
+let findings = api.events.filter(&filter).await?;
+```
+
+</TabItem>
+</Tabs>
+
+### Fold the stream
+
+A finding's current state is **not stored** — you derive it. Nothing is ever updated in place:
+raising appends an `OPEN`, resolving appends a `RESOLVED` carrying the same `externalId`. Group
+by external id, order by `eventTime` ascending, and the last event wins:
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+Map<String, EventModel> current = new HashMap<>();
+findings.getItems().stream()
+        .sorted(Comparator.comparing(EventModel::getEventTime))
+        .forEach(e -> current.put(e.getExternalId(), e));   // last write wins
+
+List<EventModel> open = current.values().stream()
+        .filter(e -> "OPEN".equals(e.getStatus()))
+        .toList();
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+current = {}
+for e in sorted(findings, key=lambda e: e.event_time):
+    current[e.external_id] = e          # last write wins
+
+open_findings = [e for e in current.values() if e.status == "OPEN"]
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use std::collections::HashMap;
+
+let mut events = findings.get_items().clone();
+events.sort_by_key(|e| e.event_time);
+
+let mut current: HashMap<String, _> = HashMap::new();
+for e in events {
+    current.insert(e.external_id.clone(), e);   // last write wins
+}
+
+let open: Vec<_> = current.values().filter(|e| e.status.as_deref() == Some("OPEN")).collect();
+```
+
+</TabItem>
+</Tabs>
+
+:::caution Do not filter on `status`
+A stored `OPEN` event means *this was raised*, not *this is outstanding*. Filtering the query
+on `status: "OPEN"` returns the raise of every finding that has since been resolved — the
+resolve is a separate, later event, and narrowing the query hides it. Open-ness is a
+conclusion drawn from the stream, not a fact the store holds, so fetch and fold.
+
+Order ascending for the same reason: replay out of order and a stale `OPEN` overwrites the
+`RESOLVED` that followed it. Keep folding across pages too — a `RESOLVED` on page 3 closes a
+finding whose `OPEN` arrived on page 1.
+:::
+
+:::caution A fold needs the *whole* stream, so a truncated page lies
+Folding is only correct if every event sharing an external id is in front of you. Get one
+page of a queue larger than your `limit` and an `OPEN` can arrive without the `RESOLVED` that
+closed it — the fold then reports a resolved finding as outstanding. It is a wrong answer,
+not an error, and nothing in the response marks it as partial.
+
+Page until short — a full page is a signal that there is more, never that you have it all.
+Narrowing by `subType` and `dataSetIds` keeps the walk cheap, but it is paging, not narrowing,
+that makes the fold correct.
+:::
+
+Raising is idempotent: a raise event's id is derived from what it asserts, so re-evaluating an
+entity whose external id has not changed collapses onto the raise already stored. An entity
+written a thousand times contributes one `OPEN`, not a thousand. A raise for a *different*
+non-conforming value is a new fact and is appended — which is also all "reopening" is.
+
+For the steward's side of this — how to resolve a finding, what resolving means, and why
+findings are raised for resources but never for events — see
+[Findings](./external-ids#findings).
+
 ## Full-text search {#search}
 
 `POST /events/search` searches event **descriptions**. Matching is fuzzy and word-aware, and
@@ -523,15 +709,16 @@ HTTP-only so far.
 | Operation | Java | Python | Rust |
 | --- | --- | --- | --- |
 | Create | `events().create` / `ingest` | `events.create` | `events.create` |
+| Get by id | `events().getById` | `events.get` | `events.get` |
 | Look up by id / external id | `events().byIds` | `events.by_ids` | `events.by_ids` |
 | Filter | `events().filter` | `events.filter` | `events.filter` |
+| — with `sort` | `EventRetreiver.sort` | `sort_by` / `sort_order` | `set_sort` |
+| — with paging | `EventRetreiver.cursor` | `cursor` | `set_cursor` |
+| Update | `events().update` | `events.update` | `events.update` |
+| Full-text search | `events().search` | `events.search` | `events.search` |
+| Count | `events().count` | `events.count` | `events.count` |
 | Delete | `events().delete` | `events.delete` | `events.delete` |
-| Update | HTTP | HTTP | HTTP |
-| Full-text search | HTTP | HTTP | HTTP |
-| Count, distinct values | HTTP | HTTP | HTTP |
+| Distinct values | `events().listTypes` etc. | HTTP | HTTP |
 
-:::caution The Rust client's `search`, `update` and `retrieve` are stubs
-`EventsService::search`, `::update` and `::retrieve` exist on the type but are
-`unimplemented!()` — calling one **panics**. They are placeholders for the endpoints above,
-not wrappers around them. Call the endpoint directly until they are filled in.
-:::
+Build the paging value from the last event of a page rather than assembling the two halves
+by hand — `Event::page_cursor()` in Rust, `event.page_cursor` in Python.
