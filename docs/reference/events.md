@@ -108,7 +108,29 @@ let events = api.events.filter(&filter).await?;
 </TabItem>
 </Tabs>
 
-## High-throughput ingestion
+### Filter by data set
+
+`dataSetIds` narrows a query to one or more data sets, each named by **id or externalId** —
+the same `IdCollection` reference the API uses elsewhere:
+
+```java
+retriever.getFilter().setDataSetIds(List.of(
+        IdCollection.createFromId(43L),
+        IdCollection.createFromExternalId("data_set_sap")));
+```
+
+Over the wire that is `[{"id": 43}, {"externalId": "data_set_sap"}]`. Browser clients should
+send ids as strings, since they exceed JavaScript's safe integer range.
+
+:::note Matched exactly
+A data set reference matches only that data set — unlike a read grant, it does not extend to
+data sets beneath it in the hierarchy. List every data set you want. An `externalId` naming no
+data set contributes nothing, so a list of only unknown names returns no events.
+
+Omitting the field (or sending `null`) applies **no** data set restriction; you still only see
+events in data sets you may read. Sending an explicit empty list `[]` is the opposite — it
+narrows to no data sets and therefore matches nothing.
+:::
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
