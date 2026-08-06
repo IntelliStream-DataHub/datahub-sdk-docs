@@ -121,6 +121,40 @@ let events = api.events.filter(&filter).await?;
 </TabItem>
 </Tabs>
 
+### Ordering and paging {#paging}
+
+By default a query returns matching events in no particular order. Ask for an order with
+`sort`, over `eventTime`, `createdTime`, `lastUpdatedTime`, `externalId`, `type`, `subType`,
+`status`, `source` or `dataSetId`:
+
+```json
+{ "filter": { "type": "alarm" },
+  "sort": { "property": ["eventTime"], "order": "desc" },
+  "limit": 200 }
+```
+
+To walk past the first page, send back a `cursor` rather than an offset. It is
+`<eventTime epoch millis>_<id>`, taken from the last event you saw:
+
+```json
+{ "filter": { "type": "alarm" },
+  "sort": { "property": ["eventTime"], "order": "asc" },
+  "cursor": "1754476522104_0195f3a2-4c1b-7f9e-9c3a-1b2d4e6f8a90",
+  "limit": 200 }
+```
+
+Two things to know about this. Both halves are required: event times are not unique — a
+bulk ingest lands thousands of events in the same millisecond — so a cursor on the timestamp
+alone would either skip that group or repeat it forever, and the `id` breaks the tie. A value
+that does not parse is ignored and the walk restarts from the beginning, rather than a half-read
+cursor quietly returning the wrong page. And a cursor fixes the order to `eventTime` then `id`
+ascending, overriding `sort`, because a cursor read back in a different order silently skips
+rows instead of failing.
+
+Prefer this to counting pages. Events are stored partitioned by event time, so resuming from
+a timestamp lets whole partitions be skipped, where an offset re-reads everything ahead of it
+and gets slower the further you page. A short page is the last page.
+
 ## High-throughput ingestion
 
 <Tabs groupId="lang">
