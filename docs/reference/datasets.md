@@ -86,5 +86,5 @@ api.datasets.delete(&vec![IdAndExtId::from_external_id("plant_a")]).await?;
 </Tabs>
 
 The Java client additionally offers `list(DataSetRetreiver)`, `search(DataSetSearch)` and
-`update(List<DataSetForm>)`; the Rust client offers `filter(&DatasetFilter)` and
-`search(&DatasetSearch)`.
+`update(List<DataSetForm>)`; the Rust client offers
+[`filter(&DatasetFilter)`](./filters.md#datasetfilter) and `search(&DatasetSearch)`.

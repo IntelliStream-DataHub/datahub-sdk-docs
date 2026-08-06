@@ -197,7 +197,8 @@ api.time_series.insert_datapoints(&mut dw).await?;
 
 ## Retrieve datapoints
 
-Identify a series (external id or id) and a time window.
+Identify a series (external id or id) and a time window — see
+[`RetrieveFilter`](./filters.md#retrievefilter) for every field it accepts.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
