@@ -101,3 +101,19 @@ api.datasets.delete(&vec![IdAndExtId::from_external_id("plant_a")]).await?;
 The Java client additionally offers `list(DataSetRetreiver)`, `search(DataSetSearch)` and
 `update(List<DataSetForm>)`; the Rust client offers `filter(&DatasetFilter)` and
 `search(&DatasetSearch)`.
+
+## What each client covers {#client-coverage}
+
+| Operation | Java | Python | Rust |
+| --- | --- | --- | --- |
+| Create | `datasets().create` | `datasets.create` | `datasets.create` |
+| Look up by id / external id | `datasets().byIds` | `datasets.by_ids` | `datasets.by_ids` |
+| List | `datasets().list` | HTTP | `datasets.list` |
+| Filter | HTTP | HTTP | `datasets.filter` |
+| Search | `datasets().search` | HTTP | `datasets.search` |
+| Update | `datasets().update` | HTTP | `datasets.update` |
+| Delete | `datasets().delete` | `datasets.delete` | `datasets.delete` |
+| Access policies | HTTP | HTTP | `datasets.policies` |
+
+The Python client is the thinnest here: it covers the write path and lookup, so listing,
+searching and updating still go through the endpoint directly.

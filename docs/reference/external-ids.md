@@ -347,23 +347,28 @@ does not change that.
 
 ### Paging the queue {#findings-paging}
 
-Findings from a bulk import arrive in the thousands, so page with a cursor rather than an
+Findings from a bulk import arrive in the thousands, so page with `after` rather than an
 offset — `<eventTime epoch millis>_<id>`, from the last event you saw — and keep folding into the
 same state as pages arrive: a `RESOLVED` on page 3 closes a finding whose `OPEN` came on page 1:
 
 ```http
 POST /events/filter
 {
-  "filter": { "type": "policy_finding", "status": "OPEN" },
-  "sort": { "property": ["eventTime"], "order": "asc" },
-  "cursor": "1754476522104_0195f3a2-4c1b-7f9e-9c3a-1b2d4e6f8a90",
+  "filter": { "type": "policy_finding" },
+  "after": "1754476522104_0195f3a2-4c1b-7f9e-9c3a-1b2d4e6f8a90",
   "limit": 200
 }
 ```
 
-Both halves of the cursor are required. Event times are not unique — an import lands thousands
-of findings in the same millisecond — so a cursor on the timestamp alone would either skip that
+No `sort` here, and no `status` either. `after` fixes the order to `eventTime` then `id`
+ascending on its own, which is exactly the order a fold needs — and narrowing to `OPEN` would
+drop the `RESOLVED` events that close the findings you are folding.
+
+Both halves of `after` are required. Event times are not unique — an import lands thousands
+of findings in the same millisecond — so paging on the timestamp alone would either skip that
 group or repeat it forever. A short page is the last page.
+
+[Fetching and folding the queue, with SDK examples →](./events#policy-findings)
 
 ## Practical advice
 

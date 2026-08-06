@@ -415,3 +415,21 @@ if (!result.isComplete()) {
             System.err.println(e.statusCode() + " on " + e.datapointCount() + " items: " + e.message()));
 }
 ```
+
+## What each client covers {#client-coverage}
+
+| Operation | Java | Python | Rust |
+| --- | --- | --- | --- |
+| Create | `timeseries().create` | `timeseries.create` | `time_series.create` / `create_one` |
+| Look up by id / external id | `timeseries().byIds` | `timeseries.by_ids` | `time_series.by_ids` |
+| Filter | `timeseries().filter` | `timeseries.filter` | `time_series.filter` |
+| Search | HTTP | `timeseries.search` | `time_series.search` (+ `_by_name` / `_by_description`) |
+| List | HTTP | `timeseries.list` | `time_series.list` / `list_with_limit` |
+| Update | HTTP | `timeseries.update` | `time_series.update` |
+| Delete | `timeseries().delete` | `timeseries.delete` | `time_series.delete` |
+| Write datapoints | `insertDatapoints` / `ingest` | `insert_datapoints` / `insert_from_lists` | `insert_datapoint` / `insert_datapoints` |
+| Read datapoints | `retrieve` / `retrieveAggregated` | `retrieve_datapoints` / `retrieve_latest_datapoints` | `retrieve_datapoints` / `retrieve_latest_datapoint` |
+| Delete datapoints | HTTP | `timeseries.delete_datapoints` | `time_series.delete_datapoints` |
+
+Java is the one with `ingest` — the chunking, parallelising, retrying path described above.
+It is also the one missing `search`, `list` and `update`, so reach for the endpoint there.

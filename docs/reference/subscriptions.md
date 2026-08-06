@@ -165,3 +165,14 @@ looking like an indefinitely silent stream.
 Ack a message only after you've durably handled it. If your process dies before the ack,
 the server redelivers it — so make your handler idempotent.
 :::
+
+## What each client covers {#client-coverage}
+
+| Operation | Java | Python | Rust |
+| --- | --- | --- | --- |
+| Create | `subscriptions().create` | `subscriptions.create` | `subscriptions.create` |
+| List | `subscriptions().list` | `subscriptions.list` | `subscriptions.list` |
+| Delete | `subscriptions().delete` | `subscriptions.delete` | `subscriptions.delete` |
+| Live delivery | `subscriptions().listen` | `subscriptions.listen` | `subscriptions.listen` |
+
+Full parity — subscriptions are the one area where all three clients cover the same ground.

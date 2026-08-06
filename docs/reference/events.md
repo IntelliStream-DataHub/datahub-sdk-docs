@@ -22,7 +22,38 @@ event even when a `snake_case` policy is rejecting it on resources.
 [The two contracts →](./external-ids#the-two-contracts)
 :::
 
-## Create
+## The event body {#body}
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `id` | UUID string | The event's identity. Time-ordered UUID v7 — see the note under [Create](#create). |
+| `externalId` | string, 3–256 | **Required.** The subject's key in the source system. Shared across events on purpose. |
+| `eventTime` | epoch millis, or ISO-8601 on the way in | **Required.** When it happened at the source. Never defaulted — see [Create](#create). |
+| `type` | string, 3–128 | Top-level categorization (`alarm`, `work_order`). |
+| `subType` | string, 3–128 | Refinement of `type` (`overpressure`). |
+| `status` | string, 3–128 | Free-form lifecycle marker (`OPEN`, `acknowledged`). No state machine is enforced. |
+| `source` | string, 2–128 | The system of record the event came from (`SAP`, a historian). |
+| `description` | string | Prose. This is the field [full-text search](#search) reads. |
+| `metadata` | map&lt;string, string&gt; | Flat key/value. An empty key is dropped rather than rejected. |
+| `dataSetId` | number | Optional. Platform-internal events (say, anomaly detection on a series outside any data set) legitimately have none. |
+| `relatedResourceIds` | number[] | Resources the event is about, by numeric id. |
+| `relatedResourceExternalIds` | string[] | The same, by external id. |
+| `createdTime` | epoch millis | Server-set. When the platform stored it. |
+| `lastUpdatedTime` | epoch millis | Server-set. |
+
+`eventTime` and `createdTime` answer different questions and routinely differ by hours: a
+gateway that was offline over a weekend backfills Monday morning, so every event it sends
+carries a weekend `eventTime` and a Monday `createdTime`. Filter on `eventTime` to ask *when
+did it happen*, on `createdTime` to ask *when did we learn about it*.
+
+:::note Numeric ids cross the wire as JSON strings
+`dataSetId` and the entries of `relatedResourceIds` serialize as `"12"`, not `12`. Ids can
+exceed the 53-bit integer a JSON number is safe for in JavaScript, and a silently rounded id
+is worse than a quoted one. The clients parse them back to integers for you; a hand-rolled
+HTTP caller should expect the quotes.
+:::
+
+## Create {#create}
 
 Every event must carry an **event time** — the moment it occurred at the source (sensor,
 PLC, upstream system). The SDK deliberately does *not* default it to "now": an event
@@ -71,17 +102,67 @@ api.events.create(&vec![event]).await?;
 </TabItem>
 </Tabs>
 
+Creating is **all-or-nothing**: if one event in the batch fails validation, none are
+written. Attaching the event to resources that do not exist is a `400`, as is a
+`dataSetId` naming no data set — so a typo surfaces at write time rather than as an event
+that quietly relates to nothing.
+
 :::note Event ids are time-ordered UUID v7
 The ingestion paths stamp every event that has no `id` with a **UUID v7** before sending —
 `create` in the Python and Rust clients, `ingest(...)` in Java (a plain Java `create` sends
 events as-is and lets the server assign ids). The server honors a client-supplied id, which is
-what makes retries idempotent: the events table is a `ReplacingMergeTree` ordered by `id`, so
-re-sending the same event (for example after a
-[buffered](./client#durable-ingest-buffering) outage) collapses to one row instead of
-duplicating. If you set the `id` yourself, use a time-ordered UUID v7 — a random v4 scatters
-writes across that sort key and hurts insert/query performance. The created event (with its
-id) is returned from `create`.
+what makes retries idempotent: the events table is keyed by `id` and collapses rows that share
+one, so re-sending the same event (for example after a
+[buffered](./client#durable-ingest-buffering) outage) leaves one row instead of a duplicate.
+If you set the `id` yourself, use a time-ordered UUID v7 — a random v4 scatters writes across
+that key and hurts insert and query performance. The created event (with its id) is returned
+from `create`.
 :::
+
+## Look up {#lookup}
+
+Fetch a single event by its UUID, or a batch by any mix of `id` and `externalId`. Ids that
+match nothing are **silently omitted** — compare what came back against what you asked for
+if a miss matters. A batch is capped at 10 000 ids.
+
+Because an external id is a correlation key, looking one up returns **every** event filed
+under it, not one event.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+DataWrapper<EventModel> events = client.events().byIds(List.of(
+        IdCollection.createFromExternalId("PO-4500171")));   // every event about this order
+```
+
+`IdCollection` carries a numeric id, so the Java client can only look events up by external
+id — an event's id is a UUID. Call `POST /events/byids` directly to fetch by UUID.
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+events = client.events.by_ids(["PO-4500171"])   # a str selects by external id
+events = client.events.by_ids([uuid.UUID("0195f3a2-4c1b-7f9e-9c3a-1b2d4e6f8a90")])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::events::EventIdCollection;
+
+let events = api.events
+    .by_ids(&vec![EventIdCollection::from_external_id("PO-4500171")])
+    .await?;
+```
+
+</TabItem>
+</Tabs>
+
+`GET /events/{id}` fetches one event by UUID and returns `404` when there is none — the one
+place a missing event is an error rather than an omission.
 
 ## Query
 
@@ -121,18 +202,27 @@ let events = api.events.filter(&filter).await?;
 </TabItem>
 </Tabs>
 
+`limit` defaults to **100** and is capped at **10 000**; a zero or negative value falls back
+to 100 rather than returning nothing. Whatever you ask for, the result is intersected with
+the data sets your token may read — a filter can never widen access, so an empty page can
+mean "no matches" or "none you may see", and the two are not distinguished.
+
 ### Filtering {#filtering}
 
-Alongside the scalar matches (`type`, `subType`, `status`, `source`, `externalIdPrefix`) and the
-time ranges (`eventTime`, `createdTime`, `lastUpdatedTime`), two fields narrow by reference:
+Every field you supply is combined with **AND** — an event must match all of them.
 
-| Field | Restricts to |
+| Field | Matching |
 | --- | --- |
-| `dataSetIds` | Events belonging to these data sets |
-| `relatedResources` | Events attached to these resources |
+| `type`, `subType`, `status`, `source` | Exact string equality. |
+| `externalIdPrefix` | Prefix match, 3–256 characters. The natural way to sweep one source system's key space. |
+| `metadata` | Every key/value pair given must be present on the event. |
+| `dataSetIds` | Events belonging to these data sets. |
+| `relatedResources` | Events attached to these resources. |
+| `eventTime`, `createdTime`, `lastUpdatedTime` | `{ "min": …, "max": … }` bounds — see the note below. |
+| `id` | Present but **not usable**: it is typed as a number while an event's id is a UUID. Use [`byids`](#lookup) to fetch by id. |
 
-Both take the same shape — each entry is `{"id": …}` **or** `{"externalId": …}`, and the two can
-be mixed in one list:
+`dataSetIds` and `relatedResources` take the same shape — each entry is `{"id": …}` **or**
+`{"externalId": …}`, and the two can be mixed in one list:
 
 ```json
 {
@@ -162,6 +252,46 @@ comes back empty, rather than the unrestricted result the same code returns for 
 filter field.
 :::
 
+:::note `eventTime.max` is exclusive; the other maxima are inclusive
+`eventTime` is matched as `min <= t < max`, while `createdTime` and `lastUpdatedTime` are
+matched as `min <= t <= max`. That makes back-to-back `eventTime` windows tile cleanly —
+`[Monday, Tuesday)` then `[Tuesday, Wednesday)` covers every event exactly once — where the
+same pattern on `createdTime` double-counts the boundary millisecond.
+:::
+
+### Advanced filters {#advanced-filters}
+
+`advancedFilter` sits alongside `filter` and builds a boolean expression when flat AND is not
+enough — "type is alarm **or** the source is SAP", or "everything except the `test_` prefix".
+Combine with `and`, `or` and `not`; the leaves take one of three operators:
+
+| Operator | Meaning |
+| --- | --- |
+| `equals` | `property` equals `value`. |
+| `prefix` | `property` starts with `value`. |
+| `in` | `property` is one of `values`. |
+
+Filterable properties are `id`, `externalId`, `type`, `subType`, `source`, `dataSetId` and
+`metadata`. Anything else is rejected with a `400` naming the offending property, rather than
+being ignored.
+
+```json
+{
+  "filter": { "type": "alarm" },
+  "advancedFilter": {
+    "or": [
+      { "equals": { "property": ["source"], "value": "SAP" } },
+      { "prefix": { "property": ["externalId"], "value": "PO-" } }
+    ]
+  },
+  "limit": 200
+}
+```
+
+Two things to know. `property` is a list, but only its **first** entry is read — there is no
+nested path into `metadata`. And every value is compared as a string, so `dataSetId` matches
+`"43"`, not `43`.
+
 ### Ordering and paging {#paging}
 
 By default a query returns matching events in no particular order. Ask for an order with
@@ -174,27 +304,319 @@ By default a query returns matching events in no particular order. Ask for an or
   "limit": 200 }
 ```
 
-To walk past the first page, send back a `cursor` rather than an offset. It is
+A property that is not sortable is ignored rather than rejected, and any `order` that is not
+exactly `desc` sorts ascending — a malformed sort degrades to the default instead of silently
+reversing your results.
+
+To walk past the first page, send back an `after` rather than an offset. It is
 `<eventTime epoch millis>_<id>`, taken from the last event you saw:
 
 ```json
 { "filter": { "type": "alarm" },
-  "sort": { "property": ["eventTime"], "order": "asc" },
-  "cursor": "1754476522104_0195f3a2-4c1b-7f9e-9c3a-1b2d4e6f8a90",
+  "after": "1754476522104_0195f3a2-4c1b-7f9e-9c3a-1b2d4e6f8a90",
   "limit": 200 }
 ```
 
 Two things to know about this. Both halves are required: event times are not unique — a
-bulk ingest lands thousands of events in the same millisecond — so a cursor on the timestamp
+bulk ingest lands thousands of events in the same millisecond — so paging on the timestamp
 alone would either skip that group or repeat it forever, and the `id` breaks the tie. A value
 that does not parse is ignored and the walk restarts from the beginning, rather than a half-read
-cursor quietly returning the wrong page. And a cursor fixes the order to `eventTime` then `id`
-ascending, overriding `sort`, because a cursor read back in a different order silently skips
+position quietly returning the wrong page. And `after` fixes the order to `eventTime` then `id`
+ascending, overriding `sort`, because a page read back in a different order silently skips
 rows instead of failing.
 
 Prefer this to counting pages. Events are stored partitioned by event time, so resuming from
 a timestamp lets whole partitions be skipped, where an offset re-reads everything ahead of it
-and gets slower the further you page. A short page is the last page.
+and gets slower the further you page. Page 400 costs what page 1 costs. The trade is that
+there is no random access: you walk forward from where you were and cannot jump to page 7.
+A short page is the last page.
+
+All three clients can sort and page. Rather than assembling `<millis>_<id>` yourself, take it
+from the last event of the page you just read:
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+retriever.setCursor(last.getEventTime().toInstant().toEpochMilli() + "_" + last.getId());
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+filter.cursor = page[-1].page_cursor
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+if let Some(cursor) = last.page_cursor() { filter.set_cursor(cursor); }
+```
+
+</TabItem>
+</Tabs>
+
+## Policy findings {#policy-findings}
+
+A **policy finding** — a naming-policy violation that was allowed through and recorded for a
+steward — is an ordinary event. There is no findings endpoint and no findings client: they are
+written to the event store like anything else, so everything on this page already works on
+them.
+
+The encoding is a wire contract, so you can read findings without a policy-aware client:
+
+| Field | Holds |
+| --- | --- |
+| `type` | Always `policy_finding`. Matched exactly, never by prefix — this is the one filter separating findings from the tenant's real events. |
+| `subType` | Which policy fired, by its external id. |
+| `source` | `datahub_policy_<policy external id>`, truncated to 128 characters. |
+| `externalId` | `policy_finding_<policy external id>_<node id>` — the correlation key every event in one finding's lifecycle shares. |
+| `status` | `OPEN` or `RESOLVED` — what *this event* asserts, not the finding's current state. |
+| `description` | What is wrong, in words. |
+| `relatedResourceIds` | The entity the finding is about. |
+| `dataSetId` | That entity's data set. |
+| `metadata` | `offendingValue`, `suggestion` (when one could be derived), `raisedBy`. |
+
+Note the external id is keyed on the entity's **node id**, not its external id. The external
+id is the offending value here — the thing a steward is most likely to change — and keying on
+it would mean renaming a resource silently abandoned its finding and started a second stream.
+
+### Fetch the queue
+
+Filter on the type, ascending by `eventTime`, and page with [`after`](#paging):
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+EventRetreiver retriever = new EventRetreiver();
+retriever.getFilter().setType("policy_finding");
+retriever.getFilter().setSubType("naming_snake_case");   // one policy; omit for all
+retriever.setLimit(200);
+retriever.getSort().setProperty(List.of("eventTime"));
+retriever.getSort().setOrder("asc");
+
+DataWrapper<EventModel> findings = client.events().filter(retriever);
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+filter = datahub_sdk.EventFilter(
+    basic_filter=datahub_sdk.BasicEventFilter(
+        type="policy_finding",
+        sub_type="naming_snake_case"),   # one policy; omit for all
+    limit=200)
+
+findings = client.events.filter(filter)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::filters::{BasicEventFilter, EventFilter};
+
+let filter = EventFilter::default()
+    .set_filter(BasicEventFilter {
+        r#type: Some("policy_finding".into()),
+        sub_type: Some("naming_snake_case".into()),   // one policy; omit for all
+        ..Default::default()
+    })
+    .set_limit(200)
+    .build();
+
+let findings = api.events.filter(&filter).await?;
+```
+
+</TabItem>
+</Tabs>
+
+### Fold the stream
+
+A finding's current state is **not stored** — you derive it. Nothing is ever updated in place:
+raising appends an `OPEN`, resolving appends a `RESOLVED` carrying the same `externalId`. Group
+by external id, order by `eventTime` ascending, and the last event wins:
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+Map<String, EventModel> current = new HashMap<>();
+findings.getItems().stream()
+        .sorted(Comparator.comparing(EventModel::getEventTime))
+        .forEach(e -> current.put(e.getExternalId(), e));   // last write wins
+
+List<EventModel> open = current.values().stream()
+        .filter(e -> "OPEN".equals(e.getStatus()))
+        .toList();
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+current = {}
+for e in sorted(findings, key=lambda e: e.event_time):
+    current[e.external_id] = e          # last write wins
+
+open_findings = [e for e in current.values() if e.status == "OPEN"]
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use std::collections::HashMap;
+
+let mut events = findings.get_items().clone();
+events.sort_by_key(|e| e.event_time);
+
+let mut current: HashMap<String, _> = HashMap::new();
+for e in events {
+    current.insert(e.external_id.clone(), e);   // last write wins
+}
+
+let open: Vec<_> = current.values().filter(|e| e.status.as_deref() == Some("OPEN")).collect();
+```
+
+</TabItem>
+</Tabs>
+
+:::caution Do not filter on `status`
+A stored `OPEN` event means *this was raised*, not *this is outstanding*. Filtering the query
+on `status: "OPEN"` returns the raise of every finding that has since been resolved — the
+resolve is a separate, later event, and narrowing the query hides it. Open-ness is a
+conclusion drawn from the stream, not a fact the store holds, so fetch and fold.
+
+Order ascending for the same reason: replay out of order and a stale `OPEN` overwrites the
+`RESOLVED` that followed it. Keep folding across pages too — a `RESOLVED` on page 3 closes a
+finding whose `OPEN` arrived on page 1.
+:::
+
+:::caution A fold needs the *whole* stream, so a truncated page lies
+Folding is only correct if every event sharing an external id is in front of you. Get one
+page of a queue larger than your `limit` and an `OPEN` can arrive without the `RESOLVED` that
+closed it — the fold then reports a resolved finding as outstanding. It is a wrong answer,
+not an error, and nothing in the response marks it as partial.
+
+Page until short — a full page is a signal that there is more, never that you have it all.
+Narrowing by `subType` and `dataSetIds` keeps the walk cheap, but it is paging, not narrowing,
+that makes the fold correct.
+:::
+
+Raising is idempotent: a raise event's id is derived from what it asserts, so re-evaluating an
+entity whose external id has not changed collapses onto the raise already stored. An entity
+written a thousand times contributes one `OPEN`, not a thousand. A raise for a *different*
+non-conforming value is a new fact and is appended — which is also all "reopening" is.
+
+For the steward's side of this — how to resolve a finding, what resolving means, and why
+findings are raised for resources but never for events — see
+[Findings](./external-ids#findings).
+
+## Full-text search {#search}
+
+`POST /events/search` searches event **descriptions**. Matching is fuzzy and word-aware, and
+results come back ranked by relevance rather than by time. It accepts the same `filter` block
+as `POST /events/filter`, so a free-text query can be narrowed to a type or a data set:
+
+```json
+{
+  "search": { "query": "overpressure" },
+  "filter": { "type": "alarm" },
+  "limit": 50
+}
+```
+
+`query` must be 3–140 characters of letters, digits and spaces — punctuation is rejected with
+a `400`, so strip it before sending user input straight through. `limit` here is capped at
+**1 000**, lower than the 10 000 of `filter`.
+
+Reach for `filter` instead whenever the question is structured (a time range, an exact type, a
+related resource). It is faster and its results are predictable.
+
+## Distinct values {#distinct-values}
+
+Two families of endpoint answer "what values actually occur?" — the material for a filter
+drop-down or a type-ahead, without scanning events yourself. Both are restricted to the data
+sets your token may read, so a UI built on them cannot offer a facet the user could not then
+query.
+
+| Endpoint | Returns |
+| --- | --- |
+| `GET /events/list/types` | Every distinct `type`, alphabetically. |
+| `GET /events/list/sub-types` | Every distinct `subType`. |
+| `GET /events/list/statuses` | Every distinct `status`. |
+| `GET /events/list/sources` | Every distinct `source`. |
+| `GET /events/search/type?q=` | Distinct `type` values containing `q`, case-insensitive. |
+| `GET /events/search/sub-type?q=` | The same for `subType`. |
+| `GET /events/search/status?q=` | The same for `status`. |
+| `GET /events/search/source?q=` | The same for `source`. |
+
+Both families take `limit` (default 1 000, clamped to 1–10 000). The `search/*` form requires
+`q` and returns `400` without it.
+
+```
+GET /events/search/type?q=alarm&limit=20
+→ { "items": ["alarm", "alarm_cleared", "pre_alarm"] }
+```
+
+## Count {#count}
+
+`GET /events/count` returns `{ "count": 148392 }` for the tenant. It is a single cheap query,
+and it takes **no filters** — for a filtered count, run `POST /events/filter` with the `limit`
+you care about and measure the page.
+
+## Update {#update}
+
+`POST /events/update` changes fields on events that already exist. Identify each one by UUID
+`id` or by `externalId`, and name only the fields you want changed — anything you leave out
+keeps its current value.
+
+Each field is an object carrying a verb rather than a bare value, which is what lets "clear
+this" be expressed distinctly from "leave it alone":
+
+| Verb | Applies to | Effect |
+| --- | --- | --- |
+| `set` | every field | Replace the value. |
+| `setNull: true` | nullable fields | Clear the value. |
+| `add` | `metadata`, `relatedResourceIds`, `relatedResourceExternalIds` | Merge entries in, keeping the rest. |
+| `remove` | the same collections | Take entries out, keeping the rest. |
+
+```json
+{
+  "items": [
+    {
+      "externalId": "alarm_pipe_overpressure_2026_04_22_14_30",
+      "update": {
+        "status": { "set": "acknowledged" },
+        "metadata": { "add": { "acked_by": "olav" } }
+      }
+    }
+  ]
+}
+```
+
+Updatable fields are `externalId`, `description`, `type`, `subType`, `status`, `source`,
+`dataSetId`, `metadata`, `eventTime`, `relatedResourceIds` and `relatedResourceExternalIds`.
+`eventTime` is set from an ISO-8601 string. Sending both `set` and `setNull` for one field is
+a `400` — the request is contradictory, so it is refused rather than resolved by precedence.
+
+:::caution Prefer a follow-up event to mutating one
+An event update runs a replace-and-cleanup on the stored record. While it is in flight, a
+concurrent read of the same event can briefly return the pre-update version *or* see it
+twice. Where the record matters for audit, write a new event that corrects the old one
+instead: that is what an append-only log is for, and it keeps the correction itself visible.
+
+`status` is the honourable exception — acknowledging an alarm in place is what the field is
+there for.
+:::
+
+`source` is worth one warning: create accepts up to 128 characters, but the update path
+rejects anything over **64**. A value in between can be written and then not modified.
 
 ## High-throughput ingestion
 
@@ -233,6 +655,28 @@ api.events.create(&events).await?;   // Vec<Event>
 
 ## Delete
 
+Deletes are **idempotent**: removing an event that is already gone returns `200` and changes
+nothing, so a retried delete needs no bookkeeping.
+
+Remember that an external id names a *subject*, not an event. Deleting by external id removes
+**every event filed under it**, which is rarely what you want for a single mistaken record —
+delete that one by its UUID.
+
+:::caution A `200` means "accepted", not "gone"
+The delete is published to the ingestion pipeline and marked in the backend without waiting
+for the removal to land — a background job does the actual work. Until it has run, the event
+**can still come back from `filter` and `byids`**.
+
+So a test that deletes an event and immediately asserts it is gone will flake, and so will a
+UI that re-queries straight on the back of a delete. Poll until the event disappears rather
+than reading once, and treat its absence — not the `200` — as the signal. The same eventual
+consistency applies in the other direction: an event is not necessarily queryable the instant
+`create` returns.
+
+Once the background job has run the removal is permanent, and anything referencing the event
+by id stops resolving.
+:::
+
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
 
@@ -256,3 +700,25 @@ api.events.delete(&vec![IdAndExtId::from_external_id("door_open")]).await?;
 
 </TabItem>
 </Tabs>
+
+## What each client covers {#client-coverage}
+
+The three clients cover the write and read paths; the administrative and facet endpoints are
+HTTP-only so far.
+
+| Operation | Java | Python | Rust |
+| --- | --- | --- | --- |
+| Create | `events().create` / `ingest` | `events.create` | `events.create` |
+| Get by id | `events().getById` | `events.get` | `events.get` |
+| Look up by id / external id | `events().byIds` | `events.by_ids` | `events.by_ids` |
+| Filter | `events().filter` | `events.filter` | `events.filter` |
+| — with `sort` | `EventRetreiver.sort` | `sort_by` / `sort_order` | `set_sort` |
+| — with paging | `EventRetreiver.cursor` | `cursor` | `set_cursor` |
+| Update | `events().update` | `events.update` | `events.update` |
+| Full-text search | `events().search` | `events.search` | `events.search` |
+| Count | `events().count` | `events.count` | `events.count` |
+| Delete | `events().delete` | `events.delete` | `events.delete` |
+| Distinct values | `events().listTypes` etc. | HTTP | HTTP |
+
+Build the paging value from the last event of a page rather than assembling the two halves
+by hand — `Event::page_cursor()` in Rust, `event.page_cursor` in Python.

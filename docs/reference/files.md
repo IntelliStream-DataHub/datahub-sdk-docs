@@ -132,3 +132,15 @@ api.files.delete(&DataWrapper::from(vec![IdAndExtId::from_external_id("report_20
 
 </TabItem>
 </Tabs>
+
+## What each client covers {#client-coverage}
+
+| Operation | Java | Python | Rust |
+| --- | --- | --- | --- |
+| List root | `files().list()` | `files.list_root_directory` | `files.list_root_directory` |
+| List a path | `files().list(path)` | `files.list_directory_by_path` | `files.list_directory_by_path` |
+| Upload | `files().upload` | `files.upload_file` | `files.upload_file` |
+| Download | `files().download` | HTTP | HTTP |
+| Delete | `files().delete` | `files.delete` | `files.delete` |
+
+Download is Java-only so far — see [above](#download-java).

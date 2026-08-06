@@ -77,3 +77,13 @@ let by_id = api.units.by_ids(&DataWrapper::from(vec![IdAndExtId::from_id(7)])).a
 
 </TabItem>
 </Tabs>
+
+## What each client covers {#client-coverage}
+
+| Operation | Java | Python | Rust |
+| --- | --- | --- | --- |
+| List all | `units().list` | `units.list` | `units.list` |
+| Look up by id | `units().byIds` | `units.by_ids` | `units.by_ids` |
+| Look up by external id | HTTP | `units.by_external_ids` | `units.by_external_id` |
+
+The unit catalogue is read-only in every client: units are platform-managed, not tenant data.
