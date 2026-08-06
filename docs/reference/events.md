@@ -8,35 +8,26 @@ import TabItem from '@theme/TabItem';
 # Events
 
 Records of things that happened — an alarm firing, a work order raised, a machine
-changing state. Where a time-series answers *what was the value at time T*, an event
-answers *what occurred, and when*. Events are anchored in time by `eventTime`, the moment
-they occurred at the source, and classified by free-form `type`/`subType`.
+changing state. Anchored in time by `eventTime`, classified by free-form `type`/`subType`.
 
 ## Event fields
 
-`externalId`, `type` and `eventTime` are the fields you must set; everything else is
-optional. An event without an `eventTime` is rejected rather than silently stamped with
-"now" — the moment it occurred at the source is rarely the moment you sent it.
-
-`externalId` is **not** required to be unique over time. Events sharing one form the
-lifecycle of a single logical thing: a purchase order moving `created → approved → paid`
-is four events under one id.
+An event without an `eventTime` is rejected, never stamped with "now". `externalId` need
+not be unique over time: events sharing one form the lifecycle of a single thing, as a
+purchase order moving `created → approved → paid` is four events under one id.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `externalId` | string | **Required.** Stable snake_case id, 3–256 chars. |
 | `type` | string | **Required.** Classification, 3–128 chars (e.g. `alarm`). |
-| `eventTime` | timestamp | **Required.** When the event occurred at the source. Must be timezone-aware. |
+| `eventTime` | timestamp | **Required.** When it occurred at the source. Timezone-aware. |
 | `subType` | string | Finer classification, 3–128 chars (e.g. `electrical`). |
 | `description` | string | Human-readable summary. |
 | `status` | string | Free-form lifecycle state (e.g. `open`, `COMPLETE`). |
 | `source` | string | System the event came from. |
 | `metadata` | map | String-to-string. Numbers must be stringified. |
-| `dataSetId` | integer | Owning data set. Governs access and makes the event addressable by data set. |
+| `dataSetId` | integer | Owning data set. Governs access and addressability by data set. |
 | `id` | UUID | Server-assigned if omitted — see below. |
-
-Java uses a no-arg model plus setters, Python a keyword constructor, Rust a `new` taking
-the external id plus field assignment:
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -92,21 +83,16 @@ event.add_metadata("site".into(), "oslo".into());
 </Tabs>
 
 :::note Event ids are time-ordered UUID v7
-The ingestion paths stamp every event that has no `id` with a **UUID v7** before sending —
-`create` in the Python and Rust clients, `ingest(...)` in Java (a plain Java `create` sends
-events as-is and lets the server assign ids). The server honors a client-supplied id, which is
-what makes retries idempotent: the events table is a `ReplacingMergeTree` ordered by `id`, so
-re-sending the same event (for example after a
-[buffered](./client#durable-ingest-buffering) outage) collapses to one row instead of
-duplicating. If you set the `id` yourself, use a time-ordered UUID v7 — a random v4 scatters
-writes across that sort key and hurts insert/query performance. The created event (with its
-id) is returned from `create`.
+`create` (Python, Rust) and `ingest` (Java) stamp a UUID v7 on any event without an `id`;
+a plain Java `create` lets the server assign one. A client-supplied id makes retries
+idempotent — the events table is a `ReplacingMergeTree` ordered by `id`, so re-sending
+after a [buffered](./client#durable-ingest-buffering) outage collapses to one row. Use v7,
+not v4: random ids scatter writes across that sort key.
 :::
 
 ## Create
 
-Takes a batch and returns the created events, each with its `id` populated. Pass a
-single-element list for one event.
+Batch call; returns the created events with `id` populated.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -134,21 +120,18 @@ api.events.create(&vec![event]).await?;   // Vec<Event>
 
 ## High-throughput ingestion (Java)
 
-`ingest` chunks, parallelises and retries events the same way as datapoints, returning
-the same [`IngestResult`](./timeseries.md#ingestresult) tuned with the same
-[`IngestOptions`](./timeseries.md#ingestoptions). It is also the Java path that stamps
-client-side UUID v7 ids.
+Chunks, parallelises and retries like datapoint ingestion — returns
+[`IngestResult`](./timeseries.md#ingestresult), tuned with
+[`IngestOptions`](./timeseries.md#ingestoptions). Python and Rust `create` already batches.
 
 ```java
 IngestResult result = client.events().ingest(events,
         IngestOptions.builder().batchSize(1_000).parallelism(8).build());
 ```
 
-In Python and Rust, `create` already batches — pass it a large list instead.
-
 ## Query
 
-Takes an [`EventFilter`](./filters.md#eventfilter) and returns the matching events.
+Takes an [`EventFilter`](./filters.md#eventfilter).
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -188,7 +171,7 @@ let events = api.events.filter(&filter).await?;
 
 ## Delete
 
-Takes [id or external-id references](./filters.md#idcollection) and deletes them together.
+Takes [id or external-id references](./filters.md#idcollection).
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
