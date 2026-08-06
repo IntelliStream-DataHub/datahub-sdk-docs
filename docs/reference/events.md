@@ -121,6 +121,47 @@ let events = api.events.filter(&filter).await?;
 </TabItem>
 </Tabs>
 
+### Filtering {#filtering}
+
+Alongside the scalar matches (`type`, `subType`, `status`, `source`, `externalIdPrefix`) and the
+time ranges (`eventTime`, `createdTime`, `lastUpdatedTime`), two fields narrow by reference:
+
+| Field | Restricts to |
+| --- | --- |
+| `dataSetIds` | Events belonging to these data sets |
+| `relatedResources` | Events attached to these resources |
+
+Both take the same shape — each entry is `{"id": …}` **or** `{"externalId": …}`, and the two can
+be mixed in one list:
+
+```json
+{
+  "filter": {
+    "type": "alarm",
+    "dataSetIds": [{ "id": "43" }, { "externalId": "data_set_sap" }],
+    "relatedResources": [{ "externalId": "klp_pipe_ws_a1212_dl" }]
+  },
+  "limit": 50
+}
+```
+
+**Data sets match exactly.** A parent data set does not stand in for its children, so list every
+data set you want rather than relying on the hierarchy. This is the one place data set behaviour
+differs from access control, where a grant on a parent *does* cover its descendants.
+
+An `externalId` that names no data set contributes nothing. That can only ever narrow the
+result — a typo gives you too few events, never events you should not see.
+
+:::caution Omitting `dataSetIds` and sending `[]` are opposites
+Omit the field (or send `null`) for **no data set restriction**. An explicit empty list means
+**narrow to no data sets**, which matches nothing.
+
+The distinction matters if you build the filter programmatically: code that collects data set
+references into a list and always sets the field will silently return zero events when that list
+comes back empty, rather than the unrestricted result the same code returns for every other
+filter field.
+:::
+
 ### Ordering and paging {#paging}
 
 By default a query returns matching events in no particular order. Ask for an order with
