@@ -19,7 +19,7 @@ high-throughput).
 | `unit` | string | **Required.** Unit of measure, max 64 chars (e.g. `kg/hr`). |
 | `valueType` | string | One of `FLOAT32` (default), `FLOAT`, `BIGINT`, `NUMERIC`, `DECIMAL32`, `TEXT`, `MIXED`. |
 | `unitExternalId` | string | A [Units](./units.md) external id, 3–256 chars. Canonicalized to snake_case. |
-| `dataSetId` | integer | Owning dataset — see [Datasets](./datasets.md). |
+| `dataSetId` | integer | Owning [dataset](./datasets.md). Omitting it creates an orphan, which needs an all-datasets write grant. |
 | `description` | string | Optional description. |
 | `metadata` | map | String-to-string. |
 | `securityCategories` | list&lt;integer&gt; | Security category ids. |

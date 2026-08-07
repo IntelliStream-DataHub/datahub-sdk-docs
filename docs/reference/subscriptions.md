@@ -15,10 +15,14 @@ Durable, fan-out subscriptions over time-series, plus **live delivery over a Web
 | --- | --- | --- |
 | `externalId` | string | **Required.** Stable snake_case id, 3–256 chars. Also the Pulsar subscription name. |
 | `name` | string | **Required.** Display name, 3–256 chars. |
-| `timeseries` | list&lt;IdCollection&gt; | The bound series — see [`IdCollection`](./filters.md#idcollection). |
+| `timeseries` | list&lt;IdCollection&gt; | **Required, at least one.** The bound series — see [`IdCollection`](./filters.md#idcollection). |
 | `id` | integer | Server-assigned. |
 | `systemManaged` | boolean | True when auto-provisioned by function binding. |
 | `dateCreated` / `lastUpdated` | timestamp | Server-assigned. |
+
+`create` rejects an empty binding with **HTTP 400**, and every referenced series must
+exist. An existing subscription can still end up empty — detaching the last series from a
+system-managed one leaves the row in place by design.
 
 ## Manage subscriptions
 

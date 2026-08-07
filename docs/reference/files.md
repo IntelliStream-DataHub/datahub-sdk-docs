@@ -52,7 +52,7 @@ file and a `destination_path`.
 | `contentType` | string | Java only; default `application/octet-stream`. Inferred in Rust. |
 | `name` | string | Stored file name. |
 | `externalId` | string | Stable snake_case id. |
-| `dataSetId` | integer | Owning dataset. |
+| `dataSetId` | integer | Owning [dataset](./datasets.md). Omitting it creates an orphan, which needs an all-datasets write grant. |
 | `description` | string | Optional description. |
 
 <Tabs groupId="lang">

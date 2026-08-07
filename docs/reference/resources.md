@@ -17,7 +17,7 @@ and the edges between them in one call; the server returns the persisted graph.
 | `externalId` | string | **Required.** Stable snake_case id, 3–256 chars. |
 | `name` | string | **Required.** Display name, 3–512 chars. |
 | `labels` | list&lt;string&gt; | **Required, at least one.** Classifies the node (e.g. `PIPE`). |
-| `dataSetId` | integer | Owning dataset — see [Datasets](./datasets.md). |
+| `dataSetId` | integer | Owning [dataset](./datasets.md). Omitting it creates an orphan, which needs an all-datasets write grant. |
 | `description` | string | Optional description. |
 | `metadata` | map | String-to-string. |
 | `source` | string | Originating system, 2–128 chars. |

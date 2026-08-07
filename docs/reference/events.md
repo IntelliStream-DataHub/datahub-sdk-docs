@@ -28,7 +28,7 @@ sharing one form the lifecycle of a single thing, as a purchase order moving
 | `status` | string | Free-form lifecycle state, 3–128 chars (e.g. `COMPLETE`). |
 | `source` | string | System the event came from, 2–128 chars (e.g. `SAP`). |
 | `metadata` | map | String-to-string. Numbers must be stringified. |
-| `dataSetId` | integer | Owning data set. Optional — platform-internal events may have none. |
+| `dataSetId` | integer | Owning [data set](./datasets.md). Omitting it creates an orphan, which needs an all-datasets write grant. |
 | `relatedResourceIds` | list&lt;integer&gt; | Resources this event relates to, by id. |
 | `relatedResourceExternalIds` | list&lt;string&gt; | Resources this event relates to, by external id. |
 | `id` | string | Server-assigned if omitted — see below. |
