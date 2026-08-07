@@ -116,18 +116,15 @@ DatahubConfig cfg = DatahubConfig.fromVaultAppRoleEnv("datahub/sdk");          /
 
 ## Durable ingest buffering
 
-Optional and **off by default**. When enabled, datapoint and event ingestion that can't reach the
-API — or is rejected with an auth failure (HTTP 401/403, e.g. an expired or rotated token) — spools
-to disk and is flushed automatically on the next ingest call, so neither a transient outage nor a
-credential hiccup loses data or raises. The buffer is a segmented, compressed log (gzip in Java,
-zstd in Rust/Python) bounded on two axes, either of which may be left unset; an unset axis defaults
-to **72 hours** / **5 GiB** once buffering is on:
+Optional and **off by default**. Ingestion that can't reach the API — or is rejected with an auth
+failure (HTTP 401/403, e.g. a rotated token) — spools to disk and flushes on the next ingest call,
+so neither an outage nor a credential hiccup loses data or raises. The spool is a segmented,
+compressed log (gzip in Java, zstd in Rust/Python), drained segment-by-segment so a multi-gigabyte
+buffer never loads into memory, and recovered from disk on the next start.
 
-- **time** — datapoints/events older than the window are dropped.
-- **size** — when the on-disk spool exceeds the cap, the oldest segment is dropped.
-
-It is memory-safe: the spool is drained in segments, so even a multi-gigabyte buffer never loads
-into memory, and it is recovered from disk on the next start.
+Two bounds apply, either of which may be left unset; an unset one defaults to **72 hours** /
+**5 GiB** once buffering is on. Past the time window datapoints are dropped; past the size cap the
+oldest segment is.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -148,9 +145,6 @@ if (r.buffered() > 0) {
 }
 ```
 
-`fromEnv()` instead reads `BUFFER_RETENTION` (an ISO-8601 duration, e.g. `PT72H`),
-`BUFFER_MAX_BYTES` and `BUFFER_DIRECTORY` — setting either bound turns buffering on.
-
 </TabItem>
 <TabItem value="python" label="Python">
 
@@ -164,9 +158,6 @@ client = DataHubClient(
     buffer_dir="datahub-spool",       # optional, default .datahub-spool
 )
 ```
-
-`from_env()` / `from_envfile()` instead read `ENABLE_BUFFERING`, `BUFFER_RETENTION_SECS`,
-`BUFFER_MAX_BYTES` and `BUFFER_DIR` from the environment.
 
 </TabItem>
 <TabItem value="rust" label="Rust">
@@ -183,11 +174,17 @@ config
 let api = ApiService::new(config);
 ```
 
-Or via the environment (read by `create_api_service()`): `ENABLE_BUFFERING=true`,
-`BUFFER_RETENTION_SECS`, `BUFFER_MAX_BYTES`, `BUFFER_DIR`.
-
 </TabItem>
 </Tabs>
+
+The env-var equivalents, read by `fromEnv()` / `from_env()` / `create_api_service()`:
+
+| Setting | Java | Python | Rust |
+| --- | --- | --- | --- |
+| Enable | *set either bound* | `ENABLE_BUFFERING` | `ENABLE_BUFFERING` |
+| Time window | `BUFFER_RETENTION` (ISO-8601, e.g. `PT72H`) | `BUFFER_RETENTION_SECS` | `BUFFER_RETENTION_SECS` |
+| Size cap | `BUFFER_MAX_BYTES` | `BUFFER_MAX_BYTES` | `BUFFER_MAX_BYTES` |
+| Directory | `BUFFER_DIRECTORY` | `BUFFER_DIR` | `BUFFER_DIR` |
 
 :::note Retries are idempotent
 A flush re-sends buffered data, which is safe: datapoints are keyed by `(series, timestamp)` and
@@ -200,11 +197,14 @@ UUID v7 before the first send, so a retried event keeps the same id (see [Events
 Most calls return the entity (or a thin wrapper around a list of them); a non-2xx
 response surfaces as an exception/error carrying the HTTP status and the raw body.
 
+| | Returns | Results via | Non-2xx |
+| --- | --- | --- | --- |
+| Java | `DataWrapper<T>` | `getItems()` | throws `DatahubApiException` |
+| Python | `list[T]` | *the list itself* | raises `DataHubException` |
+| Rust | `Result<DataWrapper<T>, ResponseError>` | `get_items()` | `Err(ResponseError)` |
+
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
-
-Methods return `DataWrapper<T>` — `getItems()` holds the results. Non-2xx throws
-`DatahubApiException`:
 
 ```java
 import ai.intellistream.datahub.models.IdCollection;
@@ -221,8 +221,6 @@ try {
 </TabItem>
 <TabItem value="python" label="Python">
 
-Methods return plain `list[T]`. Non-2xx raises `DataHubException`:
-
 ```python
 from datahub_sdk import DataHubException
 
@@ -235,8 +233,7 @@ except DataHubException as e:
 </TabItem>
 <TabItem value="rust" label="Rust">
 
-Methods return `Result<DataWrapper<T>, ResponseError>` — `get_items()` holds the results,
-and `ResponseError` exposes `get_status()` and `get_message()` (its `Display` prints both):
+`ResponseError` exposes `get_status()` and `get_message()`; its `Display` prints both:
 
 ```rust
 match api.resources.by_ids(&vec![IdAndExtId::from_external_id("pump_1")]).await {

@@ -9,6 +9,14 @@ import TabItem from '@theme/TabItem';
 
 Durable, fan-out subscriptions over time-series, plus **live delivery over a WebSocket**.
 
+## Subscription fields
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `externalId` | string | **Required.** Stable snake_case id. |
+| `name` | string | **Required.** Human-readable display name. |
+| `timeseries` | list&lt;IdCollection&gt; | **Required.** The bound series — see [`IdCollection`](./filters.md#idcollection). |
+
 ## Manage subscriptions
 
 <Tabs groupId="lang">
@@ -145,20 +153,17 @@ while let Some(result) = listener.next().await {
 
 Every listener also exposes `stream` for push delivery, `ack`/`nack`,
 `subscribe`/`unsubscribe`/`set_subscriptions` to change the live interest set at runtime,
-and `close`.
-
-A delivered message carries the originating subscription's external id, an opaque
-`messageId` you echo back to `ack`/`nack`, and a `payload` describing the fan-out event
-(an action — create/update/delete — plus the affected datapoints).
+and `close`. A message carries the originating subscription's external id, an opaque
+`messageId` you echo back to `ack`/`nack`, and a `payload` (an action —
+create/update/delete — plus the affected datapoints).
 
 :::note Refused subscriptions surface as errors
-Live delivery enforces the same dataset ACL: to attach a subscription you must be able to read
-**all** of its bound timeseries. A subscription you can't read (`reason: "forbidden"`) or one that
-doesn't exist (`reason: "not-found"`) is refused per-subscription — the connection stays open for
-the subscriptions that did attach. The refusal is surfaced, not swallowed: a `SubscriptionError`
-via `pollError` in Java, an `Err(ListenError::Subscription { .. })` from `next().await` in Rust, and
-an exception raised from the iterator in Python — so a refused subscription is visible instead of
-looking like an indefinitely silent stream.
+Attaching requires read access to **all** of a subscription's bound timeseries. A subscription you
+can't read (`reason: "forbidden"`) or that doesn't exist (`reason: "not-found"`) is refused
+per-subscription — the connection stays open for those that did attach. Refusals surface rather than
+producing a silently empty stream: `SubscriptionError` via `pollError` in Java,
+`Err(ListenError::Subscription { .. })` from `next().await` in Rust, an exception from the iterator
+in Python.
 :::
 
 :::tip Acking is at-least-once

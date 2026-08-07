@@ -41,8 +41,19 @@ let listing = api.files.list_directory_by_path("/reports/2026").await?;
 
 ## Upload
 
-The Java client uploads raw `content` bytes to a destination `path`; the Python and Rust
-clients upload a local file and a `destination_path`.
+Java uploads raw `content` bytes to a destination `path`; Python and Rust upload a local
+file and a `destination_path`.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `path` | string | **Required.** Destination path (Java) or local file (Python, Rust). |
+| `content` | bytes | **Required in Java.** Raw file bytes. |
+| `destinationPath` | string | **Required in Python and Rust.** Destination directory. |
+| `contentType` | string | Java only; default `application/octet-stream`. Inferred in Rust. |
+| `name` | string | Stored file name. |
+| `externalId` | string | Stable snake_case id. |
+| `dataSetId` | integer | Owning dataset. |
+| `description` | string | Optional description. |
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">

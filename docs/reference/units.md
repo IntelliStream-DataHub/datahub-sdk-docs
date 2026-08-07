@@ -7,7 +7,17 @@ import TabItem from '@theme/TabItem';
 
 # Units
 
-Units of measure (read-only reference data).
+Units of measure (read-only reference data). The catalogue is managed centrally and small
+— typically a few hundred entries.
+
+## Unit fields
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | integer | Server-assigned numeric id. |
+| `externalId` | string | Stable id — use this as a series' `unit`. |
+| `name` | string | Display name (e.g. `Celsius`). |
+| `symbol` | string | Symbol (e.g. `°C`). |
 
 ## List all units
 

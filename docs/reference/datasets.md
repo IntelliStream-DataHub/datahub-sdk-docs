@@ -15,6 +15,14 @@ A dataset external id is normalized to snake_case (lower-cased, special characte
 when you look the dataset up again.
 :::
 
+## Dataset fields
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `externalId` | string | **Required.** Stable snake_case id, 3–256 chars. Derived from `name` in Rust. |
+| `name` | string | **Required.** Human-readable display name. |
+| `description` | string | Optional description. |
+
 ## Create
 
 <Tabs groupId="lang">

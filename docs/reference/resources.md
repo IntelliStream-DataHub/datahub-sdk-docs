@@ -10,6 +10,16 @@ import TabItem from '@theme/TabItem';
 Hierarchical, asset-like entities and the relationships between them. Create resources
 and the edges between them in one call; the server returns the persisted graph.
 
+## Resource fields
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `externalId` | string | **Required.** Stable snake_case id, 3–256 chars. |
+| `name` | string | **Required.** Human-readable display name. |
+| `labels` | list&lt;string&gt; | **Required, at least one.** Classifies the node (e.g. `PUMP`). |
+| `dataSetId` | integer | Owning dataset — see [Datasets](./datasets.md). |
+| `description` | string | Optional description. |
+
 ## Look up
 
 Fetch by numeric id or external id (you can mix them).

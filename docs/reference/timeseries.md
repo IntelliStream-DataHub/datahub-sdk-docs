@@ -10,6 +10,17 @@ import TabItem from '@theme/TabItem';
 Time-series metadata, datapoint retrieval, and datapoint ingestion (single-request or
 high-throughput).
 
+## TimeSeries fields
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `externalId` | string | **Required.** Stable snake_case id, 3–256 chars. |
+| `name` | string | **Required.** Human-readable display name. |
+| `dataSetId` | integer | **Required.** Owning dataset — see [Datasets](./datasets.md). |
+| `unit` | string | Unit of measure; use a [Units](./units.md) external id. |
+| `valueType` | string | `NUMERIC` (default) or `STRING`. |
+| `description` | string | Optional description. |
+
 ## Create a series
 
 <Tabs groupId="lang">
