@@ -190,17 +190,15 @@ where `start` and `end` are the numeric ids of the two nodes. That is why you se
 `fromExternalId`/`toExternalId` but read `start`/`end`: the write side speaks in your
 identifiers, the read side in the graph's.
 
-## Connect resources you already have {#create-relations}
+Relations are directional. `from` → `to` is the direction you will see when you
+[traverse](#traverse-the-graph), so `plant contains pump` and `pump contains plant`
+describe different graphs.
 
-`POST /edges/create` draws a relationship between two resources that are already in the
-graph. Nothing else changes: no resource is created, updated or moved, and either end can
-already have any number of other relationships.
+### Relations without the nodes {#create-relations}
 
-This is the call for wiring up a graph that arrived in pieces — a pump loaded from one
-feed and the plant that holds it from another, a hierarchy you are filling in after the
-initial import, a connection someone only discovered later. Reach for
-`/resources/create` instead when a resource and its relationship have to come into being
-together.
+There are two ways to create a relation and they produce the same edge. The call above
+sends nodes and relations together. `POST /edges/create` sends the relations by
+themselves:
 
 ```http
 POST /edges/create
@@ -217,48 +215,26 @@ POST /edges/create
 }
 ```
 
-Name each end by external id, or by numeric id with `fromId`/`toId` — whichever you happen
-to be holding, and the two ends need not agree. `relationshipType` is the label the
-relationship carries in the graph and is what queries later filter on; a type you have
-never used before is simply created. You can send many relations in one call, and they
-either all take effect or none do.
+`items[]` takes exactly what you would have put in `relations[]` — the same fields, the
+same endpoint rules, the same `Relation` objects back, now under `items` and with a `201`.
+Which form you pick is only a question of whether the two ends need creating: send them
+together when a resource and its relation have to appear in one go, and send the relation
+alone when both ends are already there and repeating them would be noise.
 
-Relationships are directional: `from` → `to` is the direction you will see when you
-[traverse](#traverse-the-graph), so `plant contains pump` and `pump contains plant`
-describe different graphs.
-
-The response is `201` and hands back each relationship with the id it now has:
-
-```json
-{
-  "items": [
-    {
-      "id": "6728353061711138026",
-      "start": 5677892,
-      "end": 5677893,
-      "type": "CONTAINS",
-      "relationshipTypeId": "88",
-      "description": "Feeds the east wing",
-      "metadata": { "work_order": "wo-sap-12344" }
-    }
-  ]
-}
-```
-
-| Status | What happened |
-| --- | --- |
-| `400` | One end doesn't exist (the message says which), the relationship has no type, or it is one the dataset and time-series rules above don't allow. |
-| `403` | You can't write one of the two resources. Both ends are checked — connecting something *into* a data set needs write access on that data set too. |
-| `409` | The two are already connected that way. Relationships are unique per pair and type. |
+Either way the failures are the same. A `400` means one end doesn't exist (the message
+says which), the relation has no type, or the dataset and time-series rules above don't
+allow it. A `403` means you can't write one of the two resources — both ends are checked,
+so connecting something *into* a data set needs write access on that data set too. A `409`
+means the two are already connected that way; a pair can carry one relation per type.
 
 :::note Not yet in the clients
-This endpoint is REST-only for now. From the Java, Python or Rust client, connect existing
-resources with `resources.create`, passing your relations and an empty list of nodes.
+The Java, Python and Rust clients only offer the first form. Pass your relations with an
+empty list of nodes and you get the same edges back.
 :::
 
 To disconnect two resources without touching either of them, `POST /edges/delete` with the
-relationship's id. [Deleting a resource](#delete) is the heavier move: it takes every
-relationship the resource had with it.
+relation's id. [Deleting a resource](#delete) is the heavier move: it takes every relation
+the resource had with it.
 
 ## Filter
 
@@ -636,7 +612,7 @@ let nearest = api.resources.fetch_nearest(
 | Get by numeric id | `resources().getById` | `resources.get_by_id` | `resources.get_by_id` |
 | Look up by id / external id | `resources().byIds` | `resources.by_ids` | `resources.by_ids` |
 | Create | `resources().create` | `resources.create` | `resources.create` |
-| Connect existing resources (`/edges/create`) | — | — | — |
+| Create relations only (`/edges/create`) | REST only | REST only | REST only |
 | Update | `resources().update` | `resources.update` | `resources.update` |
 | Delete | `resources().delete` | `resources.delete` | `resources.delete` |
 | Search | `resources().search` | `resources.search` | `resources.search` |
