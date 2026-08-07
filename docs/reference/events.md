@@ -36,8 +36,7 @@ event even when a `snake_case` policy is rejecting it on resources.
 | `description` | string | Prose. This is the field [full-text search](#search) reads. |
 | `metadata` | map&lt;string, string&gt; | Flat key/value. An empty key is dropped rather than rejected. |
 | `dataSetId` | number | Optional. Platform-internal events (say, anomaly detection on a series outside any data set) legitimately have none. |
-| `relatedResourceIds` | number[] | Resources the event is about, by numeric id. |
-| `relatedResourceExternalIds` | string[] | The same, by external id. |
+| `relatedResources` | object[] | Resources the event is about. Each entry takes an `id`, an `externalId`, or both. |
 | `createdTime` | epoch millis | Server-set. When the platform stored it. |
 | `lastUpdatedTime` | epoch millis | Server-set. |
 
@@ -47,10 +46,23 @@ carries a weekend `eventTime` and a Monday `createdTime`. Filter on `eventTime` 
 did it happen*, on `createdTime` to ask *when did we learn about it*.
 
 :::note Numeric ids cross the wire as JSON strings
-`dataSetId` and the entries of `relatedResourceIds` serialize as `"12"`, not `12`. Ids can
+`dataSetId` and the `id` of each `relatedResources` entry serialize as `"12"`, not `12`. Ids can
 exceed the 53-bit integer a JSON number is safe for in JavaScript, and a silently rounded id
 is worse than a quoted one. The clients parse them back to integers for you; a hand-rolled
 HTTP caller should expect the quotes.
+:::
+
+:::note One list, not two parallel ones
+`relatedResources` replaced a `relatedResourceIds` / `relatedResourceExternalIds` pair. The two
+were independent inputs and drifted: a mismatched pair was unioned into an event describing both
+resources, and a patch setting only the external ids left the stored ids stale. There are no
+aliases, and events ignore unknown properties, so a client still sending the old field names gets
+a `200` with its relations silently dropped. Java SDK users get a compile break on the removed
+setters instead.
+
+Supply an `id`, an `externalId`, or both. The server resolves whichever side you left out and
+returns both, so a read always gives you the pair. Sending both when they name *different*
+resources is a `400` rather than a guess about which one you meant.
 :::
 
 ## Create {#create}
@@ -375,7 +387,7 @@ The encoding is a wire contract, so you can read findings without a policy-aware
 | `externalId` | `policy_finding_<policy external id>_<node id>` — the correlation key every event in one finding's lifecycle shares. |
 | `status` | `OPEN` or `RESOLVED` — what *this event* asserts, not the finding's current state. |
 | `description` | What is wrong, in words. |
-| `relatedResourceIds` | The entity the finding is about. |
+| `relatedResources` | The entity the finding is about, by node id. |
 | `dataSetId` | That entity's data set. |
 | `metadata` | `offendingValue`, `suggestion` (when one could be derived), `raisedBy`. |
 
@@ -583,8 +595,8 @@ this" be expressed distinctly from "leave it alone":
 | --- | --- | --- |
 | `set` | every field | Replace the value. |
 | `setNull: true` | nullable fields | Clear the value. |
-| `add` | `metadata`, `relatedResourceIds`, `relatedResourceExternalIds` | Merge entries in, keeping the rest. |
-| `remove` | the same collections | Take entries out, keeping the rest. |
+| `add` | `metadata`, `relatedResources` | Merge entries in, keeping the rest. |
+| `remove` | the same collections | Take entries out, keeping the rest. A `relatedResources` entry matches on either side, so you can remove by `id` or by `externalId` whichever you have. |
 
 ```json
 {
@@ -601,8 +613,8 @@ this" be expressed distinctly from "leave it alone":
 ```
 
 Updatable fields are `externalId`, `description`, `type`, `subType`, `status`, `source`,
-`dataSetId`, `metadata`, `eventTime`, `relatedResourceIds` and `relatedResourceExternalIds`.
-`eventTime` is set from an ISO-8601 string. Sending both `set` and `setNull` for one field is
+`dataSetId`, `metadata`, `eventTime` and `relatedResources`. `eventTime` is set from an
+ISO-8601 string. Sending both `set` and `setNull` for one field is
 a `400` — the request is contradictory, so it is refused rather than resolved by precedence.
 
 :::caution Prefer a follow-up event to mutating one
