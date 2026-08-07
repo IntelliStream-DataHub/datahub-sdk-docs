@@ -301,7 +301,7 @@ Each finding event carries:
 | `subType` | The policy that fired, by external id |
 | `source` | `datahub_policy_<policy>` |
 | `description` | What is wrong, in words |
-| `relatedResourceIds` | The entity the finding is about |
+| `relatedResources` | The entity the finding is about, by node id |
 | `dataSetId` | That entity's data set |
 | `eventTime` | When this happened |
 | `status` | `OPEN` or `RESOLVED` — what *this event* asserts |
@@ -320,13 +320,13 @@ POST /events/create
     "subType": "naming_snake_case",
     "status": "RESOLVED",
     "eventTime": "2026-08-06T11:02:00Z",
-    "relatedResourceIds": [42],
+    "relatedResources": [{ "id": 42 }],
     "dataSetId": 7
   }]
 }
 ```
 
-Copy `dataSetId` and `relatedResourceIds` from the raise. The resolve has to come back from the
+Copy `dataSetId` and `relatedResources` from the raise. The resolve has to come back from the
 same filtered query the raise does, or a queue narrowed to one data set sees the complaint and
 misses the answer to it. Resolving therefore needs write access to that data set.
 
