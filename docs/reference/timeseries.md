@@ -15,11 +15,16 @@ high-throughput).
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `externalId` | string | **Required.** Stable snake_case id, 3–256 chars. |
-| `name` | string | **Required.** Human-readable display name. |
-| `dataSetId` | integer | **Required.** Owning dataset — see [Datasets](./datasets.md). |
-| `unit` | string | Unit of measure; use a [Units](./units.md) external id. |
-| `valueType` | string | `NUMERIC` (default) or `STRING`. |
+| `name` | string | **Required.** Display name, 3–512 chars. |
+| `unit` | string | **Required.** Unit of measure, max 64 chars (e.g. `kg/hr`). |
+| `valueType` | string | One of `FLOAT32` (default), `FLOAT`, `BIGINT`, `NUMERIC`, `DECIMAL32`, `TEXT`, `MIXED`. |
+| `unitExternalId` | string | A [Units](./units.md) external id, 3–256 chars. Canonicalized to snake_case. |
+| `dataSetId` | integer | Owning dataset — see [Datasets](./datasets.md). |
 | `description` | string | Optional description. |
+| `metadata` | map | String-to-string. |
+| `securityCategories` | list&lt;integer&gt; | Security category ids. |
+
+`labels` is inherited but defaulted to `TIMESERIES`, so you never set it here.
 
 ## Create a series
 

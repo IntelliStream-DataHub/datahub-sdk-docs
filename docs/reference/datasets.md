@@ -20,8 +20,13 @@ when you look the dataset up again.
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `externalId` | string | **Required.** Stable snake_case id, 3–256 chars. Derived from `name` in Rust. |
-| `name` | string | **Required.** Human-readable display name. |
+| `name` | string | **Required.** Display name, 3–512 chars. |
 | `description` | string | Optional description. |
+| `metadata` | map | String-to-string. |
+| `policies` | list&lt;string&gt; | External ids of policy resources to apply. |
+| `connectedDataSets` | list&lt;integer&gt; | Ids of datasets this one is part of. |
+
+`labels` is inherited but defaulted to `DATASET`, so you never set it here.
 
 ## Create
 

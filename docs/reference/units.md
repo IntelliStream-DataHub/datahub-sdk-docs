@@ -15,9 +15,15 @@ Units of measure (read-only reference data). The catalogue is managed centrally 
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `id` | integer | Server-assigned numeric id. |
-| `externalId` | string | Stable id — use this as a series' `unit`. |
-| `name` | string | Display name (e.g. `Celsius`). |
-| `symbol` | string | Symbol (e.g. `°C`). |
+| `externalId` | string | **Required.** Stable id, 3–256 chars — use as a series' `unitExternalId`. |
+| `name` | string | **Required.** Display name, 1–64 chars (e.g. `Celsius`). |
+| `longName` | string | Full name, 1–256 chars. |
+| `symbol` | string | Symbol, 1–32 chars (e.g. `°C`). |
+| `quantity` | string | Physical quantity measured (e.g. `Temperature`). |
+| `aliasNames` | list&lt;string&gt; | Alternative names (e.g. `["c", "C", "Celsius"]`). |
+| `conversion` | object | Multiplier and offset for converting between units. |
+| `description` | string | Optional description. |
+| `source` / `sourceReference` | string | Specification source (e.g. `qudt.org`) and its URL. |
 
 ## List all units
 

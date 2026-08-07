@@ -12,22 +12,26 @@ changing state. Anchored in time by `eventTime`, classified by free-form `type`/
 
 ## Event fields
 
-An event without an `eventTime` is rejected, never stamped with "now". `externalId` need
-not be unique over time: events sharing one form the lifecycle of a single thing, as a
-purchase order moving `created → approved → paid` is four events under one id.
+`eventTime` is yours to set — Java's `ingest` rejects an event without one rather than
+guessing. A plain `create` does not check, and the model serializes the current time in
+its place, so always set it explicitly. `externalId` need not be unique over time: events
+sharing one form the lifecycle of a single thing, as a purchase order moving
+`created → approved → paid` is four events under one id.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `externalId` | string | **Required.** Stable snake_case id, 3–256 chars. |
-| `type` | string | **Required.** Classification, 3–128 chars (e.g. `alarm`). |
-| `eventTime` | timestamp | **Required.** When it occurred at the source. Timezone-aware. |
-| `subType` | string | Finer classification, 3–128 chars (e.g. `electrical`). |
+| `type` | string | **Required.** Classification, 3–128 chars (e.g. `Alarm`). |
+| `eventTime` | string | **Required.** When it occurred at the source. Accepts ISO-8601 or epoch millis; always returned as ISO-8601. |
+| `subType` | string | Finer classification, 3–128 chars (e.g. `Electrical`). |
 | `description` | string | Human-readable summary. |
-| `status` | string | Free-form lifecycle state (e.g. `open`, `COMPLETE`). |
-| `source` | string | System the event came from. |
+| `status` | string | Free-form lifecycle state, 3–128 chars (e.g. `COMPLETE`). |
+| `source` | string | System the event came from, 2–128 chars (e.g. `SAP`). |
 | `metadata` | map | String-to-string. Numbers must be stringified. |
-| `dataSetId` | integer | Owning data set. Governs access and addressability by data set. |
-| `id` | UUID | Server-assigned if omitted — see below. |
+| `dataSetId` | integer | Owning data set. Optional — platform-internal events may have none. |
+| `relatedResourceIds` | list&lt;integer&gt; | Resources this event relates to, by id. |
+| `relatedResourceExternalIds` | list&lt;string&gt; | Resources this event relates to, by external id. |
+| `id` | string | Server-assigned if omitted — see below. |
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">

@@ -15,10 +15,14 @@ and the edges between them in one call; the server returns the persisted graph.
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `externalId` | string | **Required.** Stable snake_case id, 3–256 chars. |
-| `name` | string | **Required.** Human-readable display name. |
-| `labels` | list&lt;string&gt; | **Required, at least one.** Classifies the node (e.g. `PUMP`). |
+| `name` | string | **Required.** Display name, 3–512 chars. |
+| `labels` | list&lt;string&gt; | **Required, at least one.** Classifies the node (e.g. `PIPE`). |
 | `dataSetId` | integer | Owning dataset — see [Datasets](./datasets.md). |
 | `description` | string | Optional description. |
+| `metadata` | map | String-to-string. |
+| `source` | string | Originating system, 2–128 chars. |
+| `isRoot` | boolean | Whether this is a root resource. Defaults to `false`. |
+| `geoLocation` | object | Optional geographic location. |
 
 ## Look up
 

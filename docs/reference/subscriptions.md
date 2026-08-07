@@ -13,9 +13,12 @@ Durable, fan-out subscriptions over time-series, plus **live delivery over a Web
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `externalId` | string | **Required.** Stable snake_case id. |
-| `name` | string | **Required.** Human-readable display name. |
-| `timeseries` | list&lt;IdCollection&gt; | **Required.** The bound series — see [`IdCollection`](./filters.md#idcollection). |
+| `externalId` | string | **Required.** Stable snake_case id, 3–256 chars. Also the Pulsar subscription name. |
+| `name` | string | **Required.** Display name, 3–256 chars. |
+| `timeseries` | list&lt;IdCollection&gt; | The bound series — see [`IdCollection`](./filters.md#idcollection). |
+| `id` | integer | Server-assigned. |
+| `systemManaged` | boolean | True when auto-provisioned by function binding. |
+| `dateCreated` / `lastUpdated` | timestamp | Server-assigned. |
 
 ## Manage subscriptions
 
