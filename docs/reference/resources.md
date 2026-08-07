@@ -227,9 +227,20 @@ allow it. A `403` means you can't write one of the two resources — both ends a
 so connecting something *into* a data set needs write access on that data set too. A `409`
 means the two are already connected that way; a pair can carry one relation per type.
 
-:::note Not yet in the clients
-The Java, Python and Rust clients only offer the first form. Pass your relations with an
-empty list of nodes and you get the same edges back.
+In Java that is `resources().createRelations(relations)`:
+
+```java
+RelForm contains = new RelForm();
+contains.setName("contains");
+contains.setFromExternalId("plant_oslo");
+contains.setToExternalId("pump_1");
+
+DataWrapper<EdgeProxy> created = client.resources().createRelations(List.of(contains));
+```
+
+:::note Python and Rust
+The other two clients don't wrap this one yet. Until they do, `resources.create` with your
+relations and an empty list of nodes gets you the same edges.
 :::
 
 To disconnect two resources without touching either of them, `POST /edges/delete` with the
@@ -612,7 +623,7 @@ let nearest = api.resources.fetch_nearest(
 | Get by numeric id | `resources().getById` | `resources.get_by_id` | `resources.get_by_id` |
 | Look up by id / external id | `resources().byIds` | `resources.by_ids` | `resources.by_ids` |
 | Create | `resources().create` | `resources.create` | `resources.create` |
-| Create relations only (`/edges/create`) | REST only | REST only | REST only |
+| Create relations only (`/edges/create`) | `resources().createRelations` | — | — |
 | Update | `resources().update` | `resources.update` | `resources.update` |
 | Delete | `resources().delete` | `resources.delete` | `resources.delete` |
 | Search | `resources().search` | `resources.search` | `resources.search` |
