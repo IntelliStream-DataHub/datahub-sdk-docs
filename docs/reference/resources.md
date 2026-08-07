@@ -190,6 +190,73 @@ where `start` and `end` are the numeric ids of the two nodes. That is why you se
 `fromExternalId`/`toExternalId` but read `start`/`end`: the write side speaks in your
 identifiers, the read side in the graph's.
 
+## Link resources that already exist {#create-relations}
+
+When both ends are already in the graph, `POST /edges/create` links them without a
+`nodes[]` array. The edge semantics are exactly those above — endpoint resolution,
+relationship types, the dataset and time-series rules, all-or-nothing — because both paths
+run the same server-side code; only the envelope differs. The body is a plain `items[]` of
+relation forms, and the response is the created edges alone.
+
+Use `/resources/create` when nodes and edges have to appear together in one atomic call.
+Use this when the nodes are already there and resending them would be noise — wiring up an
+existing hierarchy, backfilling relationships discovered after the fact, or connecting two
+resources that arrived from different feeds.
+
+```http
+POST /edges/create
+{
+  "items": [
+    {
+      "fromExternalId": "plant_oslo",
+      "toExternalId": "pump_1",
+      "relationshipType": "contains",
+      "description": "Feeds the east wing",
+      "metadata": { "work_order": "wo-sap-12344" }
+    }
+  ]
+}
+```
+
+Identify each endpoint by `fromExternalId`/`toExternalId` or by numeric `fromId`/`toId` —
+either kind, and the two ends need not use the same one. Name the relationship with
+`relationshipType` (upper-cased by the server, created on first use) or with a
+`relationshipTypeId` you already hold.
+
+The response is `201` with the persisted edges:
+
+```json
+{
+  "items": [
+    {
+      "id": "6728353061711138026",
+      "start": 5677892,
+      "end": 5677893,
+      "type": "CONTAINS",
+      "relationshipTypeId": "88",
+      "description": "Feeds the east wing",
+      "metadata": { "work_order": "wo-sap-12344" }
+    }
+  ]
+}
+```
+
+| Status | What happened |
+| --- | --- |
+| `400` | An endpoint that resolves to nothing (the message names which end), a relation with neither `relationshipType` nor `relationshipTypeId`, or an edge the dataset / time-series rules above forbid. |
+| `403` | No write access to the data set of one of the endpoints. **Both** ends are checked, not just the one you are attaching from. |
+| `409` | That edge already exists — same start, end and relationship type. |
+
+:::note Not yet in the clients
+This endpoint is REST-only for now. From the Java, Python or Rust client, link existing
+resources with `resources.create` and an empty node list — it reaches the same code and
+returns the same edges, wrapped in a graph response whose `nodes` is empty.
+:::
+
+Removing a link is the mirror image: `POST /edges/delete` with the edge ids takes the
+relationship and leaves both resources standing — unlike [deleting a resource](#delete),
+which takes all of its edges with it.
+
 ## Filter
 
 `POST /resources/filter` finds resources by structured criteria. Everything you supply is
@@ -566,6 +633,7 @@ let nearest = api.resources.fetch_nearest(
 | Get by numeric id | `resources().getById` | `resources.get_by_id` | `resources.get_by_id` |
 | Look up by id / external id | `resources().byIds` | `resources.by_ids` | `resources.by_ids` |
 | Create | `resources().create` | `resources.create` | `resources.create` |
+| Link existing resources (`/edges/create`) | — | — | — |
 | Update | `resources().update` | `resources.update` | `resources.update` |
 | Delete | `resources().delete` | `resources.delete` | `resources.delete` |
 | Search | `resources().search` | `resources.search` | `resources.search` |
