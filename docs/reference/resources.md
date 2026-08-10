@@ -196,56 +196,18 @@ describe different graphs.
 
 ### Relations without the nodes {#create-relations}
 
-There are two ways to create a relation and they produce the same edge. The call above
-sends nodes and relations together. `POST /edges/create` sends the relations by
-themselves:
+There are two ways to create a relation and they produce the same edge. The call above sends
+nodes and relations together, in one transaction. `POST /edges/create` sends the relations by
+themselves, for when both ends already exist and repeating them would be noise — same fields,
+same rules, same edges back.
 
-```http
-POST /edges/create
-{
-  "items": [
-    {
-      "fromExternalId": "plant_oslo",
-      "toExternalId": "pump_1",
-      "relationshipType": "contains",
-      "description": "Feeds the east wing",
-      "metadata": { "work_order": "wo-sap-12344" }
-    }
-  ]
-}
-```
+That endpoint, and the rest of the `/edges` surface (reading an edge back, deleting one
+without touching its endpoints, the relationship-type catalog), has its own page.
+[Edges →](./edges)
 
-`items[]` takes exactly what you would have put in `relations[]` — the same fields, the
-same endpoint rules, the same `Relation` objects back, now under `items` and with a `201`.
-Which form you pick is only a question of whether the two ends need creating: send them
-together when a resource and its relation have to appear in one go, and send the relation
-alone when both ends are already there and repeating them would be noise.
-
-Either way the failures are the same. A `400` means one end doesn't exist (the message
-says which), the relation has no type, or the dataset and time-series rules above don't
-allow it. A `403` means you can't write one of the two resources — both ends are checked,
-so connecting something *into* a data set needs write access on that data set too. A `409`
-means the two are already connected that way; a pair can carry one relation per type.
-
-In Java that is `resources().createRelations(relations)`:
-
-```java
-RelForm contains = new RelForm();
-contains.setName("contains");
-contains.setFromExternalId("plant_oslo");
-contains.setToExternalId("pump_1");
-
-DataWrapper<EdgeProxy> created = client.resources().createRelations(List.of(contains));
-```
-
-:::note Python and Rust
-The other two clients don't wrap this one yet. Until they do, `resources.create` with your
-relations and an empty list of nodes gets you the same edges.
-:::
-
-To disconnect two resources without touching either of them, `POST /edges/delete` with the
-relation's id. [Deleting a resource](#delete) is the heavier move: it takes every relation
-the resource had with it.
+To disconnect two resources without touching either of them, [delete the edge](./edges#delete).
+[Deleting a resource](#delete) is the heavier move: it takes every relation the resource had
+with it.
 
 ## Filter
 
@@ -623,10 +585,12 @@ let nearest = api.resources.fetch_nearest(
 | Get by numeric id | `resources().getById` | `resources.get_by_id` | `resources.get_by_id` |
 | Look up by id / external id | `resources().byIds` | `resources.by_ids` | `resources.by_ids` |
 | Create | `resources().create` | `resources.create` | `resources.create` |
-| Create relations only (`/edges/create`) | `resources().createRelations` | — | — |
 | Update | `resources().update` | `resources.update` | `resources.update` |
 | Delete | `resources().delete` | `resources.delete` | `resources.delete` |
 | Search | `resources().search` | `resources.search` | `resources.search` |
 | Filter | `resources().filter` | `resources.filter` | `resources.filter` |
 | Traverse (`fetch-related`) | `resources().fetchRelated` | `resources.fetch_related` | `resources.fetch_related` |
 | Nearest N (`fetch-nearest`) | `resources().fetchNearest` | `resources.fetch_nearest` | `resources.fetch_nearest` |
+
+Relations have their own client surface in all three clients — `edges()` in Java, `edges` in
+Python and Rust. [Edges → client coverage](./edges#client-coverage)
