@@ -99,8 +99,91 @@ api.datasets.delete(&vec![IdAndExtId::from_external_id("plant_a")]).await?;
 </Tabs>
 
 The Java client additionally offers `list(DataSetRetreiver)`, `search(DataSetSearch)` and
-`update(List<DataSetForm>)`; the Rust client offers `filter(&DatasetFilter)` and
-`search(&DatasetSearch)`.
+`update(List<DataSetForm>)`; the Rust client offers `search(&DatasetSearch)`.
+
+## Filter {#filter}
+
+`POST /datasets/filter` finds datasets by structured criteria. Everything you supply is
+combined with AND — a dataset must match every criterion to be included.
+
+| Criterion | Matching |
+| --- | --- |
+| `ids` / `externalIds` | Datasets named directly, as lists. External ids match case-insensitively, like every other external-id lookup. |
+| `names` | One pattern per entry, OR-ed together: `["SAP%", "Plant A"]` takes everything starting with SAP plus that one exact name. Case-insensitive, `%` is yours to place. |
+| `source` | The data source the dataset came from. Case-insensitive, `%` works. |
+| `externalIdPrefix` | External ids starting with this. Case-insensitive, and anchored — a mid-string match does not count. |
+| `metadata` | Every key/value pair you give must be present on the dataset. |
+| `createdTime` / `lastUpdatedTime` | Inclusive `min`/`max` instants; either bound alone works. |
+| `writeProtected` / `deactivated` | The dataset's flags. `false` **also matches datasets that never set the flag**, which is most of them. |
+
+An empty list places no restriction rather than matching nothing, so building `ids` from a
+possibly-empty selection is safe. Results come newest first, capped by `limit` (default 100,
+max 10000). For free-text lookups over name, external id and description use
+`POST /datasets/search` instead.
+
+```http
+POST /datasets/filter
+{
+  "limit": 100,
+  "filter": {
+    "names": ["SAP%"],
+    "source": "sap",
+    "writeProtected": false,
+    "metadata": { "owner": "plant-a" }
+  }
+}
+```
+
+`POST /datasets/list` takes the same body and behaves identically — `/filter` is the name
+the resource, time-series and event endpoints use for the same operation. Send an empty
+filter and you get every dataset, up to `limit`.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+import ai.intellistream.datahub.models.datafilters.DataSetFilter;
+
+DataSetFilter criteria = new DataSetFilter();
+criteria.setNames(List.of("SAP%"));
+criteria.setSource("sap");
+criteria.setWriteProtected(false);
+
+DataWrapper<DataSetModel> datasets = client.datasets().filter(criteria);
+```
+
+Pass a `DataSetRetreiver` instead of the bare criteria to set an explicit `limit`.
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+The Python client's `datasets` service covers `create`, `by_ids` and `delete` only, so
+filtering goes through the endpoint directly — the same way listing, searching and updating do.
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::datasets::{BasicDatasetFilter, DatasetFilter};
+
+let criteria = BasicDatasetFilter::new()
+    .set_names(vec!["SAP%".into()])
+    .set_source("sap".into())
+    .set_write_protected(false)
+    .build();
+
+let datasets = api.datasets.filter(&DatasetFilter::from_filter(criteria)).await?;
+```
+
+`DatasetFilter` carries the `limit`; `set_limit` on it raises the default 100. `datasets.list()`
+posts an empty body to `/datasets/list`, which is the same handler with no criteria.
+
+</TabItem>
+</Tabs>
+
+Unlike the time-series filter, this one does **not** expand the dataset hierarchy: it matches
+the datasets themselves, not their descendants. Filtering *time-series* by a dataset is what
+follows the hierarchy. [Filter series →](./timeseries#filter-series)
 
 ## Access control {#access-control}
 
@@ -141,7 +224,7 @@ so a changed grant takes effect within about a minute, without a new token.
 | Create | `datasets().create` | `datasets.create` | `datasets.create` |
 | Look up by id / external id | `datasets().byIds` | `datasets.by_ids` | `datasets.by_ids` |
 | List | `datasets().list` | HTTP | `datasets.list` |
-| Filter | HTTP | HTTP | `datasets.filter` |
+| [Filter](#filter) | `datasets().filter` | HTTP | `datasets.filter` |
 | Search | `datasets().search` | HTTP | `datasets.search` |
 | Update | `datasets().update` | HTTP | `datasets.update` |
 | Delete | `datasets().delete` | `datasets.delete` | `datasets.delete` |
