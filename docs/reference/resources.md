@@ -190,6 +190,25 @@ where `start` and `end` are the numeric ids of the two nodes. That is why you se
 `fromExternalId`/`toExternalId` but read `start`/`end`: the write side speaks in your
 identifiers, the read side in the graph's.
 
+Relations are directional. `from` → `to` is the direction you will see when you
+[traverse](#traverse-the-graph), so `plant contains pump` and `pump contains plant`
+describe different graphs.
+
+### Relations without the nodes {#create-relations}
+
+There are two ways to create a relation and they produce the same edge. The call above sends
+nodes and relations together, in one transaction. `POST /edges/create` sends the relations by
+themselves, for when both ends already exist and repeating them would be noise — same fields,
+same rules, same edges back.
+
+That endpoint, and the rest of the `/edges` surface (reading an edge back, deleting one
+without touching its endpoints, the relationship-type catalog), has its own page.
+[Edges →](./edges)
+
+To disconnect two resources without touching either of them, [delete the edge](./edges#delete).
+[Deleting a resource](#delete) is the heavier move: it takes every relation the resource had
+with it.
+
 ## Filter
 
 `POST /resources/filter` finds resources by structured criteria. Everything you supply is
@@ -572,3 +591,6 @@ let nearest = api.resources.fetch_nearest(
 | Filter | `resources().filter` | `resources.filter` | `resources.filter` |
 | Traverse (`fetch-related`) | `resources().fetchRelated` | `resources.fetch_related` | `resources.fetch_related` |
 | Nearest N (`fetch-nearest`) | `resources().fetchNearest` | `resources.fetch_nearest` | `resources.fetch_nearest` |
+
+Relations have their own client surface in all three clients — `edges()` in Java, `edges` in
+Python and Rust. [Edges → client coverage](./edges#client-coverage)
