@@ -102,6 +102,38 @@ The Java client additionally offers `list(DataSetRetreiver)`, `search(DataSetSea
 `update(List<DataSetForm>)`; the Rust client offers `filter(&DatasetFilter)` and
 `search(&DatasetSearch)`.
 
+## Access control {#access-control}
+
+Access to a data set is administered in Keycloak (or the directory behind it), not in
+DataHub. A grant is membership of an **organization group**, scoped to one organization:
+
+| Group | Grants |
+| --- | --- |
+| `/datasets/<externalId>/read` | Read everything in that data set, and in every data set beneath it. |
+| `/datasets/<externalId>/write` | Write, with the same inheritance. |
+| `/datasets/*/read` | Read every data set. |
+| `/datasets/*/write` | Write every data set. |
+
+Read and write are independent: a write grant does not imply read, the wildcard included.
+The `DATAHUB_ADMIN` realm role grants read and write to everything (an operator escape
+hatch). Entities outside any data set follow the wildcard too: reading them needs
+`/datasets/*/read`, writing or creating them needs `/datasets/*/write` (or admin).
+
+Two consequences worth knowing when you code against this:
+
+- **A missing grant is a `403`** with an `application/problem+json` body naming the
+  `dataSetId` and the `permission` (read or write) you lack. List, filter and search
+  endpoints never 403 on grants: rows in data sets you cannot read are silently
+  omitted instead.
+- **Managing a data set itself is stricter.** Creating, updating or deleting a data set
+  (as opposed to the data in it) requires the `/datasets/*/write` grant or `DATAHUB_ADMIN`;
+  grants on individual data sets are never enough, deliberately: a data set is the unit
+  access is granted on, so renaming or re-parenting one changes what existing grants
+  cover. The `403` detail spells this out.
+
+The API reads grants from the identity provider's UserInfo endpoint, not from the token,
+so a changed grant takes effect within about a minute, without a new token.
+
 ## What each client covers {#client-coverage}
 
 | Operation | Java | Python | Rust |

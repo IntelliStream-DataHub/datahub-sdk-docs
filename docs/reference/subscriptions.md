@@ -64,10 +64,11 @@ api.subscriptions.delete(&vec![IdAndExtId::from_external_id("engine_temps")]).aw
 </Tabs>
 
 :::note Dataset access control
-Creating a subscription requires **read access to every timeseries' dataset** it binds. If your
-token lacks a dataset read role for any of them, `create` fails with **HTTP 403** and nothing is
-persisted. Access is granted through the Keycloak `DATAHUB_DATASET_READ_*` (or `DATASET_ALL`) realm
-roles.
+Creating a subscription requires **read access to every timeseries' dataset** it binds. If you
+lack read access to any of them, `create` fails with **HTTP 403** and nothing is persisted.
+Access is granted through Keycloak **organization groups**: `/datasets/<externalId>/read` for one
+data set (and everything beneath it), or the wildcard `/datasets/*/read` for all of them.
+[Dataset access control →](./datasets#access-control)
 :::
 
 ## Live delivery
