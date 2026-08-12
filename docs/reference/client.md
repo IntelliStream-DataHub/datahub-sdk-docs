@@ -104,12 +104,14 @@ falling back to a `.env` file in the working directory (real environment variabl
 
 ### Provider-specific parameters
 
-`scope` and `audience` are left out of the token request unless you set them. Keycloak wants
-neither; other providers refuse without them.
+`scope` and `audience` are left out of the token request unless you set them. DataHub needs
+`SCOPE=organization:*`: the organization claim behind tenant routing and
+[dataset grants](/reference/datasets#access-control) is only issued when that scope is
+requested. Other providers add requirements of their own.
 
 | Variable | Java builder | Python kwarg | Rust setter | When you need it |
 | --- | --- | --- | --- | --- |
-| `SCOPE` | `.scope(...)` | `scope=` | `set_scope(...)` | Entra ID requires `api://<app-id-uri>/.default`. Space-separate several. |
+| `SCOPE` | `.scope(...)` | `scope=` | `set_scope(...)` | DataHub requires `organization:*`. Entra ID requires `api://<app-id-uri>/.default`. Space-separate several. |
 | `AUDIENCE` | `.audience(...)` | `audience=` | `set_audience(...)` | Auth0 requires it. Keycloak ignores it. |
 
 ### Exchanging an external token (jwt-bearer)
