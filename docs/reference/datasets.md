@@ -159,24 +159,48 @@ Pass a `DataSetRetreiver` instead of the bare criteria to set an explicit `limit
 
 The Python client's `datasets` service covers `create`, `by_ids` and `delete` only, so
 filtering goes through the endpoint directly — the same way listing, searching and updating do.
+Reuse the base URL and token you built the client with:
+
+```python
+import requests
+
+response = requests.post(
+    f"{base_url}/datasets/filter",
+    headers={"Authorization": f"Bearer {token}"},
+    json={
+        "limit": 100,
+        "filter": {
+            "names": ["SAP%"],
+            "source": "sap",
+            "writeProtected": False,
+            "metadata": {"owner": "plant-a"},
+        },
+    },
+)
+response.raise_for_status()
+datasets = response.json()["items"]
+```
 
 </TabItem>
 <TabItem value="rust" label="Rust">
 
 ```rust
+use std::collections::HashMap;
 use dataplatform_rust_sdk::datasets::{BasicDatasetFilter, DatasetFilter};
 
-let criteria = BasicDatasetFilter::new()
-    .set_names(vec!["SAP%".into()])
-    .set_source("sap".into())
-    .set_write_protected(false)
-    .build();
+let mut criteria = BasicDatasetFilter::new();
+criteria.set_external_id_prefix("sap_".into());
+criteria.set_metadata(HashMap::from([("owner".to_string(), "plant-a".to_string())]));
 
-let datasets = api.datasets.filter(&DatasetFilter::from_filter(criteria)).await?;
+let mut request = DatasetFilter::new();
+request.set_filter(criteria.build()).set_limit(100);
+
+let datasets = api.datasets.filter(&request).await?;
 ```
 
-`DatasetFilter` carries the `limit`; `set_limit` on it raises the default 100. `datasets.list()`
-posts an empty body to `/datasets/list`, which is the same handler with no criteria.
+`DatasetFilter` carries the `limit`, defaulting to 100. The filter struct predates this
+endpoint, so it reaches `externalIdPrefix`, `metadata` and the two time bounds but not `names`,
+`source` or the flags — post those to the endpoint yourself until it catches up.
 
 </TabItem>
 </Tabs>
