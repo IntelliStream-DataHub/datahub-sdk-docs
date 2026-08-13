@@ -21,11 +21,11 @@ touching its endpoints, and managing the relationship-type catalog.
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| `id` | number | Server-assigned. Crosses the wire as a JSON string. |
-| `start` | number | Numeric id of the `from` node. |
-| `end` | number | Numeric id of the `to` node. |
+| `id` | number | Server-assigned. |
+| `start` | number | Id of the `from` node. |
+| `end` | number | Id of the `to` node. |
 | `type` | string | The relationship type name, upper-cased (`CONTAINS`, `FLOWS_TO`). |
-| `relationshipTypeId` | number | The type's id in the [catalog](#types). JSON string on the wire. |
+| `relationshipTypeId` | number | The type's id in the [catalog](#types). |
 | `description` | string | Prose. |
 | `metadata` | map&lt;string, string&gt; | Flat key/value. |
 
@@ -118,7 +118,7 @@ println!("{:?}", created.get_items()[0].id);
 
 | Status | Means |
 | --- | --- |
-| `400` | An end doesn't exist (the message names which), the relation has no type, or it breaks one of the graph rules below. |
+| `400` | An end doesn't exist (the message names which), the relation has no type, or it breaks one of the dataset or time-series rules below. |
 | `403` | You can't write one of the two resources. Both ends are checked, so linking something *into* a data set needs write access on that data set too. |
 | `409` | The two are already connected that way. `(start, end, type)` is unique — one relation per pair per type. |
 
@@ -198,6 +198,13 @@ heavier move: it takes every relation the resource had with it.
 
 Deletion is **idempotent**: unknown ids are silently skipped, so a successful call is not
 evidence the edge existed.
+
+It can still be refused. Cutting an edge is rejected with a `400` if it would leave a
+surviving resource unreachable from a root — the same connectivity rule
+[deleting a resource](./resources#delete) is checked against, and the response names the
+resources that would be stranded. An edge that is the only path from a subtree to the root is
+exactly the one you cannot cut: re-attach the subtree another way first, or delete it in the
+same call. A `403` means you lack write access to a data set one of the endpoints sits in.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -293,17 +300,17 @@ Rust send what you give them.
 A name with no letter or digit in it (blank, or symbols only) is a `400`, and names registered
 through `types/create` are capped at 128 characters.
 
-:::caution A type name that already exists fails silently
+:::caution A duplicate type name takes the whole batch with it
 `POST /edges/types/create` has no find-or-create: it saves a fresh type unconditionally, so a
-duplicate name collides on the unique name hash at *commit* time — after the handler has
-already returned. The caller gets a **`200` with an empty body**, not the "existing ones
-returned unchanged" the endpoint advertises.
+name that already exists (matched case-insensitively) collides on the unique name hash and
+comes back as a **`409`** naming the conflict — not the "existing ones returned unchanged" the
+endpoint used to advertise. You cannot use it to look up the id of a type you did not just
+create; read `GET /edges/types` for that.
 
-In a batch it is worse: every form is saved in one transaction, so a single duplicate rolls
-back the valid new types alongside it and the response still says `200`. Treat a `200` with no
-items as *"something in this batch already existed and nothing was created"*, and read
-`GET /edges/types` for the real state. Creating an edge with an unknown type name does not
-have this problem — that path is a proper find-or-create.
+Every form in a batch is saved in one transaction, so a single duplicate rolls the valid new
+types back alongside it. Treat the `409` as *"nothing in this batch was created"* rather than
+*"one of these already existed"*. Creating an edge with an unknown type name does not have
+this problem — that path is a proper find-or-create.
 :::
 
 ## What each client covers {#client-coverage}
