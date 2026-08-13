@@ -246,7 +246,9 @@ plural names because adding an entry there narrows the result where adding a `na
 ```
 
 `limit` defaults to **1 000** and is capped at **10 000**; a zero, negative or null value
-falls back to the default rather than returning nothing.
+falls back to the default rather than returning nothing. Results come newest created first
+unless ordered otherwise, and page with a cursor — the same contract as
+[timeseries](./timeseries#sorting-and-paging), over the same sortable properties.
 
 :::caution A pattern-less value matches exactly, not as a substring
 `"name": "pipe"` matches a resource named exactly `pipe`, not every name containing it. Add a
@@ -316,9 +318,16 @@ Free-text search across resource **names**. Matching is fuzzy and word-aware: se
 and you also get `pipes`, `piping`, and multi-word names containing the term. Results are
 ordered by relevance, not alphabetically.
 
-A search body may carry the same `filter` block as `POST /resources/filter`, so a free-text
-query can be narrowed to a data set or a metadata value. `limit` is capped at **1 000** here,
-lower than the 10 000 of `filter`, and `query` must be 3–140 characters.
+`limit` is capped at **1 000** here, lower than the 10 000 of `filter`, and `query` must be
+3–140 characters.
+
+:::caution The `filter` block on this endpoint is accepted and ignored
+A search body may carry the same `filter` as `POST /resources/filter`, and the SDKs let you pass
+one, but the resource search does not apply it — nor do the dataset and event searches. Only
+`/timeseries/search` reads its filter today. A search you believe is narrowed to a data set is
+not, so narrow it afterwards, or use `filter` and give up the relevance ranking. The gap is
+pinned by strict-xfail tests in the SDK, which turn green when it closes.
+:::
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">

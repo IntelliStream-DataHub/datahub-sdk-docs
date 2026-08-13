@@ -98,9 +98,68 @@ api.datasets.delete(&vec![IdAndExtId::from_external_id("plant_a")]).await?;
 </TabItem>
 </Tabs>
 
-The Java client additionally offers `list(DataSetRetreiver)`, `search(DataSetSearch)` and
-`update(List<DataSetForm>)`; the Rust client offers `filter(&DatasetFilter)` and
-`search(&DatasetSearch)`.
+## Filter {#filter}
+
+`POST /datasets/filter` finds data sets by structured criteria, combined with AND. It is exactly
+the criteria every node type shares — a data set has no `dataSetId` of its own, being the thing
+other nodes are scoped *by*:
+
+| Criterion | Matching |
+| --- | --- |
+| `id`, `externalId`, `name`, `source` | Patterns, case-insensitive. `*` and `%` are wildcards, `_` is literal, and an entry with no wildcard matches exactly. |
+| `labels` | Data sets carrying **all** of these labels. |
+| `metadata` | Every key/value pair given must be present. **A null value matches the key alone**, whatever it holds. |
+| `createdTime`, `lastUpdatedTime` | `{ "min": …, "max": … }` bounds. |
+
+Each field except `labels` and `metadata` takes **either a bare value or an array**, whose
+entries are combined with OR — which is why they are named in the singular. `limit` defaults to
+1000 and is capped at 10000, and the page can be ordered and walked exactly as
+[timeseries](./timeseries#sorting-and-paging) can.
+
+`POST /datasets/list` is the same handler with an empty filter, so it returns everything your
+token may read.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+DataSetFilter criteria = new DataSetFilter();
+criteria.setName(List.of("Plant *"));
+criteria.setMetadata(Map.of("tier", "gold"));
+
+DataWrapper<DataSetModel> matches = client.datasets().filter(criteria);
+```
+
+Pass a `DataSetRetreiver` instead of the bare criteria to set `limit`, `sort` or `cursor`.
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+matches = client.datasets.filter(datahub_sdk.DatasetFilter(
+    datahub_sdk.BasicDatasetFilter(name="Plant *", metadata={"tier": "gold"}),
+    limit=100))
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::datasets::{BasicDatasetFilter, DatasetFilter};
+
+let criteria = BasicDatasetFilter::new()
+    .set_name(vec!["Plant *".to_string()])
+    .build();
+let matches = api.datasets.filter(&DatasetFilter::from_filter(criteria)).await?;
+```
+
+</TabItem>
+</Tabs>
+
+:::note There is no `writeProtected` or `deactivated`
+Both were removed server-side as inert. The api drops unknown keys silently, so a filter still
+carrying one looked like it was narrowing and was not.
+:::
 
 ## Access control {#access-control}
 
@@ -140,12 +199,12 @@ so a changed grant takes effect within about a minute, without a new token.
 | --- | --- | --- | --- |
 | Create | `datasets().create` | `datasets.create` | `datasets.create` |
 | Look up by id / external id | `datasets().byIds` | `datasets.by_ids` | `datasets.by_ids` |
-| List | `datasets().list` | HTTP | `datasets.list` |
-| Filter | HTTP | HTTP | `datasets.filter` |
-| Search | `datasets().search` | HTTP | `datasets.search` |
-| Update | `datasets().update` | HTTP | `datasets.update` |
+| List | `datasets().list` | `datasets.list` | `datasets.list` |
+| Filter | `datasets().filter` | `datasets.filter` | `datasets.filter` |
+| Search | `datasets().search` | `datasets.search` | `datasets.search` |
+| Update | `datasets().update` | `datasets.update` | `datasets.update` |
 | Delete | `datasets().delete` | `datasets.delete` | `datasets.delete` |
-| Access policies | HTTP | HTTP | `datasets.policies` |
+| Access policies | HTTP | `datasets.policies` | `datasets.policies` |
 
-The Python client is the thinnest here: it covers the write path and lookup, so listing,
-searching and updating still go through the endpoint directly.
+All three clients now cover the whole surface bar the access-policy read in Java, which still
+goes through the endpoint directly.
