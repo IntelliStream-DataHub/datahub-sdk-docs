@@ -347,7 +347,7 @@ this" be said distinctly from "leave it alone":
 | Verb | Applies to | Effect |
 | --- | --- | --- |
 | `set` | every field | Replace the value. |
-| `setNull: true` | nullable fields | Clear the value. |
+| `setNull: true` | nullable fields only | Clear the value. `name` and `externalId` are not nullable, so asking to clear either is a `400`. |
 | `add` | `metadata`, `labels` | Merge entries in, keeping the rest. |
 | `remove` | `metadata`, `labels` | Take entries out, keeping the rest. |
 
@@ -374,7 +374,11 @@ Updatable node fields are `externalId`, `name`, `description`, `source`, `dataSe
 [endpoint rules](#create-resources-and-relations) as a create.
 
 Sending both `set` and `setNull` for one field is a `400`: the request is contradictory, so
-it is refused rather than resolved by precedence. Changing `externalId` runs it past the
+it is refused rather than resolved by precedence. `setNull` against `name` or `externalId`
+is also a `400`, for the same reason a create cannot omit them: every resource has to have
+both. Rename with `set` instead. (This used to return `200` and quietly change nothing, so
+check the value rather than the status if you are working against an older deployment.)
+Changing `externalId` runs it past the
 [naming policy](./external-ids#the-naming-policy), which reports violations per item in an
 RFC 9457 problem response. The whole batch is **all-or-nothing**.
 

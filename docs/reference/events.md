@@ -594,7 +594,7 @@ this" be expressed distinctly from "leave it alone":
 | Verb | Applies to | Effect |
 | --- | --- | --- |
 | `set` | every field | Replace the value. |
-| `setNull: true` | nullable fields | Clear the value. |
+| `setNull: true` | nullable fields only | Clear the value. `externalId`, `type` and `eventTime` are not nullable, so asking to clear any of them is a `400`. |
 | `add` | `metadata`, `relatedResources` | Merge entries in, keeping the rest. |
 | `remove` | the same collections | Take entries out, keeping the rest. A `relatedResources` entry matches on either side, so you can remove by `id` or by `externalId` whichever you have. |
 
@@ -616,6 +616,13 @@ Updatable fields are `externalId`, `description`, `type`, `subType`, `status`, `
 `dataSetId`, `metadata`, `eventTime` and `relatedResources`. `eventTime` is set from an
 ISO-8601 string. Sending both `set` and `setNull` for one field is
 a `400` — the request is contradictory, so it is refused rather than resolved by precedence.
+
+`setNull` is refused on the three fields a create cannot omit: `externalId`, `type` and
+`eventTime`. Clearing `type` used to be accepted, and it left the event unreadable by any
+client that models `type` as required, so the read failed rather than the write. `dataSetId`
+is the one field here that genuinely is nullable: `setNull` detaches the event from its data
+set, and naming a `dataSetId` that no data set has is a `400` rather than a stored dangling
+reference.
 
 :::caution Prefer a follow-up event to mutating one
 An event update runs a replace-and-cleanup on the stored record. While it is in flight, a
