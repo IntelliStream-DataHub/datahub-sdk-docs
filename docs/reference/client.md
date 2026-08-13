@@ -104,12 +104,18 @@ falling back to a `.env` file in the working directory (real environment variabl
 
 ### Provider-specific parameters
 
-`scope` and `audience` are left out of the token request unless you set them. Keycloak wants
-neither; other providers refuse without them.
+`scope` and `audience` are left out of the token request unless you set them. What DataHub
+needs is a token carrying the `organization` claim naming exactly one organization (tenant
+routing and [dataset grants](/reference/datasets#access-control) ride on it); whether that
+takes a scope depends on how your realm issues the claim. A realm using a client protocol
+mapper (the common production setup) puts it on every token, so leave `SCOPE` unset. A realm
+using Keycloak Organizations only issues it when the request names `organization:*` or
+`organization:<alias>`. When the claim is missing, every call fails `401 invalid_token`,
+which looks like a credentials problem but is not.
 
 | Variable | Java builder | Python kwarg | Rust setter | When you need it |
 | --- | --- | --- | --- | --- |
-| `SCOPE` | `.scope(...)` | `scope=` | `set_scope(...)` | Entra ID requires `api://<app-id-uri>/.default`. Space-separate several. |
+| `SCOPE` | `.scope(...)` | `scope=` | `set_scope(...)` | `organization:*` if your realm issues the organization claim through Keycloak Organizations (see above). Entra ID requires `api://<app-id-uri>/.default`. Space-separate several. |
 | `AUDIENCE` | `.audience(...)` | `audience=` | `set_audience(...)` | Auth0 requires it. Keycloak ignores it. |
 
 ### Exchanging an external token (jwt-bearer)

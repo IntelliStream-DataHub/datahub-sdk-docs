@@ -1,33 +1,39 @@
 ---
 sidebar_position: 4
-title: MCP server
-description: Connect an AI agent to DataHub over the Model Context Protocol - endpoint, authentication, the 36 tools the server exposes, and the limits worth knowing before you ship one.
+title: MCP servers
+description: Connect an AI agent to DataHub over the Model Context Protocol - the two endpoints, authentication, the 38 tools they expose, and the limits worth knowing before you ship one.
 ---
 
-# MCP server
+# MCP servers
 
-DataHub ships an [MCP](https://modelcontextprotocol.io/) server, so an agent can work against
-your data model directly instead of you hand-writing an integration layer for it. It exposes
-**36 tools** across datasets, resources, relationships, timeseries, events, labels and units.
+DataHub ships two [MCP](https://modelcontextprotocol.io/) servers, so an agent can work
+against your data model directly instead of you hand-writing an integration layer for it:
 
-The important part is what it *isn't*: the MCP endpoint is an ordinary Spring MVC endpoint on
+| Server | Endpoint | Exposes |
+| --- | --- | --- |
+| API | `<api-url>/mcp` (port 8081 locally) | **37 tools** across datasets, resources, relationships, timeseries, events, labels and units |
+| Analysis | the analysis service's `/mcp` (port 8082 locally) | **one tool**, [`analysis_related_series`](#the-analysis-server) |
+
+The important part is what they *aren't*: each MCP endpoint is an ordinary Spring endpoint on
 the same security chain as the REST API. There is no separate agent door, no service account
 with blanket access, and no MCP-specific bypass. An agent sees exactly what the identity in
 its token is allowed to see.
 
-## Endpoint
+## Endpoints
+
+Both servers speak the same transport:
 
 | | |
 | --- | --- |
-| Path | `/mcp` (set by `spring.ai.mcp.server.base-url`) |
+| Path | `POST /mcp`, the only route |
 | Transport | Streamable HTTP, Spring AI WebMVC |
-| Protocol mode | `STATELESS` |
+| Protocol mode | `STATELESS`: no initialize handshake, no session to hold |
 | Server version | `1.0.0` |
 
 ## Authentication
 
-Identical to every other call in this documentation: an OAuth2 Bearer JWT in the
-`Authorization` header, on each request.
+Identical for both servers, and identical to every other call in this documentation: an
+OAuth2 Bearer JWT in the `Authorization` header, on each request.
 
 ```http
 POST /mcp HTTP/1.1
@@ -46,15 +52,26 @@ Three things are checked before any tool body runs:
    `OrganizationValidator` used for REST, so an agent cannot reach another tenant's data
    even by asking for an id it happens to know.
 
+Past those gates, per-dataset [access grants](/reference/datasets#access-control) apply
+exactly as on REST: rows in data sets the identity cannot read are omitted, writes it lacks
+a grant for are refused.
+
 The practical consequence, and the reason this design is worth the trouble: **an agent
 inherits the permissions of whoever it is acting for.** If you want an agent that can read
 but not write, issue it a token that can read but not write. There is no second permission
 model to keep in sync.
 
+For an unattended agent, get the token from the OAuth2 **client-credentials** grant. Whether
+the token request must also name a scope such as `organization:*` depends on how your realm
+issues the organization claim that check 3 reads: see
+[provider-specific parameters](/reference/client#provider-specific-parameters) in the client
+reference.
+
 ## Connecting a client
 
-Any MCP client that speaks streamable HTTP and can attach a bearer token will work. A typical
-client entry:
+Any MCP client that speaks streamable HTTP and can attach a bearer token will work. The two
+servers are two entries; substitute the analysis URL for wherever your deployment exposes
+the analysis service:
 
 ```json
 {
@@ -62,6 +79,13 @@ client entry:
     "datahub": {
       "type": "http",
       "url": "https://api.intellistream.ai/mcp",
+      "headers": {
+        "Authorization": "Bearer ${DATAHUB_TOKEN}"
+      }
+    },
+    "datahub-analysis": {
+      "type": "http",
+      "url": "https://<your-analysis-host>/mcp",
       "headers": {
         "Authorization": "Bearer ${DATAHUB_TOKEN}"
       }
@@ -73,7 +97,28 @@ client entry:
 Tokens are short-lived. For anything long-running, refresh through your IdP and update the
 header rather than pinning a token into a config file.
 
-## The tools
+### By hand, with curl
+
+Well-known MCP clients handle the transport for you. If you roll your own, two details
+matter: the body is plain JSON-RPC 2.0, and the `Accept` header must be **exactly**
+`application/json, text/event-stream`. Both media types, in that order, no `q=` parameters;
+anything else earns an empty `400`.
+
+```bash
+curl -s https://api.intellistream.ai/mcp \
+  -H "Authorization: Bearer $DATAHUB_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
+```
+
+Calling a tool is the same request with a `tools/call` body:
+
+```json
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"resource_fetch_nearest","arguments":{"externalId":"pump_12","endLabels":"TIMESERIES"}}}
+```
+
+## The API server's tools
 
 Named `<domain>_<action>` in snake_case, deliberately, so the listing reads the same to you
 and to the model.
@@ -101,10 +146,20 @@ items, documents.
 | `resource_update` | Update common fields by id |
 | `resource_delete` | Delete by id or externalId. Connected edges go with it |
 | `resource_fetch_related` | Walk outward and return the connected neighbourhood |
+| `resource_fetch_nearest` | Breadth-first to the nearest nodes carrying a wanted label |
 
 `resource_fetch_related` is the one to reach for when a question is really about context:
 it returns the neighbourhood in a single call rather than making the agent traverse edge by
 edge, which is both slower and worse for the context window.
+
+`resource_fetch_nearest` asks the sharper question: not "what surrounds this node" but
+"where is the nearest X". Breadth-first from a starting resource (`externalId` or `id`), it
+returns the closest `limit` nodes (default 10) carrying one of the `endLabels`
+(comma-separated, such as `TIMESERIES`), plus the sub-graph connecting them.
+`relationshipTypes` restricts which edge types are followed; `excludedLabels` prunes
+branches. The cap counts matching end nodes, not hops, so a match five hops out is still
+found. Prefer it over `resource_fetch_related` whenever the agent hunts a specific kind of
+neighbour ("the time series measuring this pump").
 
 ### Relationships
 
@@ -154,10 +209,82 @@ for when the agent only has words to go on.
 | `unit_list` | Units of measure known to DataHub, e.g. Celsius |
 | `unit_get` | Look up one unit by externalId, e.g. `celsius` |
 
+## The analysis server
+
+The analysis service serves its own `/mcp` with a single tool, **`analysis_related_series`**:
+given one series, which others move with it over a window, and can the relation be trusted?
+It walks the knowledge graph outward from the focus series to collect physically related
+candidates, then tests each pair statistically and returns the candidates ranked.
+
+| Parameter | |
+| --- | --- |
+| `focusExternalId` | The series to explain. Required |
+| `start`, `end` | ISO-8601 window. Required |
+| `limit` | Candidates to test. Default 10, max 200 |
+| `relationshipTypes` | Optional comma-separated list; restricts the graph walk to these edge types |
+| `analyses` | Optional comma-separated subset of the tests below; default all |
+
+| `analyses` value | Question it answers |
+| --- | --- |
+| `raw` | Lagged cross-correlation on the aggregated series |
+| `whitened` | The same after ARIMA prewhitening, with Haugh-Box significance: does the relation survive removing trend and autocorrelation? |
+| `cointegration` | Engle-Granger: do the two series share a long-run equilibrium? |
+| `stability` | Does the correlation hold across subwindows, or ride one burst? |
+| `coherence` | Welch coherence: at what period is the shared periodicity strongest? |
+
+### Reading a result
+
+One entry from a call with focus `pump_flow`:
+
+```json
+{
+  "externalId": "discharge_pressure",
+  "name": "Discharge pressure",
+  "overlapCount": 1380,
+  "path": "pump_flow -FEEDS-> #55 -MEASURED_BY-> discharge_pressure",
+  "rawCorrelation": 0.84,
+  "rawLagSeconds": 120,
+  "whitenedCorrelation": 0.61,
+  "whitenedLagSeconds": 120,
+  "haughBoxPValue": 0.004,
+  "whitenedSignificant": true,
+  "cointegrated": true,
+  "stable": true,
+  "peakCoherence": 0.9,
+  "peakCoherencePeriodSeconds": 3600,
+  "rankScore": 0.87
+}
+```
+
+Read it as:
+
+- **`path`**: how the candidate is physically connected to the focus, flattened to one
+  string (`#55` is an intermediate node without an externalId).
+- **`rawCorrelation` at `rawLagSeconds`**: correlation 0.84 with the candidate shifted by
+  120 s. A **positive lag means the candidate lags the focus** (the focus leads); here,
+  pressure follows flow by two minutes.
+- **`whitenedSignificant`, `haughBoxPValue` 0.004**: the correlation survives prewhitening,
+  so it is not an artifact of two series each trending or oscillating on their own. Trust
+  this over the raw number.
+- **`cointegrated`**: the pair shares a long-run equilibrium; after a shock they drift back
+  together.
+- **`stable`**: the correlation holds across subwindows rather than being carried by one
+  event.
+- **`peakCoherence` at `peakCoherencePeriodSeconds`**: the strongest shared cycle sits at
+  one hour.
+- **`overlapCount`**: how many aligned samples the tests ran on. Treat verdicts from a thin
+  overlap with suspicion.
+- **`rankScore`**: the combined score the list is sorted by.
+
+Fields for analyses you did not request are absent from each entry. Around the list, the
+response carries `focusExternalId` and `focusName`, `bucketSeconds` (the aggregation bucket
+the series were resampled to), `maxLagSeconds` (how far the lag scan went), `skipped`
+(candidates that could not be tested) and `message`.
+
 ## How results are shaped
 
-The server is written for a reader with a finite context window, which is not something the
-REST wire contract has to care about.
+The API server is written for a reader with a finite context window, which is not something
+the REST wire contract has to care about.
 
 - **Nothing empty is sent.** Every tool serializes with `NON_EMPTY` inclusion, so nulls,
   empty collections and empty strings never reach the model. The REST DTOs keep their own
@@ -174,7 +301,7 @@ records it will not use.
 
 ## Limits worth knowing
 
-**The server does not ask permission.** It runs in `STATELESS` mode, which has no
+**The servers do not ask permission.** They run in `STATELESS` mode, which has no
 elicitation: a tool cannot open a channel back to the user to confirm a mutating action.
 `resource_delete`, `event_delete` and `timeseries_send_datapoint` execute the moment they are
 called. If your agent should pause for a human before it writes, **that gate belongs in the
@@ -191,7 +318,7 @@ name and then search for the string they constructed will miss.
 
 ## Adding a tool
 
-Annotate a public method on a Spring bean in the `mcp.tools` package with `@Tool`, reference
+Annotate a public method on a Spring bean in the API server's `mcp.tools` package with `@Tool`, reference
 `McpResultConverter` from it, and register the bean in the `ToolCallbackProvider`. If it is
 not registered there, the server does not advertise it. Spring AI builds the schema from the
 parameter types and the `@ToolParam` descriptions, so those descriptions are what the model
