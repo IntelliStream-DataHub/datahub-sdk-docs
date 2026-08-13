@@ -61,10 +61,11 @@ inherits the permissions of whoever it is acting for.** If you want an agent tha
 but not write, issue it a token that can read but not write. There is no second permission
 model to keep in sync.
 
-For an unattended agent, get the token from the OAuth2 **client-credentials** grant, and
-include `scope=organization:*` in the token request, exactly as for programmatic REST
-access: the organization claim that check 3 reads is only issued when that scope is
-requested.
+For an unattended agent, get the token from the OAuth2 **client-credentials** grant. Whether
+the token request must also name a scope such as `organization:*` depends on how your realm
+issues the organization claim that check 3 reads: see
+[provider-specific parameters](/reference/client#provider-specific-parameters) in the client
+reference.
 
 ## Connecting a client
 
