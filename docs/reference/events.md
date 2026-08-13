@@ -184,7 +184,7 @@ place a missing event is an error rather than an omission.
 ```java
 EventRetreiver retriever = new EventRetreiver();
 retriever.setLimit(50);
-retriever.getFilter().setType("alarm");
+retriever.getFilter().setType(List.of("alarm"));
 DataWrapper<EventModel> events = client.events().filter(retriever);
 ```
 
@@ -205,7 +205,7 @@ events = client.events.filter(filter)
 use dataplatform_rust_sdk::filters::{BasicEventFilter, EventFilter};
 
 let filter = EventFilter::default()
-    .set_filter(BasicEventFilter { r#type: Some("alarm".into()), ..Default::default() })
+    .set_filter(BasicEventFilter { r#type: Some(vec!["alarm".into()]), ..Default::default() })
     .set_limit(50)
     .build();
 let events = api.events.filter(&filter).await?;
@@ -419,8 +419,8 @@ Filter on the type, ascending by `eventTime`, and page with [`after`](#paging):
 
 ```java
 EventRetreiver retriever = new EventRetreiver();
-retriever.getFilter().setType("policy_finding");
-retriever.getFilter().setSubType("naming_snake_case");   // one policy; omit for all
+retriever.getFilter().setType(List.of("policy_finding"));
+retriever.getFilter().setSubType(List.of("naming_snake_case"));   // one policy; omit for all
 retriever.setLimit(200);
 retriever.getSort().setProperty(List.of("eventTime"));
 retriever.getSort().setOrder("asc");
@@ -449,8 +449,8 @@ use dataplatform_rust_sdk::filters::{BasicEventFilter, EventFilter};
 
 let filter = EventFilter::default()
     .set_filter(BasicEventFilter {
-        r#type: Some("policy_finding".into()),
-        sub_type: Some("naming_snake_case".into()),   // one policy; omit for all
+        r#type: Some(vec!["policy_finding".into()]),
+        sub_type: Some(vec!["naming_snake_case".into()]),   // one policy; omit for all
         ..Default::default()
     })
     .set_limit(200)

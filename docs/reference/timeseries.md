@@ -161,8 +161,8 @@ Pass a `TimeseriesRetreiver` instead of the bare criteria to set an explicit `li
 
 ```python
 form = datahub_sdk.TimeSeriesFilterForm(
-    data_set_id=12,              # this data set and every data set beneath it
-    unit="celsius",
+    data_set_id=[12],            # this data set and every data set beneath it
+    unit="celsius",              # a pattern field also takes a bare value
     limit=100)
 
 series = client.timeseries.filter(form)
@@ -172,11 +172,12 @@ series = client.timeseries.filter(form)
 <TabItem value="rust" label="Rust">
 
 ```rust
+use dataplatform_rust_sdk::generic::IdAndExtId;
 use dataplatform_rust_sdk::{TimeSeriesFilter, TimeSeriesFilterForm};
 
 let criteria = TimeSeriesFilter {
-    data_set_id: Some(12),       // this data set and every data set beneath it
-    unit: Some("celsius".into()),
+    data_set_id: Some(vec![IdAndExtId::from_id(12)]),   // and every data set beneath it
+    unit: Some(vec!["celsius".into()]),
     ..Default::default()
 };
 let series = api.time_series.filter(&TimeSeriesFilterForm::new(criteria, Some(100))).await?;

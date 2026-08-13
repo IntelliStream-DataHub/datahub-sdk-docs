@@ -277,7 +277,7 @@ POST /events/filter
   "filter": {
     "type": "policy_finding",
     "subType": "naming_snake_case",     // which policy fired; omit for all
-    "dataSetIds": [{ "id": 42 }]
+    "dataSetId": [{ "id": 42 }]
   },
   "sort": { "property": ["eventTime"], "order": "asc" },
   "limit": 200

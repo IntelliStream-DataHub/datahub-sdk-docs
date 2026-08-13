@@ -268,6 +268,7 @@ ResourceRetreiver retriever = new ResourceRetreiver();
 retriever.setLimit(100);
 retriever.getFilter().setName(List.of("pipe%"));
 retriever.getFilter().setMetadata(Map.of("work_order", "wo-sap-12344"));
+retriever.getFilter().setDataSetId(List.of(IdCollection.createFromId(12L)));
 
 DataWrapper<Resource> matches = client.resources().filter(retriever);
 ```
@@ -279,7 +280,7 @@ DataWrapper<Resource> matches = client.resources().filter(retriever);
 matches = client.resources.filter(
     name="pipe%",
     metadata={"work_order": "wo-sap-12344"},
-    data_set_ids=[12],
+    data_set_id=[12],
     limit=100)
 ```
 
@@ -287,11 +288,19 @@ matches = client.resources.filter(
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::resources::{IdObject, ResourceFilter, ResourceRetreiver};
+use dataplatform_rust_sdk::filters::NodeFilter;
+use dataplatform_rust_sdk::generic::IdAndExtId;
+use dataplatform_rust_sdk::resources::{ResourceFilter, ResourceRetreiver};
 
+// The criteria every node type shares are a flattened `NodeFilter`, so they nest in Rust even
+// though they sit alongside the resource's own fields on the wire.
 let retriever = ResourceRetreiver::new(ResourceFilter {
-    name: Some("pipe%".into()),
-    data_set_ids: Some(vec![IdObject::new(12)]),
+    node: NodeFilter {
+        name: Some(vec!["pipe%".into()]),
+        metadata: Some([("work_order".into(), Some("wo-sap-12344".into()))].into()),
+        ..Default::default()
+    },
+    data_set_id: Some(vec![IdAndExtId::from_id(12)]),
     ..Default::default()
 }).with_limit(100);
 
