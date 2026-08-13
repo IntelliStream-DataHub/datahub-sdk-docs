@@ -116,14 +116,30 @@ combined with AND — a series must match every criterion to be included.
 
 | Criterion | Matching |
 | --- | --- |
-| `dataSetId` | The data set **and every data set beneath it** in the data set hierarchy — a series attached to a child (or grandchild, …) data set matches too. |
-| `unit` | Case-insensitive; `%` works as a wildcard (`"cel%"`). |
-| `unitExternalId` | Exact match on the unit-catalogue external id (e.g. `temperature_deg_c`). |
-| `metadataKey` / `metadataValue` | Together: that key must carry that value. Alone: any entry with that key (or any entry with that value). |
+| `dataSetId` | The data set **and every data set beneath it** in the data set hierarchy, so a series attached to a child (or grandchild, …) data set matches too. Each entry is `{"id": …}` or `{"externalId": …}`. |
+| `unit` | Pattern, case-insensitive. `*` and `%` are wildcards, `_` is literal (`"cel%"`). |
+| `unitExternalId` | Pattern on the unit-catalogue external id (e.g. `temperature_deg_c`), on the same rules. |
+| `valueType` | Exact, case-insensitive, against the closed catalogue: `BIGINT`, `FLOAT`, `FLOAT32`, `NUMERIC`, `DECIMAL32`, `TEXT`, `MIXED`. Not a pattern. |
+| `id`, `externalId`, `name`, `source` | The shared node criteria. Patterns, on the same rules as `unit`. |
+| `labels` | Series carrying **all** of these labels. |
+| `metadata` | Every key/value pair given must be present. **A null value matches the key alone**, whatever it holds. |
+| `createdTime`, `lastUpdatedTime` | `{ "min": …, "max": … }` bounds. |
+
+Each field above except `labels` and `metadata` takes **either a bare value or an array**, and the
+entries of an array are combined with **OR**. That is why they are named in the singular:
+`"unit": "celsius"` is the common case, and `"unit": ["celsius", "kelvin"]` asks for either.
+`labels` and `metadata` require **all** entries to match and keep their plural names for that
+reason.
 
 Results come newest first, capped by `limit` (default 1000, max 10000). Series in data
 sets you lack read access to are silently omitted — the result is what your token may
 see, not an error. For free-text lookups use `POST /timeseries/search` instead.
+
+:::note The `metadataKey` / `metadataValue` pair is gone
+It existed only because `metadata` could not express "has this key, whatever its value". A null
+value in the map says that now, and `{"health": "good", "tier": null}` asks for both conditions at
+once.
+:::
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -132,8 +148,8 @@ see, not an error. For free-text lookups use `POST /timeseries/search` instead.
 import ai.intellistream.datahub.models.datafilters.TimeseriesFilter;
 
 TimeseriesFilter criteria = new TimeseriesFilter();
-criteria.setDataSetId(12L);      // this data set and every data set beneath it
-criteria.setUnit("celsius");
+criteria.setDataSetId(List.of(IdCollection.createFromId(12L)));   // and every data set beneath it
+criteria.setUnit(List.of("celsius"));
 
 DataWrapper<Timeseries> series = client.timeseries().filter(criteria);
 ```

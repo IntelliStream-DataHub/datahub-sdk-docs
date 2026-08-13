@@ -216,21 +216,29 @@ combined with **AND**.
 
 | Field | Matching |
 | --- | --- |
-| `name` | Case-insensitive **substring**. `%` works as a wildcard (`"pipe%"`). |
-| `source` | Case-insensitive substring. |
-| `externalId` | Exact (case-insensitive). |
+| `name` | Pattern, case-insensitive. `*` and `%` are wildcards, `_` is literal. |
+| `source` | Pattern, on the same rules. |
+| `externalId` | Pattern, on the same rules. |
 | `id` | Exact numeric id. |
+| `nodeType` | Restrict to these node types. Omit for every type. |
 | `isRoot` | `true` or `false`. |
-| `dataSetIds` | Resources in any of these data sets. |
+| `labels` | Resources carrying **all** of these labels. |
+| `dataSetId` | Resources in any of these data sets. |
 | `metadata` | Every key/value given must be present on the resource. |
 | `createdTime`, `lastUpdatedTime` | `{ "min": …, "max": … }`, ISO-8601, both bounds inclusive. |
+
+Each field above except `isRoot`, `labels` and `metadata` takes **either a bare value or an
+array**, and the entries of an array are combined with **OR**. That is why they are named in the
+singular: `"name": "pipe%"` is the common case, and `"name": ["pipe%", "valve%"]` asks for either.
+`labels` and `metadata` are the exceptions, requiring **all** entries to match, and they keep
+plural names because adding an entry there narrows the result where adding a `name` widens it.
 
 ```json
 {
   "limit": 100,
   "filter": {
     "name": "pipe%",
-    "dataSetIds": [{ "id": 12 }],
+    "dataSetId": [{ "id": 12 }, { "externalId": "data_set_sap" }],
     "metadata": { "work_order": "wo-sap-12344" },
     "createdTime": { "min": "2026-01-01T00:00:00Z" }
   }
@@ -240,10 +248,16 @@ combined with **AND**.
 `limit` defaults to **1 000** and is capped at **10 000**; a zero, negative or null value
 falls back to the default rather than returning nothing.
 
-:::caution `dataSetIds` here takes ids only
-On a resource filter each entry is `{"id": 12}` — an `externalId` is not accepted, unlike
-the [event filter](./events#filtering), where either works. Resolve the data set's external
-id to its numeric id first.
+:::caution A pattern-less value matches exactly, not as a substring
+`"name": "pipe"` matches a resource named exactly `pipe`, not every name containing it. Add a
+wildcard for the loose match you probably want: `"pipe*"` for a prefix, `"*pipe*"` for a contains
+search. The same holds for `source` and `externalId`.
+:::
+
+:::note Omitting `dataSetId` and sending `[]` are opposites
+Omit the field (or send `null`) for **no data set restriction**. An explicit empty list means
+**narrow to no data sets**, which matches nothing. Every other list field treats empty as "no
+restriction", so this is the one to watch when you build the filter programmatically.
 :::
 
 <Tabs groupId="lang">
@@ -252,7 +266,7 @@ id to its numeric id first.
 ```java
 ResourceRetreiver retriever = new ResourceRetreiver();
 retriever.setLimit(100);
-retriever.getFilter().setName("pipe%");
+retriever.getFilter().setName(List.of("pipe%"));
 retriever.getFilter().setMetadata(Map.of("work_order", "wo-sap-12344"));
 
 DataWrapper<Resource> matches = client.resources().filter(retriever);

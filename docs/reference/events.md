@@ -225,36 +225,51 @@ Every field you supply is combined with **AND** — an event must match all of t
 
 | Field | Matching |
 | --- | --- |
-| `type`, `subType`, `status`, `source` | Exact string equality. |
-| `externalIdPrefix` | Prefix match, 3–256 characters. The natural way to sweep one source system's key space. |
+| `type`, `subType`, `status`, `source` | Pattern match. `*` and `%` are wildcards, `_` is literal. |
+| `externalId` | Pattern match, on the same rules. Literal entries are case-sensitive (see the note below). |
 | `metadata` | Every key/value pair given must be present on the event. |
-| `dataSetIds` | Events belonging to these data sets. |
+| `dataSetId` | Events belonging to these data sets. |
 | `relatedResources` | Events attached to these resources. |
 | `eventTime`, `createdTime`, `lastUpdatedTime` | `{ "min": …, "max": … }` bounds — see the note below. |
-| `id` | Present but **not usable**: it is typed as a number while an event's id is a UUID. Use [`byids`](#lookup) to fetch by id. |
 
-`dataSetIds` and `relatedResources` take the same shape — each entry is `{"id": …}` **or**
+Each field above takes **either a bare value or an array**, and the entries of an array are
+combined with **OR**. That is why they are named in the singular: asking for one thing is the
+common case and reads as `"type": "alarm"`, while asking for several reads as
+`"type": ["alarm", "warning"]`. The exceptions are `metadata` and `relatedResources`, whose entries
+must **all** match; they keep plural names for exactly that reason, because adding an entry there
+narrows the result where adding a `type` widens it.
+
+There is no `id` field. An event's id is a UUID string, so use [`byids`](#lookup) to fetch by id.
+
+`dataSetId` and `relatedResources` take the same shape: each entry is `{"id": …}` **or**
 `{"externalId": …}`, and the two can be mixed in one list:
 
 ```json
 {
   "filter": {
-    "type": "alarm",
-    "dataSetIds": [{ "id": "43" }, { "externalId": "data_set_sap" }],
+    "type": ["alarm", "warning"],
+    "dataSetId": [{ "id": "43" }, { "externalId": "data_set_sap" }],
     "relatedResources": [{ "externalId": "klp_pipe_ws_a1212_dl" }]
   },
   "limit": 50
 }
 ```
 
-**Data sets match exactly.** A parent data set does not stand in for its children, so list every
-data set you want rather than relying on the hierarchy. This is the one place data set behaviour
-differs from access control, where a grant on a parent *does* cover its descendants.
+:::note Literal `externalId` entries are case-sensitive here
+Unlike the resource, data set and timeseries filters, an `externalId` entry **without** a wildcard
+is matched case-sensitively: every event writer hashes the external id verbatim, so the stored key
+for `shift_report_1` is not the key for `SHIFT_REPORT_1`. An entry **with** a wildcard is matched
+case-insensitively, so `"SHIFT_REPORT_1*"` is the case-insensitive way to ask the same question.
+:::
+
+**A parent data set stands in for its children.** Naming one covers everything beneath it in the
+`BELONGS_TO` hierarchy, which is the same expansion access control applies to a grant, so the two
+now agree.
 
 An `externalId` that names no data set contributes nothing. That can only ever narrow the
 result — a typo gives you too few events, never events you should not see.
 
-:::caution Omitting `dataSetIds` and sending `[]` are opposites
+:::caution Omitting `dataSetId` and sending `[]` are opposites
 Omit the field (or send `null`) for **no data set restriction**. An explicit empty list means
 **narrow to no data sets**, which matches nothing.
 
@@ -516,7 +531,7 @@ closed it — the fold then reports a resolved finding as outstanding. It is a w
 not an error, and nothing in the response marks it as partial.
 
 Page until short — a full page is a signal that there is more, never that you have it all.
-Narrowing by `subType` and `dataSetIds` keeps the walk cheap, but it is paging, not narrowing,
+Narrowing by `subType` and `dataSetId` keeps the walk cheap, but it is paging, not narrowing,
 that makes the fold correct.
 :::
 
