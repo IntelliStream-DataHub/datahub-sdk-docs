@@ -98,45 +98,68 @@ api.datasets.delete(&vec![IdAndExtId::from_external_id("plant_a")]).await?;
 </TabItem>
 </Tabs>
 
-The Java client additionally offers `list(DataSetRetreiver)`, `search(DataSetSearch)` and
-`update(List<DataSetForm>)`; the Rust client offers `search(&DatasetSearch)`.
+The Java client additionally offers `getById(long)`, `list(DataSetRetreiver)`,
+`search(DataSetSearch)` and `update(List<DataSetForm>)`.
 
 ## Filter {#filter}
 
-`POST /datasets/filter` finds datasets by structured criteria. Everything you supply is
-combined with AND — a dataset must match every criterion to be included.
+`POST /datasets/filter` finds datasets by structured criteria. Every criterion is optional and
+they AND together, so a dataset must match all of them; an empty `filter` returns everything.
 
 | Criterion | Matching |
 | --- | --- |
-| `ids` / `externalIds` | Datasets named directly, as lists. External ids match case-insensitively, like every other external-id lookup. |
-| `names` | One pattern per entry, OR-ed together: `["SAP%", "Plant A"]` takes everything starting with SAP plus that one exact name. Case-insensitive, `%` is yours to place. |
-| `source` | The data source the dataset came from. Case-insensitive, `%` works. |
-| `externalIdPrefix` | External ids starting with this. Case-insensitive, and anchored — a mid-string match does not count. |
+| `ids` | Datasets named directly by id. |
+| `externalIds` / `names` / `sources` | Pattern lists, OR-ed within each list. See the wildcard note below. |
+| `labels` | Datasets carrying **all** of these labels. Names are canonicalised, so `pump a` finds the label stored as `PUMP_A`. |
 | `metadata` | Every key/value pair you give must be present on the dataset. |
 | `createdTime` / `lastUpdatedTime` | Inclusive `min`/`max` instants; either bound alone works. |
-| `writeProtected` / `deactivated` | The dataset's flags. `false` **also matches datasets that never set the flag**, which is most of them. |
 
 An empty list places no restriction rather than matching nothing, so building `ids` from a
-possibly-empty selection is safe. Results come newest first, capped by `limit` (default 100,
-max 10000). For free-text lookups over name, external id and description use
-`POST /datasets/search` instead.
+possibly-empty selection is safe — `null` means the same. For free-text matching over name and
+description use `POST /datasets/search` instead.
+
+:::note One list covers exact, prefix and contains
+`externalIds`, `names` and `sources` take patterns, not just literals. `*` and `%` are both
+wildcards, and an entry without one matches exactly — so a single list mixes all three kinds of
+lookup: `["sap_work_orders", "plant_*", "*_archive"]` is an exact id, a prefix search and a
+suffix search at once.
+
+`_` is **literal**, unlike raw SQL `LIKE`. External ids are built out of underscores, so asking
+for `sap_work_orders` means that id and not `sapXwork_orders`. Matching is case-insensitive
+throughout.
+:::
 
 ```http
 POST /datasets/filter
 {
-  "limit": 100,
+  "limit": 1000,
   "filter": {
-    "names": ["SAP%"],
-    "source": "sap",
-    "writeProtected": false,
+    "externalIds": ["sap_*"],
+    "names": ["Plant A", "Plant B"],
+    "labels": ["production"],
     "metadata": { "owner": "plant-a" }
-  }
+  },
+  "sort": { "property": ["name"], "order": "asc" }
 }
 ```
 
-`POST /datasets/list` takes the same body and behaves identically — `/filter` is the name
-the resource, time-series and event endpoints use for the same operation. Send an empty
-filter and you get every dataset, up to `limit`.
+`limit` defaults to **1000** and is capped at 10000; a value of zero or less falls back to the
+default rather than returning nothing. `POST /datasets/list` takes the same body and behaves
+identically — `/filter` is the name the resource, time-series and event endpoints use for the
+same operation.
+
+### Sorting and paging {#paging}
+
+Results come newest created first unless you say otherwise. `sort` takes one property — `id`,
+`externalId`, `name`, `source`, `description`, `createdTime`, `lastUpdatedTime` or `dataSetId` —
+with an `order` of `asc` or `desc`. `id` is always appended to whatever you pick, so the
+ordering is total and two datasets sharing a name never swap places between pages.
+
+The response carries `nextCursor` when there may be more. Send it back as `cursor` with the
+**same `sort` it came from** and keep going while it is present. This is keyset paging, not
+`OFFSET`, so the thousandth page costs what the first one did. The cursor is opaque — base64
+over the sort, the last row's value and its id — so don't build or parse one. An unreadable
+cursor silently restarts from the first page rather than erroring.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -145,69 +168,67 @@ filter and you get every dataset, up to `limit`.
 import ai.intellistream.datahub.models.datafilters.DataSetFilter;
 
 DataSetFilter criteria = new DataSetFilter();
-criteria.setNames(List.of("SAP%"));
-criteria.setSource("sap");
-criteria.setWriteProtected(false);
+criteria.setExternalIds(List.of("sap_*"));
+criteria.setLabels(List.of("production"));
 
 DataWrapper<DataSetModel> datasets = client.datasets().filter(criteria);
 ```
 
-Pass a `DataSetRetreiver` instead of the bare criteria to set an explicit `limit`.
+Pass a `DataSetRetreiver` instead of the bare criteria to set an explicit `limit`, a `sort` or
+a `cursor`.
 
 </TabItem>
 <TabItem value="python" label="Python">
 
-The Python client's `datasets` service covers `create`, `by_ids` and `delete` only, so
-filtering goes through the endpoint directly — the same way listing, searching and updating do.
-Reuse the base URL and token you built the client with:
-
 ```python
-import requests
+import datahub_sdk
 
-response = requests.post(
-    f"{base_url}/datasets/filter",
-    headers={"Authorization": f"Bearer {token}"},
-    json={
-        "limit": 100,
-        "filter": {
-            "names": ["SAP%"],
-            "source": "sap",
-            "writeProtected": False,
-            "metadata": {"owner": "plant-a"},
-        },
-    },
-)
-response.raise_for_status()
-datasets = response.json()["items"]
+page = client.datasets.filter(datahub_sdk.DatasetFilter(
+    filter=datahub_sdk.BasicDatasetFilter(
+        external_ids=["sap_*"],
+        labels=["production"],
+    ),
+    limit=1000,
+    sort_by="name",
+))
+
+while True:
+    for dataset in page:
+        print(dataset.external_id)
+    if page.next_cursor is None:
+        break
+    page = client.datasets.filter(datahub_sdk.DatasetFilter(cursor=page.next_cursor, sort_by="name"))
 ```
+
+`filter` returns a `Page`, which behaves as a list — `len()`, indexing and iteration all work —
+and adds `next_cursor`.
 
 </TabItem>
 <TabItem value="rust" label="Rust">
 
 ```rust
-use std::collections::HashMap;
 use dataplatform_rust_sdk::datasets::{BasicDatasetFilter, DatasetFilter};
+use dataplatform_rust_sdk::filters::PageRequest;
 
 let mut criteria = BasicDatasetFilter::new();
-criteria.set_external_id_prefix("sap_".into());
-criteria.set_metadata(HashMap::from([("owner".to_string(), "plant-a".to_string())]));
+criteria.set_external_ids(vec!["sap_*".into()]);
+criteria.set_labels(vec!["production".into()]);
 
-let mut request = DatasetFilter::new();
-request.set_filter(criteria.build()).set_limit(100);
+let mut request = DatasetFilter::from_filter(criteria.build());
+request.set_limit(1000).set_paging(PageRequest::asc("name"));
 
 let datasets = api.datasets.filter(&request).await?;
 ```
 
-`DatasetFilter` carries the `limit`, defaulting to 100. The filter struct predates this
-endpoint, so it reaches `externalIdPrefix`, `metadata` and the two time bounds but not `names`,
-`source` or the flags — post those to the endpoint yourself until it catches up.
+`PageRequest::asc` / `desc` name the sort; `.after(cursor)` continues from a previous page.
 
 </TabItem>
 </Tabs>
 
-Unlike the time-series filter, this one does **not** expand the dataset hierarchy: it matches
-the datasets themselves, not their descendants. Filtering *time-series* by a dataset is what
-follows the hierarchy. [Filter series →](./timeseries#filter-series)
+Filtering a dataset does **not** expand the dataset hierarchy — it matches the datasets
+themselves, not their descendants. That expansion is what naming a data set does in the *other*
+filters, where `dataSetIds` now covers a parent and everything beneath it.
+[Filter series →](./timeseries#filter-series)
 
 ## Access control {#access-control}
 
@@ -247,12 +268,19 @@ so a changed grant takes effect within about a minute, without a new token.
 | --- | --- | --- | --- |
 | Create | `datasets().create` | `datasets.create` | `datasets.create` |
 | Look up by id / external id | `datasets().byIds` | `datasets.by_ids` | `datasets.by_ids` |
-| List | `datasets().list` | HTTP | `datasets.list` |
-| [Filter](#filter) | `datasets().filter` | HTTP | `datasets.filter` |
-| Search | `datasets().search` | HTTP | `datasets.search` |
-| Update | `datasets().update` | HTTP | `datasets.update` |
+| List | `datasets().list` | `datasets.list` | `datasets.list` |
+| [Filter](#filter) | `datasets().filter` | `datasets.filter` | `datasets.filter` |
+| Search | `datasets().search` | `datasets.search` | `datasets.search` |
+| Update | `datasets().update` | `datasets.update` | `datasets.update` |
 | Delete | `datasets().delete` | `datasets.delete` | `datasets.delete` |
-| Access policies | HTTP | HTTP | `datasets.policies` |
+| Access policies | HTTP | `datasets.policies` | `datasets.policies` |
 
-The Python client is the thinnest here: it covers the write path and lookup, so listing,
-searching and updating still go through the endpoint directly.
+All three clients now cover the endpoint surface. Python and Rust unwrap the results — Python
+hands back plain lists, or a `Page` from `filter`; Java returns the `DataWrapper` the API sends,
+so the items come out of `getItems()`.
+
+:::caution The `filter` on `datasets.search` is ignored
+`POST /datasets/search` declares filter criteria alongside the query, and the server does not
+apply them. Both the Python and Rust clients expose the parameter because the endpoint does.
+Use [`filter`](#filter) when you need criteria, and treat search as free text only.
+:::
