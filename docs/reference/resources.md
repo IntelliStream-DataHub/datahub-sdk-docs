@@ -40,7 +40,8 @@ endpoint per type.
 
 :::note Numeric ids cross the wire as JSON strings
 `id` and `dataSetId` serialize as `"5677892"`, not `5677892` — ids can exceed the 53-bit
-integer a JSON number is safe for in JavaScript. The clients parse them back for you.
+integer a JSON number is safe for in JavaScript. The clients parse them back for you. The same
+holds for the ids on an [edge](./edges#body), `start` and `end` included.
 :::
 
 ## Look up
@@ -186,9 +187,9 @@ let created = api.resources.create(vec![plant, pump], vec![contains]).await?;
 </Tabs>
 
 An edge comes back as a `Relation` — `{ id, start, end, type, description, metadata }`,
-where `start` and `end` are the numeric ids of the two nodes. That is why you send
-`fromExternalId`/`toExternalId` but read `start`/`end`: the write side speaks in your
-identifiers, the read side in the graph's.
+where `start` and `end` are the ids of the two nodes (as JSON strings, like every other id).
+That is why you send `fromExternalId`/`toExternalId` but read `start`/`end`: the write side
+speaks in your identifiers, the read side in the graph's.
 
 Relations are directional. `from` → `to` is the direction you will see when you
 [traverse](#traverse-the-graph), so `plant contains pump` and `pump contains plant`
