@@ -314,6 +314,33 @@ idx, vib = messy_sensor(base=3.0, swing=1.2, noise=0.25)
 ingest("engine_vibration_raw", idx, vib, unit="mm_s")
 ```
 
+## L. A noisy alarm: four transients and one real excursion
+
+For the [sustained-condition alarm](/advanced/sustained-alarm-window): a pump discharge
+pressure that spikes briefly four times and then stays above the limit for eighty minutes.
+The transients are deliberately **higher** than the sustained excursion, because duration
+rather than severity is what that rule judges, and a signal where the real one is also the
+tallest would let a plain threshold look good.
+
+```python
+LIMIT_BAR = 4.5
+
+def noisy_discharge(hours=6, per_minute=1):
+    n = hours * 60 * per_minute
+    step = f"{60 // per_minute}s"
+    idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=n, freq=step)
+    t = np.arange(n, dtype=float) / per_minute                     # minutes from the start
+    v = 3.6 + 0.25*np.sin(t/23) + 0.15*np.sin(t/7.5)               # ordinary running
+    for centre in (30, 75, 140, 200):                              # four brief transients
+        v += 2.6 * np.exp(-((t - centre) / 2.0) ** 2)
+    v += np.where((t > 250) & (t < 330), 1.6, 0.0)                 # the one that matters
+    return idx, v + np.random.normal(0, 0.03, n)
+
+idx, bar = noisy_discharge()
+ingest("pump_p101_discharge_bar", idx, bar, unit="bar")
+print(f"{(bar > LIMIT_BAR).sum()} of {len(bar)} readings are above {LIMIT_BAR}")
+```
+
 ---
 
 With the sandbox populated, every advanced scenario will find the series, events and

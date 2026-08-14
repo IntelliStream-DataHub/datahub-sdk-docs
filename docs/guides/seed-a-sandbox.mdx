@@ -1,0 +1,139 @@
+---
+sidebar_position: 0
+title: Seed a sandbox
+---
+
+# Seed a sandbox
+
+Most guides in this section read series, resources and events that have to exist first. This
+page creates them, once, using the SDK's own calls, so every guide can be run end to end
+against a sandbox rather than read.
+
+:::info What needs seeding, and what does not
+| Guide | Needs |
+| --- | --- |
+| [High-throughput ingestion](/guides/ingest-timeseries) | Nothing. It writes its own data |
+| [Query & aggregate](/guides/query-and-aggregate) | **A** the engine series |
+| [Model assets as a graph](/guides/model-assets-graph) | Nothing. It creates the graph it reads |
+| [Consume live data](/guides/realtime-subscriptions) | **A** the engine series |
+| [Turn readings into events](/guides/detect-events) | **A** the engine series, which include a hot stretch so the rule actually fires |
+| [Attach files to assets](/guides/attach-files) | Nothing. It uploads what it then reads |
+| [Work with units](/guides/work-with-units) | Nothing. It creates the series it converts |
+| [Correlate alarms](/guides/correlate-alarms) | **B** the cooling system, its two sensors and their alarms |
+:::
+
+Everything below is Python (`numpy` + `pandas` + the SDK), the same shape as
+[Generate sample data](/advanced/generate-sample-data) for the advanced scenarios. Java and
+Rust reach the same result through the calls each guide already shows.
+
+```python
+import datahub_sdk, numpy as np, pandas as pd
+
+client = datahub_sdk.DataHubClient.from_env()
+
+def ingest(external_id, index, values, unit=None, name=None):
+    client.timeseries.create([datahub_sdk.TimeSeries(
+        external_id=external_id, name=name or external_id,
+        unit=unit or "value", value_type="float")])
+    client.timeseries.insert_from_lists(
+        timestamps=index, values=np.asarray(values), ts=external_id)
+    print(f"ingested {len(values):,} points → {external_id}")
+```
+
+## A. An engine, with the last twenty minutes running hot
+
+Three series for one engine: a day of readings at one a minute. The temperature ends in a
+climb past 110 °C, because [Turn readings into events](/guides/detect-events) looks at the
+last hour and fires above that limit. Seed this and the guide has something to find.
+
+```python
+idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=24*60, freq="1min")
+n, t = len(idx), np.arange(24*60, dtype=float)
+
+hot = np.where(t > n - 20, (t - (n - 20)) * 1.6, 0.0)          # the last twenty minutes
+ingest("engine_temperature", idx,
+       88 + 4*np.sin(t/90) + np.random.normal(0, 0.8, n) + hot, unit="celsius")
+ingest("engine_rpm", idx,
+       1500 + 60*np.sin(t/140) + np.random.normal(0, 12, n), unit="rpm")
+ingest("engine_oil_pressure", idx,
+       320 - 0.4*hot + np.random.normal(0, 4, n), unit="kpa")
+```
+
+Check that the temperature really does cross the limit the events guide uses, before
+running that guide and concluding it does not work:
+
+```python
+print(f"peak {(88 + 4*np.sin(t/90) + hot).max():.1f} °C")   # > 110
+```
+
+## B. A cooling system, two sensors and two alarms
+
+[Correlate alarms](/guides/correlate-alarms) walks outward from two alarmed sensors and
+looks for what they have in common. That only works if the chain exists, so this builds
+`sensor_a` and `sensor_b` three hops below a shared `cooling_system`, and raises one
+alarm on each. The relationship name has to match the one the guide filters on, `PART_OF`,
+or the traversal comes back empty and the guide looks broken.
+
+```python
+nodes = [
+    datahub_sdk.Resource(external_id="cooling_system", name="Cooling system", labels=["System"]),
+    datahub_sdk.Resource(external_id="skid_1", name="Cooling skid 1", labels=["Skid"]),
+    datahub_sdk.Resource(external_id="pump_a", name="Cooling pump A", labels=["Pump"]),
+    datahub_sdk.Resource(external_id="pump_b", name="Cooling pump B", labels=["Pump"]),
+    datahub_sdk.Resource(external_id="sensor_a", name="Pump A discharge sensor", labels=["Sensor"]),
+    datahub_sdk.Resource(external_id="sensor_b", name="Pump B discharge sensor", labels=["Sensor"]),
+]
+edges = [
+    datahub_sdk.RelForm.by_external_ids("skid_1", "cooling_system", "PART_OF"),
+    datahub_sdk.RelForm.by_external_ids("pump_a", "skid_1", "PART_OF"),
+    datahub_sdk.RelForm.by_external_ids("pump_b", "skid_1", "PART_OF"),
+    datahub_sdk.RelForm.by_external_ids("sensor_a", "pump_a", "PART_OF"),
+    datahub_sdk.RelForm.by_external_ids("sensor_b", "pump_b", "PART_OF"),
+]
+
+graph = client.resources.create(nodes, edges)
+print(len(graph.nodes), "nodes,", len(graph.relations), "edges")
+```
+
+Two alarms, seconds apart, one on each sensor. They look like two incidents and are one.
+
+```python
+now = pd.Timestamp.now(tz="UTC")
+client.events.create([
+    datahub_sdk.Event(external_id=f"alarm_sensor_a_{int(now.timestamp())}",
+                      type="alarm", status="open", event_time=now,
+                      metadata={"resource": "sensor_a", "reason": "high discharge temperature"}),
+    datahub_sdk.Event(external_id=f"alarm_sensor_b_{int(now.timestamp())}",
+                      type="alarm", status="open", event_time=now + pd.Timedelta(seconds=8),
+                      metadata={"resource": "sensor_b", "reason": "high discharge temperature"}),
+])
+```
+
+:::tip Attach the alarm to the resource properly
+The metadata above is enough for the correlation walk, which starts from the sensors. In
+production an alarm should carry `relatedResources` so the link is a real edge rather than a
+string somebody has to parse. [Events reference →](/reference/events)
+:::
+
+## Check the sandbox is populated
+
+```python
+points = client.timeseries.retrieve_datapoints(datahub_sdk.RetrieveFilter(
+    ts="engine_temperature",
+    start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=1),
+    end=pd.Timestamp.now(tz="UTC")))[0].get_datapoints()
+
+alarms = list(client.events.filter(datahub_sdk.EventFilter(
+    basic_filter=datahub_sdk.BasicEventFilter(type="alarm"), limit=10)))
+
+print(f"{len(points)} readings in the last hour, {len(alarms)} alarms")
+# 60 readings in the last hour, 2 alarms
+```
+
+If both numbers are non-zero, every guide on this site has something to run against.
+
+## See also
+
+- [Generate sample data](/advanced/generate-sample-data) — the equivalent for the advanced scenarios.
+- [Sustained-condition alarms](/advanced/sustained-alarm-window) — a full example that seeds, runs and then verifies itself.
+- [High-throughput ingestion](/guides/ingest-timeseries) — doing this at production volume.

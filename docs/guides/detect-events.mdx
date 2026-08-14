@@ -13,6 +13,11 @@ discrete, queryable event when the rule fires — a threshold breach, a state ch
 an alarm. Events carry a type, a time, and metadata, and can reference the resources
 they concern.
 
+:::info Needs a sandbox
+This guide reads data it does not create. [Seed a sandbox](/guides/seed-a-sandbox) writes it
+in one go.
+:::
+
 ## Detect a threshold breach and record it
 
 Read the latest hour, and if any reading exceeds a limit, create an event.

@@ -1,0 +1,532 @@
+---
+sidebar_position: 12
+title: Sustained-condition alarms (sliding window)
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Sustained-condition alarms (sliding window)
+
+A limit on a single reading fires on every transient. A pump's discharge pressure spikes on
+every start-up and every slug of gas, the alarm fires four hundred times a month, and
+somebody switches it off; on the one occasion it mattered, nobody was watching.
+
+The question worth acting on is not *is it above 4.5* but **has it stayed above 4.5**, and
+that is a question about a stretch of time. This page builds that rule end to end: seed a
+signal, replay it to prove the rule behaves, then run the same code against a live
+subscription.
+
+:::info Seed the data first
+Run generator **L** on [Generate sample data](/advanced/generate-sample-data#l-a-noisy-alarm-four-transients-and-one-real-excursion).
+It writes `pump_p101_discharge_bar`: six hours at one reading a minute, four brief spikes
+well above the limit, and one eighty-minute excursion just above it. Seeding is Python, as
+it is for every scenario here; the rule itself is below in all three languages.
+:::
+
+## 1. The rule, in four numbers
+
+| Setting | Value | Why |
+| --- | --- | --- |
+| `LIMIT` | 4.5 bar | The existing alarm limit. Unchanged, deliberately |
+| `WINDOW` | 20 minutes | Longer than any transient worth ignoring, shorter than the time you need to act |
+| `CLEAR_BELOW` | 4.2 bar | Hysteresis. Raise and clear thresholds must differ or the rule flaps at the boundary |
+| `MIN_READINGS` | 15 | A window with holes proves nothing. At one reading a minute, twenty minutes should bring about twenty |
+
+## 2. The detector
+
+One object, holding the last `WINDOW` of readings and whether a finding is currently open.
+Nothing in it knows where the readings came from, which is what lets the same code run over
+history and over a live stream.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+import java.time.*;
+import java.util.*;
+
+record Reading(Instant at, double value) {}
+
+class SustainedHigh {
+    static final double LIMIT = 4.5, CLEAR_BELOW = 4.2;
+    static final int MIN_READINGS = 15;
+    static final Duration WINDOW = Duration.ofMinutes(20);
+
+    private final Deque<Reading> recent = new ArrayDeque<>();
+    private final String seriesId;
+    private boolean open = false;
+
+    SustainedHigh(String seriesId) { this.seriesId = seriesId; }
+
+    EventModel push(Instant at, double value) {
+        if (recent.stream().anyMatch(r -> r.at().equals(at))) {
+            return null;                 // a redelivery, not a new reading
+        }
+        recent.addLast(new Reading(at, value));
+        Instant newest = recent.peekLast().at();
+        while (recent.peekFirst().at().isBefore(newest.minus(WINDOW))) {
+            recent.removeFirst();        // evict on carried time, not the clock
+        }
+        return evaluate();
+    }
+
+    private EventModel evaluate() {
+        if (recent.size() < MIN_READINGS) return null;
+        Duration span = Duration.between(
+                recent.peekFirst().at(), recent.peekLast().at());
+        if (span.toMillis() < WINDOW.toMillis() * 0.9) return null;   // not full
+        if (!open && recent.stream().allMatch(r -> r.value() > LIMIT)) {
+            open = true;
+            return raiseEvent();
+        }
+        if (open && recent.stream().allMatch(r -> r.value() < CLEAR_BELOW)) {
+            open = false;                // clear only once it is properly back
+        }
+        return null;
+    }
+
+    private EventModel raiseEvent() {
+        Instant at = recent.peekLast().at();
+        double peak = recent.stream()
+                .mapToDouble(Reading::value).max().orElseThrow();
+
+        EventModel event = new EventModel();
+        event.setExternalId(
+                "sustained_high_" + seriesId + "_" + at.getEpochSecond());
+        event.setType("sustained_high");
+        event.setStatus("open");
+        event.setEventTime(ZonedDateTime.ofInstant(at, ZoneOffset.UTC));
+        event.setMetadata(Map.of(
+                "series", seriesId, "limit", String.valueOf(LIMIT),
+                "window_minutes", "20", "peak", String.format("%.2f", peak)));
+        client.events().create(List.of(event));
+        return event;
+    }
+}
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+from collections import deque
+from datetime import timedelta
+import datahub_sdk
+
+client = datahub_sdk.DataHubClient.from_env()
+
+LIMIT, CLEAR_BELOW, MIN_READINGS = 4.5, 4.2, 15
+WINDOW = timedelta(minutes=20)
+
+class SustainedHigh:
+    def __init__(self, series_id):
+        self.series_id, self.recent, self.open = series_id, deque(), False
+
+    def push(self, ts, value):
+        if any(t == ts for t, _ in self.recent):
+            return None                    # a redelivery, not a new reading
+        self.recent.append((ts, value))
+        while self.recent and self.recent[0][0] < self.recent[-1][0] - WINDOW:
+            self.recent.popleft()          # evict on carried time, not the clock
+        return self.evaluate()
+
+    def evaluate(self):
+        if len(self.recent) < MIN_READINGS:
+            return None                    # not enough of the window to judge
+        span = self.recent[-1][0] - self.recent[0][0]
+        if span < WINDOW * 0.9:
+            return None                    # the window has not filled yet
+        if not self.open and all(v > LIMIT for _, v in self.recent):
+            self.open = True
+            return self.raise_event()
+        if self.open and all(v < CLEAR_BELOW for _, v in self.recent):
+            self.open = False              # clear only once it is properly back
+        return None
+
+    def raise_event(self):
+        at, peak = self.recent[-1][0], max(v for _, v in self.recent)
+        event = datahub_sdk.Event(
+            external_id=f"sustained_high_{self.series_id}_{int(at.timestamp())}",
+            type="sustained_high",
+            status="open",
+            event_time=at,
+            metadata={"series": self.series_id, "limit": str(LIMIT),
+                      "window_minutes": "20", "peak": f"{peak:.2f}"})
+        client.events.create([event])
+        return event
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use chrono::{DateTime, Duration, Utc};
+use dataplatform_rust_sdk::events::Event;
+use std::collections::VecDeque;
+
+const LIMIT: f64 = 4.5;
+const CLEAR_BELOW: f64 = 4.2;
+const MIN_READINGS: usize = 15;
+
+fn window() -> Duration { Duration::minutes(20) }
+
+struct SustainedHigh {
+    series_id: String,
+    recent: VecDeque<(DateTime<Utc>, f64)>,
+    open: bool,
+}
+
+impl SustainedHigh {
+    fn new(series_id: &str) -> Self {
+        Self { series_id: series_id.into(), recent: VecDeque::new(), open: false }
+    }
+
+    async fn push(&mut self, api: &ApiService, at: DateTime<Utc>, value: f64)
+        -> Option<Event> {
+        if self.recent.iter().any(|(t, _)| *t == at) {
+            return None;                   // a redelivery, not a new reading
+        }
+        self.recent.push_back((at, value));
+        let newest = self.recent.back()?.0;
+        while self.recent.front().map_or(false, |(t, _)| *t < newest - window()) {
+            self.recent.pop_front();       // evict on carried time, not the clock
+        }
+        self.evaluate(api).await
+    }
+
+    async fn evaluate(&mut self, api: &ApiService) -> Option<Event> {
+        if self.recent.len() < MIN_READINGS { return None; }
+        let span = self.recent.back()?.0 - self.recent.front()?.0;
+        if span < window() * 9 / 10 { return None; }   // not full yet
+        if !self.open && self.recent.iter().all(|(_, v)| *v > LIMIT) {
+            self.open = true;
+            return self.raise_event(api).await;
+        }
+        if self.open && self.recent.iter().all(|(_, v)| *v < CLEAR_BELOW) {
+            self.open = false;             // clear only once it is properly back
+        }
+        None
+    }
+
+    async fn raise_event(&self, api: &ApiService) -> Option<Event> {
+        let at = self.recent.back()?.0;
+        let peak = self.recent.iter().map(|(_, v)| *v).fold(f64::MIN, f64::max);
+
+        let mut event = Event::new(
+            format!("sustained_high_{}_{}", self.series_id, at.timestamp()));
+        event.r#type = Some("sustained_high".into());
+        event.status = Some("open".into());
+        event.set_event_time(at);
+        event.add_metadata("series".into(), self.series_id.clone());
+        event.add_metadata("limit".into(), LIMIT.to_string());
+        event.add_metadata("window_minutes".into(), "20".into());
+        event.add_metadata("peak".into(), format!("{peak:.2}"));
+        api.events.create(&vec![event.clone()]).await.ok()?;
+        Some(event)
+    }
+}
+```
+
+</TabItem>
+</Tabs>
+
+The "window not filled" check is worth a second look. The buffer only ever holds readings
+within `WINDOW` of the newest one, so its span can never exceed the window; what it *can* be
+is short, either because the process has only just started or because readings stopped
+arriving. Comparing against most of a window rather than exactly one keeps the rule working
+at any sampling rate.
+
+## 3. Replay the history, and see what fires
+
+The seeded six hours are the test. Pull them back and push each reading through the detector
+in order. A datapoint carries its timestamp and value as strings, so both are parsed on the
+way in.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+final String SERIES = "pump_p101_discharge_bar";
+
+RetrieveFilter filter = new RetrieveFilter();
+filter.setExternalId(SERIES);
+filter.setStart(ZonedDateTime.now().minusHours(7));
+filter.setEnd(ZonedDateTime.now());
+filter.setLimit(10000);
+
+DataRetriever<RetrieveFilter> request = new DataRetriever<>();
+request.setItems(List.of(filter));
+var points = client.timeseries().retrieve(request)
+        .getItems().get(0).getDatapoints();
+
+SustainedHigh detector = new SustainedHigh(SERIES);
+final double LIMIT = SustainedHigh.LIMIT;
+int raised = 0, crossings = 0;
+double previous = 0.0;
+for (var p : points) {
+    Instant at = Instant.ofEpochMilli(Long.parseLong(p.getTimestamp()));
+    double value = Double.parseDouble(p.getValue());
+    if (previous <= LIMIT && value > LIMIT) crossings++;
+    previous = value;
+    if (detector.push(at, value) != null) raised++;
+}
+System.out.printf("%d readings, %d crossings, %d event(s) raised%n",
+        points.size(), crossings, raised);
+// 360 readings, 5 crossings, 1 event(s) raised
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import pandas as pd
+
+SERIES = "pump_p101_discharge_bar"
+
+points = client.timeseries.retrieve_datapoints(datahub_sdk.RetrieveFilter(
+    ts=SERIES,
+    start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=7),
+    end=pd.Timestamp.now(tz="UTC")))[0].get_datapoints()
+
+readings = [(dp.timestamp, float(dp.value)) for dp in points]
+crossings = sum(1 for a, b in zip(readings, readings[1:])
+                if a[1] <= LIMIT < b[1])       # what a plain alarm would do
+
+detector = SustainedHigh(SERIES)
+raised = [e for ts, v in readings if (e := detector.push(ts, v))]
+
+print(f"{len(readings)} readings, {crossings} crossings, "
+      f"{len(raised)} event(s) raised")
+# 360 readings, 5 crossings, 1 event(s) raised
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use chrono::TimeZone;
+use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+
+const SERIES: &str = "pump_p101_discharge_bar";
+
+let filter = RetrieveFilter {
+    external_id: Some(SERIES.into()),
+    start: Some(Utc::now() - Duration::hours(7)),
+    end: Some(Utc::now()),
+    ..Default::default()
+};
+let series = api.time_series
+    .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?
+    .get_items().remove(0);
+
+let mut detector = SustainedHigh::new(SERIES);
+let (mut raised, mut crossings, mut previous) = (0, 0, 0.0_f64);
+for p in &series.datapoints {
+    let millis = p.timestamp.parse::<i64>()?;
+    let at = Utc.timestamp_millis_opt(millis).single().expect("valid time");
+    let value = p.value.as_deref()
+        .and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.0);
+    if previous <= LIMIT && value > LIMIT { crossings += 1; }
+    previous = value;
+    if detector.push(&api, at, value).await.is_some() { raised += 1; }
+}
+println!("{} readings, {} crossings, {} event(s) raised",
+         series.datapoints.len(), crossings, raised);
+// 360 readings, 5 crossings, 1 event(s) raised
+```
+
+</TabItem>
+</Tabs>
+
+:::tip What "working" looks like
+**Five crossings, one event.** The four transients each cross the limit and each would have
+fired the old alarm; none of them survives twenty minutes, so none of them raises anything
+here. The excursion does, twenty minutes after it began, which is the price the window
+charges and the reason it is worth paying.
+:::
+
+## 4. Verify it landed
+
+The detector writes real events, so the check is a query rather than a print.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+EventRetreiver retriever = new EventRetreiver();
+retriever.setLimit(100);
+retriever.getFilter().setType(List.of("sustained_high"));
+
+DataWrapper<EventModel> found = client.events().filter(retriever);
+found.getItems().forEach(e ->
+        System.out.println(e.getExternalId() + " " + e.getMetadata()));
+
+if (found.getItems().size() != 1) {
+    throw new AssertionError(
+            "expected one finding, found " + found.getItems().size());
+}
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+found = list(client.events.filter(datahub_sdk.EventFilter(
+    basic_filter=datahub_sdk.BasicEventFilter(type="sustained_high"), limit=100)))
+
+for e in found:
+    print(e.external_id, e.metadata)
+# sustained_high_pump_p101_discharge_bar_…  {'series': 'pump_p101_discharge_bar',
+#   'limit': '4.5', 'window_minutes': '20', 'peak': '5.24'}
+
+assert len(found) == 1, f"expected one finding, found {len(found)}"
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::filters::{BasicEventFilter, EventFilter};
+
+let filter = EventFilter::default()
+    .set_filter(BasicEventFilter {
+        r#type: Some(vec!["sustained_high".into()]), ..Default::default() })
+    .set_limit(100)
+    .build();
+
+let found = api.events.filter(&filter).await?;
+assert_eq!(found.get_items().len(), 1, "expected exactly one finding");
+```
+
+</TabItem>
+</Tabs>
+
+Re-running the replay is safe to try, and instructive: the detector raises the same finding
+again with the same external id, and the platform collapses it rather than storing a
+duplicate. Events are keyed by id, datapoints by series and timestamp.
+
+## 5. Run the same detector live
+
+Swap the source. Nothing in the detector changes: `push` is fed by a
+[subscription](/guides/realtime-subscriptions) instead of by a list, and each message is
+acknowledged **after** it has been handled, so a crash replays it rather than losing it.
+
+`datapoints(...)` below is your own unpacking of the delivered payload, which carries the
+action and the datapoints it affected; the SDK hands it to you rather than deciding what
+your rule wants from it.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+Subscription sub = new Subscription();
+sub.setExternalId("pump_p101");
+sub.setName("Pump P-101");
+sub.setTimeseries(List.of(IdCollection.createFromExternalId(SERIES)));
+client.subscriptions().create(List.of(sub));
+
+SustainedHigh detector = new SustainedHigh(SERIES);
+
+try (SubscriptionListener listener =
+             client.subscriptions().listen(List.of("pump_p101"))) {
+    while (running) {
+        SubscriptionMessage msg = listener.poll(Duration.ofSeconds(5));
+        if (msg == null) continue;
+        for (Reading r : datapoints(msg.payload())) {
+            EventModel event = detector.push(r.at(), r.value());
+            if (event != null) {
+                System.out.println("raised " + event.getExternalId());
+            }
+        }
+        listener.ack(msg.messageId());          // only once it is durably handled
+    }
+}
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+sub = datahub_sdk.Subscription(
+    external_id="pump_p101", name="Pump P-101", timeseries=[SERIES])
+client.subscriptions.create([sub])
+
+detector = SustainedHigh(SERIES)
+
+with client.subscriptions.listen(["pump_p101"]) as listener:
+    for msg in listener:
+        for ts, value in datapoints(msg.payload):
+            if event := detector.push(ts, value):
+                print("raised", event.external_id)
+        listener.ack([msg.message_id])          # only once it is durably handled
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::generic::IdAndExtId;
+use dataplatform_rust_sdk::subscriptions::Subscription;
+
+let sub = Subscription::new(
+    "pump_p101".into(), "Pump P-101".into(),
+    vec![IdAndExtId::from_external_id(SERIES)]);
+api.subscriptions.create(&sub).await?;
+
+let mut detector = SustainedHigh::new(SERIES);
+let mut listener = api.subscriptions.listen(&["pump_p101"]).await?;
+
+while let Some(result) = listener.next().await {
+    let msg = match result {
+        Ok(m) => m,
+        Err(e) => { eprintln!("listen: {e}"); continue }
+    };
+    for (at, value) in datapoints(&msg.payload) {
+        if detector.push(&api, at, value).await.is_some() {
+            println!("raised a sustained_high finding");
+        }
+    }
+    listener.ack(&[msg.message_id.as_str()]).await?;   // only once handled
+}
+```
+
+</TabItem>
+</Tabs>
+
+Two habits make the difference between this working on a desk and working on a plant:
+
+- **Fill the window before trusting it.** On start-up, replay the last twenty minutes
+  through `push` exactly as section 3 does. Without it the rule is blind for its first
+  twenty minutes, which is precisely when somebody has restarted it during an incident.
+- **Treat a thin window as a finding of its own.** `MIN_READINGS` makes the detector stay
+  quiet when readings stop arriving, which is right, but silence is not the same as health.
+  Raise a separate, quieter event about the instrument or the link.
+
+## 6. The same shape, other rules
+
+Only the evaluate step changes:
+
+| Question | The change |
+| --- | --- |
+| Sustained *below* a limit | Invert the comparisons |
+| Rate of change over the window | Compare first and last, divide by the span |
+| A ratio between two series drifting | One detector fed by two series, keyed on the nearest timestamps |
+| Above the limit for most of the window, not all of it | Count instead of "all", and raise on a fraction |
+
+When no threshold over any window can express what you are looking for, because the
+readings never leave their limits and it is the shape that changed, that is where
+[LSTM anomaly detection](/advanced/lstm-anomaly-detection) starts earning its keep.
+
+## Further reading
+
+- **Stream processing** — [Wikipedia](https://en.wikipedia.org/wiki/Stream_processing)
+- **Hysteresis** — [Wikipedia](https://en.wikipedia.org/wiki/Hysteresis)
+- **Idempotence** — [Wikipedia](https://en.wikipedia.org/wiki/Idempotence)
+- <a href="/data-platform-documentation/concepts/stream-processing">Stream processing, in the platform documentation</a> — windows, event time against arrival time, and what a computation has to remember
+
+## See also
+
+- [Consume live data](/guides/realtime-subscriptions) — the delivery mechanics this builds on.
+- [Turn readings into events](/guides/detect-events) — the single-reading version of the same job.
+- [Generate sample data](/advanced/generate-sample-data#l-a-noisy-alarm-four-transients-and-one-real-excursion) — the signal this page runs against.
+- [LSTM anomaly detection](/advanced/lstm-anomaly-detection) — for the excursions no limit can describe.

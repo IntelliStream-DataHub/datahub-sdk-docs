@@ -20,7 +20,9 @@ at volume, and raise an event when a reading goes out of bounds.
 
 New workspace? Run this once (Python) to create the well's sensor series and feed in a
 pump-intake pressure that sags toward the anomaly threshold — so the alarm in step 3
-actually fires. The field/well/pump graph is created by step 1 below. Safe to re-run.
+actually fires. The field/well/pump graph is created by step 1 below; this also adds the
+two temperature sensors and the shared `cooling_system` that step 4 walks between, so the
+correlation there returns something. Safe to re-run.
 
 ```python
 import datahub_sdk, numpy as np, pandas as pd
@@ -36,6 +38,15 @@ for s, u in sensors.items():
 idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=120, freq="1min")
 intake = np.full(120, 95.0); intake[-30:] -= np.linspace(0, 20, 30)
 client.timeseries.insert_from_lists(timestamps=idx, values=intake, ts="pump_intake_pressure_bar")
+
+# step 4 walks out from two alarmed temperature sensors and looks for what they share
+client.resources.create(
+    [datahub_sdk.Resource(external_id=x, name=n, labels=[lbl]) for x, n, lbl in
+     [("cooling_system", "Platform cooling system", "System"),
+      ("wellhead_temp_a12", "Wellhead temperature A-12", "Sensor"),
+      ("pump_temp_a12", "ESP motor temperature A-12", "Sensor")]],
+    [datahub_sdk.RelForm.by_external_ids("wellhead_temp_a12", "cooling_system", "PART_OF"),
+     datahub_sdk.RelForm.by_external_ids("pump_temp_a12", "cooling_system", "PART_OF")])
 ```
 
 ## 1. Model the field
