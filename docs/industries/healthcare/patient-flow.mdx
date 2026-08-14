@@ -22,11 +22,11 @@ New workspace? Run this once (Python) to create the ED time-to-bed series with a
 readings whose wait grows through the afternoon. Safe to re-run.
 
 ```python
-import datahub_sdk, numpy as np, pandas as pd
+import intellistream_datahub_sdk, numpy as np, pandas as pd
 
-client = datahub_sdk.DataHubClient.from_env()
+client = intellistream_datahub_sdk.DataHubClient.from_env()
 
-client.timeseries.create([datahub_sdk.TimeSeries(external_id="ed_time_to_bed_minutes", name="ED time to bed (min)", unit="min", value_type="float")])
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id="ed_time_to_bed_minutes", name="ED time to bed (min)", unit="min", value_type="float")])
 idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=24, freq="1h")
 ttb = 90 + np.linspace(0, 120, 24) + np.random.normal(0, 10, 24)
 client.timeseries.insert_from_lists(timestamps=idx, values=ttb, ts="ed_time_to_bed_minutes")
@@ -62,7 +62,7 @@ client.timeseries().retrieve(request).getItems().get(0).getDatapoints()
 ```python
 import pandas as pd
 
-rf = datahub_sdk.RetrieveFilter(
+rf = intellistream_datahub_sdk.RetrieveFilter(
     ts="ed_time_to_bed_minutes",
     start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=1),
     end=pd.Timestamp.now(tz="UTC"),
@@ -76,7 +76,7 @@ for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+use intellistream_datahub_sdk::generic::{DataWrapper, RetrieveFilter};
 use chrono::Utc;
 
 let filter = RetrieveFilter {
@@ -119,7 +119,7 @@ client.events().create(List.of(breach));
 <TabItem value="python" label="Python">
 
 ```python
-client.events.create([datahub_sdk.Event(
+client.events.create([intellistream_datahub_sdk.Event(
     external_id=f"flow_breach_ed_{int(pd.Timestamp.now().timestamp())}",
     type="flow_breach", status="open",
     event_time=pd.Timestamp.now(tz="UTC"),
@@ -130,7 +130,7 @@ client.events.create([datahub_sdk.Event(
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::events::Event;
+use intellistream_datahub_sdk::events::Event;
 use chrono::Utc;
 
 let mut breach = Event::new(format!("flow_breach_ed_{}", Utc::now().timestamp()));
@@ -157,7 +157,7 @@ Chart the hourly wait — the climb is the bottleneck the coordinator acts on:
 ```python
 import matplotlib.pyplot as plt
 
-rf = datahub_sdk.RetrieveFilter(ts="ed_time_to_bed_minutes",
+rf = intellistream_datahub_sdk.RetrieveFilter(ts="ed_time_to_bed_minutes",
     start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=1), end=pd.Timestamp.now(tz="UTC"),
     aggregates=["avg"], granularity="1h")
 v = [dp.average for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()]

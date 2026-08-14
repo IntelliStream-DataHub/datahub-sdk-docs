@@ -42,12 +42,12 @@ asset.
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk, pandas as pd
+import intellistream_datahub_sdk, pandas as pd
 
-client = datahub_sdk.DataHubClient.from_env()
+client = intellistream_datahub_sdk.DataHubClient.from_env()
 
 def latest(external_id):
-    rf = datahub_sdk.RetrieveFilter(
+    rf = intellistream_datahub_sdk.RetrieveFilter(
         ts=external_id,
         start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(minutes=15),
         end=pd.Timestamp.now(tz="UTC"),
@@ -85,7 +85,7 @@ double bearingTemp = Double.parseDouble(pts.get(pts.size() - 1).getValue());
 
 ```rust
 // The same retrieve, per signal; the scoring arithmetic below is shown in Python.
-use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+use intellistream_datahub_sdk::generic::{DataWrapper, RetrieveFilter};
 use chrono::Utc;
 
 let filter = RetrieveFilter {
@@ -144,13 +144,13 @@ Write the score back as its own series — now you can chart, rank and subscribe
 health like any other signal — and raise an event when an asset drops to `critical`.
 
 ```python
-client.timeseries.create([datahub_sdk.TimeSeries(
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(
     external_id="pump_07_health_score", name="Pump 07 health score", unit="score", value_type="float")])
 client.timeseries.insert_from_lists(
     timestamps=[pd.Timestamp.now(tz="UTC")], values=[score], ts="pump_07_health_score")
 
 if band == "critical":
-    client.events.create([datahub_sdk.Event(
+    client.events.create([intellistream_datahub_sdk.Event(
         external_id=f"health_critical_pump_07_{int(pd.Timestamp.now().timestamp())}",
         type="health_critical", status="open",
         event_time=pd.Timestamp.now(tz="UTC"),

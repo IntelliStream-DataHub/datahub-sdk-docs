@@ -22,16 +22,16 @@ New workspace? Run this once (Python) to create a haul truck's oil-pressure seri
 below its limit) and a crusher throughput series. Safe to re-run.
 
 ```python
-import datahub_sdk, numpy as np, pandas as pd
+import intellistream_datahub_sdk, numpy as np, pandas as pd
 
-client = datahub_sdk.DataHubClient.from_env()
+client = intellistream_datahub_sdk.DataHubClient.from_env()
 
-client.timeseries.create([datahub_sdk.TimeSeries(external_id="truck_785_oil_pressure_kpa", name="Truck 785 oil pressure", unit="kpa", value_type="float")])
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id="truck_785_oil_pressure_kpa", name="Truck 785 oil pressure", unit="kpa", value_type="float")])
 idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=60, freq="1min")
 op = np.full(60, 320.0); op[-15:] -= np.linspace(0, 90, 15)      # sags below 250 kPa
 client.timeseries.insert_from_lists(timestamps=idx, values=op, ts="truck_785_oil_pressure_kpa")
 
-client.timeseries.create([datahub_sdk.TimeSeries(external_id="crusher_01_throughput_tph", name="Crusher 01 throughput", unit="tph", value_type="float")])
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id="crusher_01_throughput_tph", name="Crusher 01 throughput", unit="tph", value_type="float")])
 idx2 = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=12, freq="1h")
 client.timeseries.insert_from_lists(timestamps=idx2, values=np.random.uniform(1800, 2200, 12), ts="crusher_01_throughput_tph")
 ```
@@ -66,7 +66,7 @@ if (series.getDatapoints().stream().anyMatch(p -> Double.parseDouble(p.getValue(
 ```python
 points = client.timeseries.retrieve_datapoints(last_hour("truck_785_oil_pressure_kpa"))[0]
 if any(float(dp.value) < 250.0 for dp in points.get_datapoints()):
-    client.events.create([datahub_sdk.Event(
+    client.events.create([intellistream_datahub_sdk.Event(
         external_id=f"equipment_warning_785_{int(pd.Timestamp.now().timestamp())}",
         type="equipment_warning", status="open",
         event_time=pd.Timestamp.now(tz="UTC"),
@@ -77,7 +77,7 @@ if any(float(dp.value) < 250.0 for dp in points.get_datapoints()):
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::events::Event;
+use intellistream_datahub_sdk::events::Event;
 use chrono::Utc;
 
 let points = api.time_series.retrieve_datapoints(&last_hour("truck_785_oil_pressure_kpa")).await?
@@ -128,7 +128,7 @@ client.timeseries().retrieve(request).getItems().get(0).getDatapoints()
 ```python
 import pandas as pd
 
-rf = datahub_sdk.RetrieveFilter(
+rf = intellistream_datahub_sdk.RetrieveFilter(
     ts="crusher_01_throughput_tph",
     start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=12),
     end=pd.Timestamp.now(tz="UTC"),
@@ -142,7 +142,7 @@ for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+use intellistream_datahub_sdk::generic::{DataWrapper, RetrieveFilter};
 use chrono::Utc;
 
 let filter = RetrieveFilter {

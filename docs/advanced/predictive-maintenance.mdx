@@ -45,12 +45,12 @@ numbers we can do maths on. This data step is identical in every language:
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk, numpy as np, pandas as pd
+import intellistream_datahub_sdk, numpy as np, pandas as pd
 
-client = datahub_sdk.DataHubClient.from_env()
+client = intellistream_datahub_sdk.DataHubClient.from_env()
 
 def load_series(external_id, start, end):
-    rf = datahub_sdk.RetrieveFilter(ts=external_id, start=start, end=end, limit=100_000)
+    rf = intellistream_datahub_sdk.RetrieveFilter(ts=external_id, start=start, end=end, limit=100_000)
     points = client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()
     idx = pd.to_datetime([p.timestamp for p in points])
     return pd.Series([float(p.value) for p in points], index=idx).sort_index()
@@ -82,7 +82,7 @@ var points = client.timeseries().retrieve(request).getItems().get(0).getDatapoin
 
 ```rust
 // Rust extracts the same data; the learning step (Step 3) is Python.
-use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+use intellistream_datahub_sdk::generic::{DataWrapper, RetrieveFilter};
 use chrono::Utc;
 
 let filter = RetrieveFilter {
@@ -181,14 +181,14 @@ X_recent = feature_matrix(recent)
 scores = anomaly_score(X_recent)
 score_index = recent.index[WINDOW::WINDOW][:len(scores)]   # timestamp each window's score
 
-client.timeseries.create([datahub_sdk.TimeSeries(
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(
     external_id="pump_07_vibration_anomaly", name="Pump 07 vibration anomaly score", unit="score", value_type="float")])
 client.timeseries.insert_from_lists(
     timestamps=score_index, values=scores, ts="pump_07_vibration_anomaly")
 
 ALARM = 0.04                          # healthy scores sit near/below 0; a sustained positive score is abnormal
 if scores[-5:].mean() > ALARM:        # sustained, not a single spike
-    client.events.create([datahub_sdk.Event(
+    client.events.create([intellistream_datahub_sdk.Event(
         external_id=f"degradation_predicted_pump_07_{int(pd.Timestamp.now().timestamp())}",
         type="degradation_predicted", status="open",
         event_time=score_index[-1],

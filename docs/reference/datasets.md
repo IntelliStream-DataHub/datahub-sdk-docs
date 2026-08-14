@@ -45,9 +45,9 @@ client.datasets().create(List.of(dataset));
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk
+import intellistream_datahub_sdk
 
-dataset = datahub_sdk.Dataset(external_id="plant_a", name="Plant A")
+dataset = intellistream_datahub_sdk.Dataset(external_id="plant_a", name="Plant A")
 client.datasets.create([dataset])
 ```
 
@@ -55,7 +55,7 @@ client.datasets.create([dataset])
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::datasets::Dataset;
+use intellistream_datahub_sdk::datasets::Dataset;
 
 // external_id is derived as snake_case of the name → "plant_a"
 let dataset = Dataset::new("Plant A".into());
@@ -89,7 +89,7 @@ client.datasets.delete(["plant_a"])
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::generic::IdAndExtId;
+use intellistream_datahub_sdk::generic::IdAndExtId;
 
 let some = api.datasets.by_ids(&vec![IdAndExtId::from_external_id("plant_a")]).await?;
 api.datasets.delete(&vec![IdAndExtId::from_external_id("plant_a")]).await?;
@@ -136,8 +136,8 @@ Pass a `DataSetRetreiver` instead of the bare criteria to set `limit`, `sort` or
 <TabItem value="python" label="Python">
 
 ```python
-matches = client.datasets.filter(datahub_sdk.DatasetFilter(
-    datahub_sdk.BasicDatasetFilter(name="Plant *", metadata={"tier": "gold"}),
+matches = client.datasets.filter(intellistream_datahub_sdk.DatasetFilter(
+    intellistream_datahub_sdk.BasicDatasetFilter(name="Plant *", metadata={"tier": "gold"}),
     limit=100))
 ```
 
@@ -145,7 +145,7 @@ matches = client.datasets.filter(datahub_sdk.DatasetFilter(
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::datasets::{BasicDatasetFilter, DatasetFilter};
+use intellistream_datahub_sdk::datasets::{BasicDatasetFilter, DatasetFilter};
 
 let criteria = BasicDatasetFilter::new()
     .set_name(vec!["Plant *".to_string()])

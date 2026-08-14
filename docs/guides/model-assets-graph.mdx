@@ -62,16 +62,16 @@ System.out.println(graph.getNodes().size() + " nodes, "
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk
+import intellistream_datahub_sdk
 
 nodes = [
-    datahub_sdk.Resource(external_id="plant_oslo", name="Oslo Plant", labels=["Plant"]),
-    datahub_sdk.Resource(external_id="line_a", name="Assembly line A", labels=["Line"]),
-    datahub_sdk.Resource(external_id="press_07", name="Hydraulic press 07", labels=["Machine"]),
+    intellistream_datahub_sdk.Resource(external_id="plant_oslo", name="Oslo Plant", labels=["Plant"]),
+    intellistream_datahub_sdk.Resource(external_id="line_a", name="Assembly line A", labels=["Line"]),
+    intellistream_datahub_sdk.Resource(external_id="press_07", name="Hydraulic press 07", labels=["Machine"]),
 ]
 edges = [
-    datahub_sdk.RelForm.by_external_ids("plant_oslo", "line_a", "contains"),
-    datahub_sdk.RelForm.by_external_ids("line_a", "press_07", "contains"),
+    intellistream_datahub_sdk.RelForm.by_external_ids("plant_oslo", "line_a", "contains"),
+    intellistream_datahub_sdk.RelForm.by_external_ids("line_a", "press_07", "contains"),
 ]
 
 graph = client.resources.create(nodes, edges)
@@ -82,8 +82,8 @@ print(len(graph.nodes), "nodes,", len(graph.relations), "edges")
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::resources::Resource;
-use dataplatform_rust_sdk::relations::RelForm;
+use intellistream_datahub_sdk::resources::Resource;
+use intellistream_datahub_sdk::relations::RelForm;
 
 let mut plant = Resource::new();
 plant.external_id = "plant_oslo".into();
@@ -147,7 +147,7 @@ for edge in press.relations:
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::generic::IdAndExtId;
+use intellistream_datahub_sdk::generic::IdAndExtId;
 
 let some = api.resources.by_ids(&vec![IdAndExtId::from_external_id("press_07")]).await?;
 if let Some(press) = some.nodes().first() {

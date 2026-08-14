@@ -31,9 +31,9 @@ client.timeseries().create(List.of(series));
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk
+import intellistream_datahub_sdk
 
-ts = datahub_sdk.TimeSeries(
+ts = intellistream_datahub_sdk.TimeSeries(
     external_id="engine_temperature",
     name="Engine temperature",
     unit="celsius")
@@ -45,7 +45,7 @@ client.timeseries.create([ts])
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::timeseries::TimeSeries;
+use intellistream_datahub_sdk::timeseries::TimeSeries;
 
 let mut ts = TimeSeries::new("engine_temperature", "Engine temperature");
 ts.unit = Some("celsius".into());
@@ -91,7 +91,7 @@ client.timeseries().create(List.of(price));
 <TabItem value="python" label="Python">
 
 ```python
-client.timeseries.create([datahub_sdk.TimeSeries(
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(
     external_id="book_value_usd", name="Book value (USD)",
     unit="usd", value_type="numeric")])
 ```
@@ -162,7 +162,7 @@ Pass a `TimeseriesRetreiver` instead of the bare criteria to set an explicit `li
 <TabItem value="python" label="Python">
 
 ```python
-form = datahub_sdk.TimeSeriesFilterForm(
+form = intellistream_datahub_sdk.TimeSeriesFilterForm(
     data_set_id=[12],            # this data set and every data set beneath it
     unit="celsius",              # a pattern field also takes a bare value
     limit=100)
@@ -174,8 +174,8 @@ series = client.timeseries.filter(form)
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::generic::IdAndExtId;
-use dataplatform_rust_sdk::{TimeSeriesFilter, TimeSeriesFilterForm};
+use intellistream_datahub_sdk::generic::IdAndExtId;
+use intellistream_datahub_sdk::{TimeSeriesFilter, TimeSeriesFilterForm};
 
 let criteria = TimeSeriesFilter {
     data_set_id: Some(vec![IdAndExtId::from_id(12)]),   // and every data set beneath it
@@ -252,7 +252,7 @@ while (page.getNextCursor() != null) {
 ```python
 cursor = None
 while True:
-    page = client.timeseries.filter(datahub_sdk.TimeSeriesFilterForm(
+    page = client.timeseries.filter(intellistream_datahub_sdk.TimeSeriesFilterForm(
         unit="celsius", limit=100, sort_by="name", sort_order="asc", cursor=cursor))
     for ts in page:
         ...
@@ -267,8 +267,8 @@ while True:
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::filters::PageRequest;
-use dataplatform_rust_sdk::{TimeSeriesFilter, TimeSeriesFilterForm};
+use intellistream_datahub_sdk::filters::PageRequest;
+use intellistream_datahub_sdk::{TimeSeriesFilter, TimeSeriesFilterForm};
 
 let mut paging = PageRequest::asc("name");
 loop {
@@ -311,7 +311,7 @@ client.timeseries.delete(["engine_temperature"])
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::generic::{DataWrapper, IdAndExtId};
+use intellistream_datahub_sdk::generic::{DataWrapper, IdAndExtId};
 
 api.time_series
     .delete(&DataWrapper::from_vec(vec![IdAndExtId::from_external_id("engine_temperature")]))
@@ -415,7 +415,7 @@ client.timeseries.insert_from_lists(
 `insert_datapoints` auto-batches large inputs (chunks above ~100k points):
 
 ```rust
-use dataplatform_rust_sdk::generic::{DataWrapper, DatapointsCollection, DatapointString};
+use intellistream_datahub_sdk::generic::{DataWrapper, DatapointsCollection, DatapointString};
 
 let mut dw = DataWrapper::new();
 dw.add_item(DatapointsCollection {
@@ -459,7 +459,7 @@ points.getItems().forEach(c ->
 ```python
 import pandas as pd
 
-rf = datahub_sdk.RetrieveFilter(
+rf = intellistream_datahub_sdk.RetrieveFilter(
     ts="engine_temperature",
     start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=1),
     end=pd.Timestamp.now(tz="UTC"),
@@ -475,7 +475,7 @@ for dp in collection.get_datapoints():
 
 ```rust
 use chrono::Utc;
-use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+use intellistream_datahub_sdk::generic::{DataWrapper, RetrieveFilter};
 
 let filter = RetrieveFilter {
     external_id: Some("engine_temperature".into()),

@@ -59,17 +59,17 @@ DataWrapper<UnitModel> result = client.units().byIds(List.of(lookup));
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk
+import intellistream_datahub_sdk
 
 by_ext = client.units.by_external_ids("celsius")
-by_id = client.units.by_ids([datahub_sdk.IdCollection(id=7)])
+by_id = client.units.by_ids([intellistream_datahub_sdk.IdCollection(id=7)])
 ```
 
 </TabItem>
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::generic::{DataWrapper, IdAndExtId};
+use intellistream_datahub_sdk::generic::{DataWrapper, IdAndExtId};
 
 let by_ext = api.units.by_external_id("celsius").await?;
 let by_id = api.units.by_ids(&DataWrapper::from(vec![IdAndExtId::from_id(7)])).await?;

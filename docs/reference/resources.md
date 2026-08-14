@@ -76,7 +76,7 @@ resources = client.resources.by_ids(["pump_1", 5677892])
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::generic::IdAndExtId;
+use intellistream_datahub_sdk::generic::IdAndExtId;
 
 let resources = api.resources.by_ids(&vec![
     IdAndExtId::from_external_id("pump_1"),
@@ -151,11 +151,11 @@ System.out.println(created.getNodes().size() + " resources, "
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk
+import intellistream_datahub_sdk
 
-plant = datahub_sdk.Resource(external_id="plant_oslo", name="Oslo Plant", labels=["Plant"])
-pump = datahub_sdk.Resource(external_id="pump_1", name="Pump 1", labels=["Pump"])
-contains = datahub_sdk.RelForm.by_external_ids("plant_oslo", "pump_1", "contains")
+plant = intellistream_datahub_sdk.Resource(external_id="plant_oslo", name="Oslo Plant", labels=["Plant"])
+pump = intellistream_datahub_sdk.Resource(external_id="pump_1", name="Pump 1", labels=["Pump"])
+contains = intellistream_datahub_sdk.RelForm.by_external_ids("plant_oslo", "pump_1", "contains")
 
 result = client.resources.create([plant, pump], [contains])
 print(len(result.nodes), "resources,", len(result.relations), "relations")
@@ -165,8 +165,8 @@ print(len(result.nodes), "resources,", len(result.relations), "relations")
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::resources::Resource;
-use dataplatform_rust_sdk::relations::RelForm;
+use intellistream_datahub_sdk::resources::Resource;
+use intellistream_datahub_sdk::relations::RelForm;
 
 let mut plant = Resource::new();
 plant.external_id = "plant_oslo".into();
@@ -291,9 +291,9 @@ matches = client.resources.filter(
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::filters::NodeFilter;
-use dataplatform_rust_sdk::generic::IdAndExtId;
-use dataplatform_rust_sdk::resources::{ResourceFilter, ResourceRetreiver};
+use intellistream_datahub_sdk::filters::NodeFilter;
+use intellistream_datahub_sdk::generic::IdAndExtId;
+use intellistream_datahub_sdk::resources::{ResourceFilter, ResourceRetreiver};
 
 // The criteria every node type shares are a flattened `NodeFilter`, so they nest in Rust even
 // though they sit alongside the resource's own fields on the wire.
@@ -344,7 +344,7 @@ DataWrapper<Resource> matches = client.resources().search(search);
 <TabItem value="python" label="Python">
 
 ```python
-form = datahub_sdk.SearchAndFilterForm(query="pump", limit=10)
+form = intellistream_datahub_sdk.SearchAndFilterForm(query="pump", limit=10)
 matches = client.resources.search(form)
 ```
 
@@ -352,7 +352,7 @@ matches = client.resources.search(form)
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::generic::{SearchAndFilterForm, SearchForm};
+use intellistream_datahub_sdk::generic::{SearchAndFilterForm, SearchForm};
 
 let form = SearchAndFilterForm {
     search: Some(SearchForm { name: None, description: None, query: Some("pump".into()) }),
@@ -530,7 +530,7 @@ for edge in net.edges:
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::resources::RelatedResourcesForm;
+use intellistream_datahub_sdk::resources::RelatedResourcesForm;
 
 let net = api.resources.fetch_related(
     &RelatedResourcesForm::from_external_id("sensor_a")
@@ -599,7 +599,7 @@ nearest = client.resources.fetch_nearest(
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::resources::FetchNearestResourcesForm;
+use intellistream_datahub_sdk::resources::FetchNearestResourcesForm;
 
 let nearest = api.resources.fetch_nearest(
     &FetchNearestResourcesForm::from_id(5677892)   // numeric id, not external id

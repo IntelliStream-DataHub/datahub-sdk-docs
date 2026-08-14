@@ -34,19 +34,19 @@ Each step reads its input series and writes a **new** derived series (never over
 input). A tiny helper keeps it readable:
 
 ```python
-import datahub_sdk, numpy as np, pandas as pd
+import intellistream_datahub_sdk, numpy as np, pandas as pd
 
-client = datahub_sdk.DataHubClient.from_env()
+client = intellistream_datahub_sdk.DataHubClient.from_env()
 
 def load(ext_id):
-    rf = datahub_sdk.RetrieveFilter(ts=ext_id,
+    rf = intellistream_datahub_sdk.RetrieveFilter(ts=ext_id,
         start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=7), end=pd.Timestamp.now(tz="UTC"), limit=100_000)
     pts = client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()
     return pd.Series([float(p.value) for p in pts],
                      index=pd.to_datetime([p.timestamp for p in pts], utc=True)).sort_index()
 
 def store(ext_id, series, name=None, unit="value"):
-    client.timeseries.create([datahub_sdk.TimeSeries(external_id=ext_id, name=name or ext_id, unit=unit,
+    client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id=ext_id, name=name or ext_id, unit=unit,
                                                      value_type="float",
                                                      description="Derived series — not a raw measurement.")])
     s = series.dropna()
@@ -95,7 +95,7 @@ same call in Java and Rust — see [model assets as a graph](/guides/model-asset
 
 ```python
 def fn(ext_id, name):
-    return datahub_sdk.Resource(external_id=ext_id, name=name, labels=["PipelineStep"])
+    return intellistream_datahub_sdk.Resource(external_id=ext_id, name=name, labels=["PipelineStep"])
 
 functions = [
     fn("clean_temp_fn", "Clean temperature"),   fn("clean_vib_fn", "Clean vibration"),
@@ -104,8 +104,8 @@ functions = [
     fn("assemble_fn", "Assemble features"),      fn("score_fn", "Health score"),
 ]
 
-def proc(src, f): return datahub_sdk.RelForm.by_external_ids(src, f, "processed_by")
-def prod(f, out): return datahub_sdk.RelForm.by_external_ids(f, out, "produces")
+def proc(src, f): return intellistream_datahub_sdk.RelForm.by_external_ids(src, f, "processed_by")
+def prod(f, out): return intellistream_datahub_sdk.RelForm.by_external_ids(f, out, "produces")
 
 edges = [
     proc("engine_temperature_raw", "clean_temp_fn"), prod("clean_temp_fn", "engine_temperature_clean"),

@@ -22,24 +22,24 @@ subscription before we listen** (with a breach), and build the dependency graph 
 services share a database — so step 4's correlation finds the shared cause. Safe to re-run.
 
 ```python
-import datahub_sdk, numpy as np, pandas as pd
+import intellistream_datahub_sdk, numpy as np, pandas as pd
 
-client = datahub_sdk.DataHubClient.from_env()
+client = intellistream_datahub_sdk.DataHubClient.from_env()
 
-client.timeseries.create([datahub_sdk.TimeSeries(external_id="service_checkout_request_latency_ms", name="Checkout p99 latency", unit="ms", value_type="float")])
-client.subscriptions.create([datahub_sdk.Subscription(
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id="service_checkout_request_latency_ms", name="Checkout p99 latency", unit="ms", value_type="float")])
+client.subscriptions.create([intellistream_datahub_sdk.Subscription(
     external_id="checkout_slo", name="Checkout SLO", timeseries=["service_checkout_request_latency_ms"])])
 idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=60, freq="1min")
 lat = np.full(60, 180.0); lat[-10:] = 360.0          # p99 breaches the 300 ms SLO
 client.timeseries.insert_from_lists(timestamps=idx, values=lat, ts="service_checkout_request_latency_ms")
 
 client.resources.create(
-    [datahub_sdk.Resource(external_id=x, name=x, labels=[lbl]) for x, lbl in
+    [intellistream_datahub_sdk.Resource(external_id=x, name=x, labels=[lbl]) for x, lbl in
      [("service_checkout", "Service"), ("service_payments", "Service"),
       ("order_db", "Database"), ("host_web_01", "Host")]],
-    [datahub_sdk.RelForm.by_external_ids("service_checkout", "order_db", "depends_on"),
-     datahub_sdk.RelForm.by_external_ids("service_payments", "order_db", "depends_on"),
-     datahub_sdk.RelForm.by_external_ids("service_checkout", "host_web_01", "runs_on")])
+    [intellistream_datahub_sdk.RelForm.by_external_ids("service_checkout", "order_db", "depends_on"),
+     intellistream_datahub_sdk.RelForm.by_external_ids("service_payments", "order_db", "depends_on"),
+     intellistream_datahub_sdk.RelForm.by_external_ids("service_checkout", "host_web_01", "runs_on")])
 ```
 
 ## 1. Model services and hosts
@@ -73,20 +73,20 @@ client.resources().create(List.of(service, host), List.of(runsOn));
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk
+import intellistream_datahub_sdk
 
 client.resources.create(
-    [datahub_sdk.Resource(external_id="service_checkout", name="Checkout service", labels=["Service"]),
-     datahub_sdk.Resource(external_id="host_web_01", name="web-01", labels=["Host"])],
-    [datahub_sdk.RelForm.by_external_ids("service_checkout", "host_web_01", "runs_on")])
+    [intellistream_datahub_sdk.Resource(external_id="service_checkout", name="Checkout service", labels=["Service"]),
+     intellistream_datahub_sdk.Resource(external_id="host_web_01", name="web-01", labels=["Host"])],
+    [intellistream_datahub_sdk.RelForm.by_external_ids("service_checkout", "host_web_01", "runs_on")])
 ```
 
 </TabItem>
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::resources::Resource;
-use dataplatform_rust_sdk::relations::RelForm;
+use intellistream_datahub_sdk::resources::Resource;
+use intellistream_datahub_sdk::relations::RelForm;
 
 let mut service = Resource::new();
 service.external_id = "service_checkout".into();
@@ -146,7 +146,7 @@ try (var stream = client.subscriptions().listen(List.of("checkout_slo"))
 with client.subscriptions.listen(["checkout_slo"]) as listener:
     for msg in listener:
         if breaches_slo(msg.payload):        # e.g. p99 latency > 300 ms
-            client.events.create([datahub_sdk.Event(
+            client.events.create([intellistream_datahub_sdk.Event(
                 external_id=f"slo_breach_checkout_{int(pd.Timestamp.now().timestamp())}",
                 type="slo_breach", status="firing",
                 event_time=pd.Timestamp.now(tz="UTC"),
@@ -158,7 +158,7 @@ with client.subscriptions.listen(["checkout_slo"]) as listener:
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::events::Event;
+use intellistream_datahub_sdk::events::Event;
 use chrono::Utc;
 
 let mut listener = api.subscriptions.listen(&["checkout_slo"]).await?;
@@ -198,15 +198,15 @@ DataWrapper<EventModel> breaches = client.events().filter(retriever);
 <TabItem value="python" label="Python">
 
 ```python
-breaches = client.events.filter(datahub_sdk.EventFilter(
-    basic_filter=datahub_sdk.BasicEventFilter(type="slo_breach"), limit=200))
+breaches = client.events.filter(intellistream_datahub_sdk.EventFilter(
+    basic_filter=intellistream_datahub_sdk.BasicEventFilter(type="slo_breach"), limit=200))
 ```
 
 </TabItem>
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::filters::{BasicEventFilter, EventFilter};
+use intellistream_datahub_sdk::filters::{BasicEventFilter, EventFilter};
 
 let mut basic = BasicEventFilter::default();
 basic.set_type(&["slo_breach"]);
@@ -258,7 +258,7 @@ shared = ({n.external_id for n in checkout.nodes}
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::resources::RelatedResourcesForm;
+use intellistream_datahub_sdk::resources::RelatedResourcesForm;
 use std::collections::HashSet;
 
 let checkout = api.resources.fetch_related(

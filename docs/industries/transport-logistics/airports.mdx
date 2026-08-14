@@ -23,12 +23,12 @@ New workspace? Run this once (Python) to create the stand's turnaround feed, **c
 subscription before we listen**, and push a leg-overrun reading. Safe to re-run.
 
 ```python
-import datahub_sdk, pandas as pd
+import intellistream_datahub_sdk, pandas as pd
 
-client = datahub_sdk.DataHubClient.from_env()
+client = intellistream_datahub_sdk.DataHubClient.from_env()
 
-client.timeseries.create([datahub_sdk.TimeSeries(external_id="stand_b12_fuelling_progress", name="Stand B12 fuelling", unit="pct", value_type="float")])
-client.subscriptions.create([datahub_sdk.Subscription(
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id="stand_b12_fuelling_progress", name="Stand B12 fuelling", unit="pct", value_type="float")])
+client.subscriptions.create([intellistream_datahub_sdk.Subscription(
     external_id="stand_b12_turnaround", name="Stand B12 turnaround", timeseries=["stand_b12_fuelling_progress"])])
 client.timeseries.insert_from_lists(timestamps=[pd.Timestamp.now(tz="UTC")], values=[1.0], ts="stand_b12_fuelling_progress")
 ```
@@ -68,7 +68,7 @@ try (var stream = client.subscriptions().listen(List.of("stand_b12_turnaround"))
 with client.subscriptions.listen(["stand_b12_turnaround"]) as listener:
     for msg in listener:
         if leg_overrunning(msg.payload):              # e.g. fuelling past plan
-            client.events.create([datahub_sdk.Event(
+            client.events.create([intellistream_datahub_sdk.Event(
                 external_id=f"turnaround_risk_su204_{int(pd.Timestamp.now().timestamp())}",
                 type="turnaround_risk", status="open",
                 event_time=pd.Timestamp.now(tz="UTC"),
@@ -80,7 +80,7 @@ with client.subscriptions.listen(["stand_b12_turnaround"]) as listener:
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::events::Event;
+use intellistream_datahub_sdk::events::Event;
 use chrono::Utc;
 
 let mut listener = api.subscriptions.listen(&["stand_b12_turnaround"]).await?;

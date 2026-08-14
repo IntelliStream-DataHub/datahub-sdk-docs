@@ -80,7 +80,7 @@ The code below lives in `src/main/java/example/MemoryIngestTutorial.java`.
 `psutil` reads memory and swap portably across Linux, macOS and Windows:
 
 ```bash
-pip install datahub-sdk psutil
+pip install intellistream-datahub-sdk psutil
 ```
 
 The code below lives in a single file, `memory_ingest.py`.
@@ -94,7 +94,7 @@ portably:
 ```toml
 # Cargo.toml
 [dependencies]
-dataplatform-rust-sdk = "0.1"
+intellistream-datahub-sdk = "0.1"
 tokio = { version = "1", features = ["full"] }
 chrono = "0.4"
 sysinfo = "0.37"
@@ -109,14 +109,14 @@ The code below lives in `src/main.rs`, with `#[tokio::main]` driving the async c
 ```toml
 # Cargo.toml
 [dependencies]
-dataplatform-rust-sdk = { version = "0.1", features = ["blocking"] }
+intellistream-datahub-sdk = { version = "0.1", features = ["blocking"] }
 chrono = "0.4"
 sysinfo = "0.37"
 hostname = "0.4"
 ```
 
 The code below lives in `src/main.rs`. The `blocking` feature enables the SDK's
-synchronous client (`dataplatform_rust_sdk::blocking`) — same services and methods as
+synchronous client (`intellistream_datahub_sdk::blocking`) — same services and methods as
 the async API, but no async runtime and no `async`/`.await` in your code.
 
 </TabItem>
@@ -150,7 +150,7 @@ DatahubClient client = DatahubClient.create(DatahubConfig.builder()
 <TabItem value="python" label="Python">
 
 ```python
-from datahub_sdk import DataHubClient
+from intellistream_datahub_sdk import DataHubClient
 
 client = DataHubClient(
     base_url=os.environ["BASE_URL"],
@@ -170,9 +170,9 @@ client = DataHubClient(
 by itself:
 
 ```rust
-use dataplatform_rust_sdk::{ApiService, datahub::DataHubApi};
+use intellistream_datahub_sdk::{ApiService, datahub::DataHubConfig};
 
-let mut config = DataHubApi::from_env().expect("BASE_URL and credentials must be set");
+let mut config = DataHubConfig::from_env().expect("BASE_URL and credentials must be set");
 config
     .enable_buffering()                 // spool to disk when unreachable
     .set_buffer_retention_secs(3600)    // keep up to an hour of backlog
@@ -187,10 +187,10 @@ let api = ApiService::new(config);
 by itself:
 
 ```rust
-use dataplatform_rust_sdk::blocking;
-use dataplatform_rust_sdk::datahub::DataHubApi;
+use intellistream_datahub_sdk::blocking;
+use intellistream_datahub_sdk::datahub::DataHubConfig;
 
-let mut config = DataHubApi::from_env().expect("BASE_URL and credentials must be set");
+let mut config = DataHubConfig::from_env().expect("BASE_URL and credentials must be set");
 config
     .enable_buffering()                 // spool to disk when unreachable
     .set_buffer_retention_secs(3600)    // keep up to an hour of backlog
@@ -274,7 +274,7 @@ wanted = {f"{base}_{host}": name for base, name in METRICS.items()}
 existing = {ts.external_id for ts in client.timeseries.by_ids(list(wanted))}
 
 missing = [
-    datahub_sdk.TimeSeries(
+    intellistream_datahub_sdk.TimeSeries(
         external_id=ext_id, name=f"{name} ({host})",
         unit="bytes", value_type="BIGINT")
     for ext_id, name in wanted.items()
@@ -772,8 +772,8 @@ from datetime import datetime, timezone
 
 import psutil
 
-import datahub_sdk
-from datahub_sdk import DataHubClient
+import intellistream_datahub_sdk
+from intellistream_datahub_sdk import DataHubClient
 
 INTERVAL_SECS = 3
 
@@ -802,7 +802,7 @@ def ensure_series(client, host):
     existing = {ts.external_id for ts in client.timeseries.by_ids(list(wanted))}
 
     missing = [
-        datahub_sdk.TimeSeries(
+        intellistream_datahub_sdk.TimeSeries(
             external_id=ext_id, name=f"{name} ({host})",
             unit="bytes", value_type="BIGINT")
         for ext_id, name in wanted.items()
@@ -860,10 +860,10 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use chrono::Utc;
-use dataplatform_rust_sdk::datahub::DataHubApi;
-use dataplatform_rust_sdk::generic::{DataWrapper, IdAndExtId};
-use dataplatform_rust_sdk::timeseries::TimeSeries;
-use dataplatform_rust_sdk::ApiService;
+use intellistream_datahub_sdk::datahub::DataHubConfig;
+use intellistream_datahub_sdk::generic::{DataWrapper, IdAndExtId};
+use intellistream_datahub_sdk::timeseries::TimeSeries;
+use intellistream_datahub_sdk::ApiService;
 use sysinfo::System;
 
 const INTERVAL_SECS: u64 = 3;
@@ -878,7 +878,7 @@ const METRICS: [(&str, &str); 3] = [
 #[tokio::main]
 async fn main() {
     // Step 1: build the client with a durable, spool-to-disk ingest buffer.
-    let mut config = DataHubApi::from_env().expect("BASE_URL and credentials must be set");
+    let mut config = DataHubConfig::from_env().expect("BASE_URL and credentials must be set");
     config
         .enable_buffering()
         .set_buffer_retention_secs(3600)
@@ -968,10 +968,10 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use chrono::Utc;
-use dataplatform_rust_sdk::blocking;
-use dataplatform_rust_sdk::datahub::DataHubApi;
-use dataplatform_rust_sdk::generic::{DataWrapper, IdAndExtId};
-use dataplatform_rust_sdk::timeseries::TimeSeries;
+use intellistream_datahub_sdk::blocking;
+use intellistream_datahub_sdk::datahub::DataHubConfig;
+use intellistream_datahub_sdk::generic::{DataWrapper, IdAndExtId};
+use intellistream_datahub_sdk::timeseries::TimeSeries;
 use sysinfo::System;
 
 const INTERVAL_SECS: u64 = 3;
@@ -985,7 +985,7 @@ const METRICS: [(&str, &str); 3] = [
 
 fn main() {
     // Step 1: build the client with a durable, spool-to-disk ingest buffer.
-    let mut config = DataHubApi::from_env().expect("BASE_URL and credentials must be set");
+    let mut config = DataHubConfig::from_env().expect("BASE_URL and credentials must be set");
     config
         .enable_buffering()
         .set_buffer_retention_secs(3600)

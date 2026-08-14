@@ -60,9 +60,9 @@ client.timeseries().create(series);
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk
+import intellistream_datahub_sdk
 
-client.timeseries.create([datahub_sdk.TimeSeries(
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(
     external_id="wellhead_pressure_bar",
     name="Wellhead pressure",
     unit="bar")])
@@ -72,7 +72,7 @@ client.timeseries.create([datahub_sdk.TimeSeries(
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::timeseries::TimeSeries;
+use intellistream_datahub_sdk::timeseries::TimeSeries;
 
 let mut ts = TimeSeries::new("wellhead_pressure_bar", "Wellhead pressure");
 ts.unit = Some("bar".into());
@@ -101,17 +101,17 @@ UnitModel unit = client.units().byIds(List.of(lookup)).getItems().iterator().nex
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk
+import intellistream_datahub_sdk
 
 celsius = client.units.by_external_ids("temperature_deg_c")
-by_id = client.units.by_ids([datahub_sdk.IdCollection(id=7)])
+by_id = client.units.by_ids([intellistream_datahub_sdk.IdCollection(id=7)])
 ```
 
 </TabItem>
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::generic::{DataWrapper, IdAndExtId};
+use intellistream_datahub_sdk::generic::{DataWrapper, IdAndExtId};
 
 let celsius = api.units.by_external_id("temperature_deg_c").await?;
 let by_id = api.units.by_ids(&DataWrapper::from(vec![IdAndExtId::from_id(7)])).await?;

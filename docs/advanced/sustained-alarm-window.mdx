@@ -111,9 +111,9 @@ class SustainedHigh {
 ```python
 from collections import deque
 from datetime import timedelta
-import datahub_sdk
+import intellistream_datahub_sdk
 
-client = datahub_sdk.DataHubClient.from_env()
+client = intellistream_datahub_sdk.DataHubClient.from_env()
 
 LIMIT, CLEAR_BELOW, MIN_READINGS = 4.5, 4.2, 15
 WINDOW = timedelta(minutes=20)
@@ -145,7 +145,7 @@ class SustainedHigh:
 
     def raise_event(self):
         at, peak = self.recent[-1][0], max(v for _, v in self.recent)
-        event = datahub_sdk.Event(
+        event = intellistream_datahub_sdk.Event(
             external_id=f"sustained_high_{self.series_id}_{int(at.timestamp())}",
             type="sustained_high",
             status="open",
@@ -161,7 +161,7 @@ class SustainedHigh:
 
 ```rust
 use chrono::{DateTime, Duration, Utc};
-use dataplatform_rust_sdk::events::Event;
+use intellistream_datahub_sdk::events::Event;
 use std::collections::VecDeque;
 
 const LIMIT: f64 = 4.5;
@@ -283,7 +283,7 @@ import pandas as pd
 
 SERIES = "pump_p101_discharge_bar"
 
-points = client.timeseries.retrieve_datapoints(datahub_sdk.RetrieveFilter(
+points = client.timeseries.retrieve_datapoints(intellistream_datahub_sdk.RetrieveFilter(
     ts=SERIES,
     start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=7),
     end=pd.Timestamp.now(tz="UTC")))[0].get_datapoints()
@@ -305,7 +305,7 @@ print(f"{len(readings)} readings, {crossings} crossings, "
 
 ```rust
 use chrono::TimeZone;
-use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+use intellistream_datahub_sdk::generic::{DataWrapper, RetrieveFilter};
 
 const SERIES: &str = "pump_p101_discharge_bar";
 
@@ -371,8 +371,8 @@ if (found.getItems().size() != 1) {
 <TabItem value="python" label="Python">
 
 ```python
-found = list(client.events.filter(datahub_sdk.EventFilter(
-    basic_filter=datahub_sdk.BasicEventFilter(type="sustained_high"), limit=100)))
+found = list(client.events.filter(intellistream_datahub_sdk.EventFilter(
+    basic_filter=intellistream_datahub_sdk.BasicEventFilter(type="sustained_high"), limit=100)))
 
 for e in found:
     print(e.external_id, e.metadata)
@@ -386,7 +386,7 @@ assert len(found) == 1, f"expected one finding, found {len(found)}"
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::filters::{BasicEventFilter, EventFilter};
+use intellistream_datahub_sdk::filters::{BasicEventFilter, EventFilter};
 
 let filter = EventFilter::default()
     .set_filter(BasicEventFilter {
@@ -447,7 +447,7 @@ try (SubscriptionListener listener =
 <TabItem value="python" label="Python">
 
 ```python
-sub = datahub_sdk.Subscription(
+sub = intellistream_datahub_sdk.Subscription(
     external_id="pump_p101", name="Pump P-101", timeseries=[SERIES])
 client.subscriptions.create([sub])
 
@@ -465,8 +465,8 @@ with client.subscriptions.listen(["pump_p101"]) as listener:
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::generic::IdAndExtId;
-use dataplatform_rust_sdk::subscriptions::Subscription;
+use intellistream_datahub_sdk::generic::IdAndExtId;
+use intellistream_datahub_sdk::subscriptions::Subscription;
 
 let sub = Subscription::new(
     "pump_p101".into(), "Pump P-101".into(),

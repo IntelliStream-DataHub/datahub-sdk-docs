@@ -23,11 +23,11 @@ New workspace? Run this once (Python) to create a crane's move series with six h
 readings. Safe to re-run.
 
 ```python
-import datahub_sdk, numpy as np, pandas as pd
+import intellistream_datahub_sdk, numpy as np, pandas as pd
 
-client = datahub_sdk.DataHubClient.from_env()
+client = intellistream_datahub_sdk.DataHubClient.from_env()
 
-client.timeseries.create([datahub_sdk.TimeSeries(external_id="crane_qc_07_moves", name="Crane QC-07 moves", unit="count", value_type="float")])
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id="crane_qc_07_moves", name="Crane QC-07 moves", unit="count", value_type="float")])
 idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=6 * 60, freq="1min")
 client.timeseries.insert_from_lists(timestamps=idx, values=np.random.poisson(0.45, len(idx)).astype(float), ts="crane_qc_07_moves")
 ```
@@ -62,7 +62,7 @@ client.timeseries().retrieve(request).getItems().get(0).getDatapoints()
 ```python
 import pandas as pd
 
-rf = datahub_sdk.RetrieveFilter(
+rf = intellistream_datahub_sdk.RetrieveFilter(
     ts="crane_qc_07_moves",
     start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=6),
     end=pd.Timestamp.now(tz="UTC"),
@@ -76,7 +76,7 @@ for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+use intellistream_datahub_sdk::generic::{DataWrapper, RetrieveFilter};
 use chrono::Utc;
 
 let filter = RetrieveFilter {
@@ -119,7 +119,7 @@ client.events().create(List.of(congestion));
 <TabItem value="python" label="Python">
 
 ```python
-client.events.create([datahub_sdk.Event(
+client.events.create([intellistream_datahub_sdk.Event(
     external_id=f"yard_congestion_b07_{int(pd.Timestamp.now().timestamp())}",
     type="yard_congestion", status="open",
     event_time=pd.Timestamp.now(tz="UTC"),
@@ -130,7 +130,7 @@ client.events.create([datahub_sdk.Event(
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::events::Event;
+use intellistream_datahub_sdk::events::Event;
 use chrono::Utc;
 
 let mut congestion = Event::new(format!("yard_congestion_b07_{}", Utc::now().timestamp()));
@@ -152,7 +152,7 @@ Chart moves-per-hour against the target the terminal works to:
 ```python
 import matplotlib.pyplot as plt
 
-rf = datahub_sdk.RetrieveFilter(ts="crane_qc_07_moves",
+rf = intellistream_datahub_sdk.RetrieveFilter(ts="crane_qc_07_moves",
     start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=6), end=pd.Timestamp.now(tz="UTC"),
     aggregates=["sum"], granularity="1h")
 moves = [dp.sum for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()]

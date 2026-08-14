@@ -25,14 +25,14 @@ two temperature sensors and the shared `cooling_system` that step 4 walks betwee
 correlation there returns something. Safe to re-run.
 
 ```python
-import datahub_sdk, numpy as np, pandas as pd
+import intellistream_datahub_sdk, numpy as np, pandas as pd
 
-client = datahub_sdk.DataHubClient.from_env()
+client = intellistream_datahub_sdk.DataHubClient.from_env()
 
 sensors = {"wellhead_pressure_bar": "bar", "casing_temperature_c": "deg_c",
            "flow_rate_bpd": "bpd", "pump_intake_pressure_bar": "bar"}
 for s, u in sensors.items():
-    client.timeseries.create([datahub_sdk.TimeSeries(external_id=s, name=s, unit=u, value_type="float")])
+    client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id=s, name=s, unit=u, value_type="float")])
 
 # intake pressure: healthy ~95 bar, then sagging below the 80-bar ESP-anomaly line
 idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=120, freq="1min")
@@ -41,12 +41,12 @@ client.timeseries.insert_from_lists(timestamps=idx, values=intake, ts="pump_inta
 
 # step 4 walks out from two alarmed temperature sensors and looks for what they share
 client.resources.create(
-    [datahub_sdk.Resource(external_id=x, name=n, labels=[lbl]) for x, n, lbl in
+    [intellistream_datahub_sdk.Resource(external_id=x, name=n, labels=[lbl]) for x, n, lbl in
      [("cooling_system", "Platform cooling system", "System"),
       ("wellhead_temp_a12", "Wellhead temperature A-12", "Sensor"),
       ("pump_temp_a12", "ESP motor temperature A-12", "Sensor")]],
-    [datahub_sdk.RelForm.by_external_ids("wellhead_temp_a12", "cooling_system", "PART_OF"),
-     datahub_sdk.RelForm.by_external_ids("pump_temp_a12", "cooling_system", "PART_OF")])
+    [intellistream_datahub_sdk.RelForm.by_external_ids("wellhead_temp_a12", "cooling_system", "PART_OF"),
+     intellistream_datahub_sdk.RelForm.by_external_ids("pump_temp_a12", "cooling_system", "PART_OF")])
 ```
 
 ## 1. Model the field
@@ -90,16 +90,16 @@ client.resources().create(List.of(field, well, pump), List.of(fieldWell, wellPum
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk
+import intellistream_datahub_sdk
 
 nodes = [
-    datahub_sdk.Resource(external_id="field_north_sea", name="North Sea field", labels=["Field"]),
-    datahub_sdk.Resource(external_id="well_a12", name="Well A-12", labels=["Well"]),
-    datahub_sdk.Resource(external_id="pump_esp_a12", name="ESP — Well A-12", labels=["Pump"]),
+    intellistream_datahub_sdk.Resource(external_id="field_north_sea", name="North Sea field", labels=["Field"]),
+    intellistream_datahub_sdk.Resource(external_id="well_a12", name="Well A-12", labels=["Well"]),
+    intellistream_datahub_sdk.Resource(external_id="pump_esp_a12", name="ESP — Well A-12", labels=["Pump"]),
 ]
 edges = [
-    datahub_sdk.RelForm.by_external_ids("field_north_sea", "well_a12", "contains"),
-    datahub_sdk.RelForm.by_external_ids("well_a12", "pump_esp_a12", "contains"),
+    intellistream_datahub_sdk.RelForm.by_external_ids("field_north_sea", "well_a12", "contains"),
+    intellistream_datahub_sdk.RelForm.by_external_ids("well_a12", "pump_esp_a12", "contains"),
 ]
 client.resources.create(nodes, edges)
 ```
@@ -108,8 +108,8 @@ client.resources.create(nodes, edges)
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::resources::Resource;
-use dataplatform_rust_sdk::relations::RelForm;
+use intellistream_datahub_sdk::resources::Resource;
+use intellistream_datahub_sdk::relations::RelForm;
 
 let mut field = Resource::new();
 field.external_id = "field_north_sea".into();
@@ -218,7 +218,7 @@ if (series.getDatapoints().stream().anyMatch(p -> Double.parseDouble(p.getValue(
 ```python
 points = client.timeseries.retrieve_datapoints(last_hour("pump_intake_pressure_bar"))[0]
 if any(float(dp.value) < 80.0 for dp in points.get_datapoints()):
-    client.events.create([datahub_sdk.Event(
+    client.events.create([intellistream_datahub_sdk.Event(
         external_id=f"esp_anomaly_a12_{int(pd.Timestamp.now().timestamp())}",
         type="esp_anomaly", status="open",
         event_time=pd.Timestamp.now(tz="UTC"),
@@ -287,7 +287,7 @@ shared = {n.external_id for n in na.nodes} & {n.external_id for n in nb.nodes}
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::resources::RelatedResourcesForm;
+use intellistream_datahub_sdk::resources::RelatedResourcesForm;
 use std::collections::HashSet;
 
 let na = api.resources.fetch_related(
@@ -315,7 +315,7 @@ half hour, which is exactly what trips the `esp_anomaly` event:
 ```python
 import matplotlib.pyplot as plt
 
-rf = datahub_sdk.RetrieveFilter(ts="pump_intake_pressure_bar",
+rf = intellistream_datahub_sdk.RetrieveFilter(ts="pump_intake_pressure_bar",
     start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=2), end=pd.Timestamp.now(tz="UTC"))
 s = pd.Series({pd.to_datetime(p.timestamp): float(p.value)
                for p in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()}).sort_index()

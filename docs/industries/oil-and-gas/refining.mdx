@@ -23,11 +23,11 @@ New workspace? Run this once (Python) to create the crude unit's energy series w
 day of hourly readings, so the roll-up in step 1 has data. Safe to re-run.
 
 ```python
-import datahub_sdk, numpy as np, pandas as pd
+import intellistream_datahub_sdk, numpy as np, pandas as pd
 
-client = datahub_sdk.DataHubClient.from_env()
+client = intellistream_datahub_sdk.DataHubClient.from_env()
 
-client.timeseries.create([datahub_sdk.TimeSeries(external_id="cdu_1_energy_gj", name="CDU-1 energy", unit="gj", value_type="float")])
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id="cdu_1_energy_gj", name="CDU-1 energy", unit="gj", value_type="float")])
 idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=24, freq="1h")
 client.timeseries.insert_from_lists(timestamps=idx, values=np.random.uniform(40, 60, 24), ts="cdu_1_energy_gj")
 ```
@@ -63,7 +63,7 @@ client.timeseries().retrieve(request).getItems().get(0).getDatapoints()
 ```python
 import pandas as pd
 
-rf = datahub_sdk.RetrieveFilter(
+rf = intellistream_datahub_sdk.RetrieveFilter(
     ts="cdu_1_energy_gj",
     start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=1),
     end=pd.Timestamp.now(tz="UTC"),
@@ -77,7 +77,7 @@ for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+use intellistream_datahub_sdk::generic::{DataWrapper, RetrieveFilter};
 use chrono::Utc;
 
 let filter = RetrieveFilter {
@@ -120,7 +120,7 @@ client.events().create(List.of(upset));
 <TabItem value="python" label="Python">
 
 ```python
-client.events.create([datahub_sdk.Event(
+client.events.create([intellistream_datahub_sdk.Event(
     external_id=f"process_upset_cdu1_{int(pd.Timestamp.now().timestamp())}",
     type="process_upset", status="open",
     event_time=pd.Timestamp.now(tz="UTC"),
@@ -131,7 +131,7 @@ client.events.create([datahub_sdk.Event(
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::events::Event;
+use intellistream_datahub_sdk::events::Event;
 use chrono::Utc;
 
 let mut upset = Event::new(format!("process_upset_cdu1_{}", Utc::now().timestamp()));
@@ -155,7 +155,7 @@ watches for drift:
 ```python
 import matplotlib.pyplot as plt
 
-rf = datahub_sdk.RetrieveFilter(ts="cdu_1_energy_gj",
+rf = intellistream_datahub_sdk.RetrieveFilter(ts="cdu_1_energy_gj",
     start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=1), end=pd.Timestamp.now(tz="UTC"),
     aggregates=["sum"], granularity="1h")
 vals = [dp.sum for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()]
