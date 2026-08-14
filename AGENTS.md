@@ -71,3 +71,43 @@ Install Node 20+ via a version manager so `npm start` just works:
 ```bash
 nvm install 22 && nvm use 22       # or fnm, or a NodeSource apt package
 ```
+
+
+## Every example has to be runnable
+
+An example that reads `engine_temperature` is not documentation until something creates
+`engine_temperature`. The convention, in three parts:
+
+1. **Seed it.** Guides read the sandbox built by
+   [`docs/guides/seed-a-sandbox.mdx`](docs/guides/seed-a-sandbox.mdx); the advanced
+   scenarios read the generators in
+   [`docs/advanced/generate-sample-data.mdx`](docs/advanced/generate-sample-data.mdx).
+   A new page that reads data adds its generator to one of those two, keyed by a letter,
+   rather than inventing a third place.
+2. **Point at the seed.** A page that reads data it does not create opens with the
+   `:::info Needs a sandbox` banner linking to the seed page. A page that creates what it
+   reads says so, so a reader knows the difference.
+3. **Verify it.** The example ends with a check that can be run and read: a count, a query
+   for what was written, or an `assert`. `docs/advanced/sustained-alarm-window.mdx` is the
+   reference shape, seed, replay, verify, then run it live.
+
+The seeded signal has to actually exercise the rule the page teaches. The engine series in
+the guides sandbox end in a stretch above 110 °C because
+`docs/guides/detect-events.mdx` fires above 110, and generator **L** puts four short
+transients and one long excursion into the same series because the sliding-window page is
+about the difference between them. A generator that produces a plausible signal the example
+never reacts to is the failure mode worth watching for.
+
+**The industry pages already follow this**, and were audited page by page on 2026-08-14:
+all 40 carry a `## Set up demo data` block and a `## See the result` check, their seeds
+create what their bodies read, and the seeded shapes are chosen to make each page's rule
+fire (a pressure that sags past the anomaly line, a p99 that breaches the SLO, CO₂ that
+leaves the comfort band). The audit found one defect, since fixed: `oil-and-gas/production`
+walked outward from two temperature sensors and a `cooling_system` that nothing created, so
+its correlation step returned nothing.
+
+Worth knowing if you audit them again: a regex comparing quoted identifiers in the seed
+against those in the body reports about thirty false positives, because event types,
+metadata keys and f-string-built series names all look like identifiers. Compare only ids
+used in *read* calls (`ts=`, `by_ids`, `fetch_related`, `listen`) against everything created
+anywhere on the page, and read the survivors by hand.

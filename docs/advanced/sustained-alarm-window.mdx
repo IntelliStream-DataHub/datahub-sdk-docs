@@ -1,0 +1,210 @@
+---
+sidebar_position: 12
+title: Sustained-condition alarms (sliding window)
+---
+
+# Sustained-condition alarms (sliding window)
+
+A limit on a single reading fires on every transient. A pump's discharge pressure spikes on
+every start-up and every slug of gas, the alarm fires four hundred times a month, and
+somebody switches it off; on the one occasion it mattered, nobody was watching.
+
+The question worth acting on is not *is it above 4.5* but **has it stayed above 4.5**, and
+that is a question about a stretch of time. This page builds that rule end to end: seed a
+signal, replay it to prove the rule behaves, then run the same code against a live
+subscription.
+
+:::info Seed the data first
+Run generator **L** on [Generate sample data](/advanced/generate-sample-data#l-a-noisy-alarm-four-transients-and-one-real-excursion).
+It writes `pump_p101_discharge_bar`: six hours at one reading a minute, four brief spikes
+well above the limit, and one eighty-minute excursion just above it.
+:::
+
+## 1. The rule, in four numbers
+
+| Setting | Value | Why |
+| --- | --- | --- |
+| `LIMIT` | 4.5 bar | The existing alarm limit. Unchanged, deliberately |
+| `WINDOW` | 20 minutes | Longer than any transient worth ignoring, shorter than the time you need to act |
+| `CLEAR_BELOW` | 4.2 bar | Hysteresis. Raise and clear thresholds must differ or the rule flaps at the boundary |
+| `MIN_READINGS` | 15 | A window with holes proves nothing. At one reading a minute, twenty minutes should bring about twenty |
+
+## 2. The detector
+
+One class, holding the last `WINDOW` of readings and whether a finding is currently open.
+Nothing in it knows where the readings came from, which is what lets the same code run over
+history and over a live stream.
+
+```python
+from collections import deque
+from datetime import timedelta
+import datahub_sdk
+
+client = datahub_sdk.DataHubClient.from_env()
+
+LIMIT, CLEAR_BELOW, MIN_READINGS = 4.5, 4.2, 15
+WINDOW = timedelta(minutes=20)
+
+class SustainedHigh:
+    def __init__(self, series_id):
+        self.series_id, self.recent, self.open = series_id, deque(), False
+
+    def push(self, ts, value):
+        if any(t == ts for t, _ in self.recent):
+            return None                                  # a redelivery, not a new reading
+        self.recent.append((ts, value))
+        while self.recent and self.recent[0][0] < self.recent[-1][0] - WINDOW:
+            self.recent.popleft()                        # evict on carried time, never the clock
+        return self.evaluate()
+
+    def evaluate(self):
+        if len(self.recent) < MIN_READINGS:
+            return None                                  # not enough of the window to judge
+        span = self.recent[-1][0] - self.recent[0][0]
+        if span < WINDOW * 0.9:
+            return None                                  # the window has not filled yet
+        if not self.open and all(v > LIMIT for _, v in self.recent):
+            self.open = True
+            return self.raise_event()
+        if self.open and all(v < CLEAR_BELOW for _, v in self.recent):
+            self.open = False                            # clear only once it is properly back
+        return None
+
+    def raise_event(self):
+        at, peak = self.recent[-1][0], max(v for _, v in self.recent)
+        event = datahub_sdk.Event(
+            external_id=f"sustained_high_{self.series_id}_{int(at.timestamp())}",
+            type="sustained_high",
+            status="open",
+            event_time=at,
+            metadata={"series": self.series_id, "limit": str(LIMIT),
+                      "window_minutes": "20", "peak": f"{peak:.2f}"})
+        client.events.create([event])
+        return event
+```
+
+The `span < WINDOW * 0.9` line is worth a second look. The buffer only ever holds readings
+within `WINDOW` of the newest one, so its span can never exceed the window; what it *can* be
+is short, either because the process has only just started or because readings stopped
+arriving. Comparing against most of a window rather than exactly one keeps the rule working
+at any sampling rate.
+
+## 3. Replay the history, and see what fires
+
+The seeded six hours are the test. Pull them back and push each reading through the
+detector in order.
+
+```python
+import pandas as pd
+
+SERIES = "pump_p101_discharge_bar"
+
+points = client.timeseries.retrieve_datapoints(datahub_sdk.RetrieveFilter(
+    ts=SERIES,
+    start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=7),
+    end=pd.Timestamp.now(tz="UTC")))[0].get_datapoints()
+
+readings = [(dp.timestamp, float(dp.value)) for dp in points]
+above = [v for _, v in readings if v > LIMIT]
+crossings = sum(1 for a, b in zip(readings, readings[1:])
+                if a[1] <= LIMIT < b[1])                 # what the plain alarm would do
+
+detector = SustainedHigh(SERIES)
+raised = [e for ts, v in readings if (e := detector.push(ts, v))]
+
+print(f"{len(readings)} readings, {len(above)} above {LIMIT}, {crossings} crossings")
+print(f"{len(raised)} event(s) raised by the windowed rule")
+# 360 readings, ... above 4.5, 5 crossings
+# 1 event(s) raised by the windowed rule
+```
+
+:::tip What "working" looks like
+**Five crossings, one event.** The four transients each cross the limit and each would have
+fired the old alarm; none of them survives twenty minutes, so none of them raises anything
+here. The excursion does, twenty minutes after it began, which is the price the window
+charges and the reason it is worth paying.
+:::
+
+## 4. Verify it landed
+
+The detector writes real events, so the check is a query rather than a print.
+
+```python
+found = list(client.events.filter(datahub_sdk.EventFilter(
+    basic_filter=datahub_sdk.BasicEventFilter(type="sustained_high"), limit=100)))
+
+for e in found:
+    print(e.external_id, e.metadata)
+# sustained_high_pump_p101_discharge_bar_…  {'series': 'pump_p101_discharge_bar',
+#   'limit': '4.5', 'window_minutes': '20', 'peak': '5.24'}
+
+assert len(found) == 1, f"expected one finding, found {len(found)}"
+```
+
+Re-running the replay is safe to try, and instructive: the detector raises the same finding
+again with the same external id, and the platform collapses it rather than storing a
+duplicate. Events are keyed by id, datapoints by series and timestamp.
+
+## 5. Run the same detector live
+
+Swap the source. Nothing above changes: `push` is fed by a
+[subscription](/guides/realtime-subscriptions) instead of by a list, and each message is
+acknowledged **after** it has been handled, so a crash replays it rather than losing it.
+
+`datapoints()` here is your own unpacking of the delivered payload, which carries the
+action and the datapoints it affected; the SDK hands it to you rather than deciding what
+your rule wants from it.
+
+```python
+sub = datahub_sdk.Subscription(
+    external_id="pump_p101", name="Pump P-101", timeseries=[SERIES])
+client.subscriptions.create([sub])
+
+detector = SustainedHigh(SERIES)
+
+with client.subscriptions.listen(["pump_p101"]) as listener:
+    for msg in listener:
+        # the payload carries the action plus the datapoints it affected
+        for ts, value in datapoints(msg.payload):
+            if event := detector.push(ts, value):
+                print("raised", event.external_id)
+        listener.ack([msg.message_id])          # only once it is durably handled
+```
+
+Two habits make the difference between this working on a desk and working on a plant:
+
+- **Fill the window before trusting it.** On start-up, replay the last twenty minutes
+  through `push` exactly as section 3 does. Without it the rule is blind for its first
+  twenty minutes, which is precisely when somebody has restarted it during an incident.
+- **Treat a thin window as a finding of its own.** `MIN_READINGS` makes the detector stay
+  quiet when readings stop arriving, which is right, but silence is not the same as health.
+  Raise a separate, quieter event about the instrument or the link.
+
+## 6. The same shape, other rules
+
+Only `evaluate` changes:
+
+| Question | The change |
+| --- | --- |
+| Sustained *below* a limit | Invert the comparisons |
+| Rate of change over the window | Compare first and last, divide by the span |
+| A ratio between two series drifting | One detector fed by two series, keyed on the nearest timestamps |
+| Above limit for most of the window, not all | Count instead of `all`, and raise on a fraction |
+
+When no threshold over any window can express what you are looking for, because the
+readings never leave their limits and it is the shape that changed, that is where
+[LSTM anomaly detection](/advanced/lstm-anomaly-detection) starts earning its keep.
+
+## Further reading
+
+- **Stream processing** — [Wikipedia](https://en.wikipedia.org/wiki/Stream_processing)
+- **Hysteresis** — [Wikipedia](https://en.wikipedia.org/wiki/Hysteresis)
+- **Idempotence** — [Wikipedia](https://en.wikipedia.org/wiki/Idempotence)
+- <a href="/data-platform-documentation/concepts/stream-processing">Stream processing, in the platform documentation</a> — windows, event time against arrival time, and what a computation has to remember
+
+## See also
+
+- [Consume live data](/guides/realtime-subscriptions) — the delivery mechanics this builds on.
+- [Turn readings into events](/guides/detect-events) — the single-reading version of the same job.
+- [Generate sample data](/advanced/generate-sample-data#l-a-noisy-alarm-four-transients-and-one-real-excursion) — the signal this page runs against.
+- [LSTM anomaly detection](/advanced/lstm-anomaly-detection) — for the excursions no limit can describe.

@@ -12,6 +12,11 @@ connection delivers each new datapoint as it lands — no polling. A control-roo
 dashboard, an alerting worker, or a downstream pipeline drives the loop and **acks**
 what it has handled. Anything unacked is redelivered, so a crash never loses data.
 
+:::info Needs a sandbox
+This guide reads data it does not create. [Seed a sandbox](/guides/seed-a-sandbox) writes it
+in one go.
+:::
+
 ## 1. Create a subscription
 
 <Tabs groupId="lang">
@@ -171,3 +176,10 @@ from the handler nacks for you; to control acks explicitly use
 `stream(handler, AckMode.MANUAL)` and call `ack`/`nack` yourself. With `poll`, just call
 `nack` instead of `ack`.
 :::
+
+## See also
+
+- [Sustained-condition alarms](/advanced/sustained-alarm-window) — a full worked example that keeps a sliding window over this stream, seeds its own data and then verifies what it found.
+- [Turn readings into events](/guides/detect-events) — recording what a rule decides.
+- [Seed a sandbox](/guides/seed-a-sandbox) — the series this guide subscribes to.
+- <a href="/data-platform-documentation/concepts/stream-processing">Stream processing, in the platform documentation</a> — windows, event time against arrival time, and what has to be remembered.

@@ -16,6 +16,11 @@ coincidences.
 sub-graph. Walk the neighbourhood of each alarm and intersect the two: a shared
 ancestor — say a `cooling_system` both sensors are `PART_OF` — is the common cause.
 
+:::info Needs a sandbox
+This guide reads data it does not create. [Seed a sandbox](/guides/seed-a-sandbox) writes it
+in one go.
+:::
+
 :::note Why a flat read isn't enough
 `byIds` returns a resource and its *direct* edges only. A shared subsystem might be
 several hops away (sensor → pump → skid → cooling_system). Graph traversal follows the
