@@ -217,21 +217,29 @@ combined with **AND**.
 
 | Field | Matching |
 | --- | --- |
-| `name` | Case-insensitive **substring**. `%` works as a wildcard (`"pipe%"`). |
-| `source` | Case-insensitive substring. |
-| `externalId` | Exact (case-insensitive). |
+| `name` | Pattern, case-insensitive. `*` and `%` are wildcards, `_` is literal. |
+| `source` | Pattern, on the same rules. |
+| `externalId` | Pattern, on the same rules. |
 | `id` | Exact numeric id. |
+| `nodeType` | Restrict to these node types. Omit for every type. |
 | `isRoot` | `true` or `false`. |
-| `dataSetIds` | Resources in any of these data sets. |
+| `labels` | Resources carrying **all** of these labels. |
+| `dataSetId` | Resources in any of these data sets. |
 | `metadata` | Every key/value given must be present on the resource. |
 | `createdTime`, `lastUpdatedTime` | `{ "min": …, "max": … }`, ISO-8601, both bounds inclusive. |
+
+Each field above except `isRoot`, `labels` and `metadata` takes **either a bare value or an
+array**, and the entries of an array are combined with **OR**. That is why they are named in the
+singular: `"name": "pipe%"` is the common case, and `"name": ["pipe%", "valve%"]` asks for either.
+`labels` and `metadata` are the exceptions, requiring **all** entries to match, and they keep
+plural names because adding an entry there narrows the result where adding a `name` widens it.
 
 ```json
 {
   "limit": 100,
   "filter": {
     "name": "pipe%",
-    "dataSetIds": [{ "id": 12 }],
+    "dataSetId": [{ "id": 12 }, { "externalId": "data_set_sap" }],
     "metadata": { "work_order": "wo-sap-12344" },
     "createdTime": { "min": "2026-01-01T00:00:00Z" }
   }
@@ -239,12 +247,20 @@ combined with **AND**.
 ```
 
 `limit` defaults to **1 000** and is capped at **10 000**; a zero, negative or null value
-falls back to the default rather than returning nothing.
+falls back to the default rather than returning nothing. Results come newest created first
+unless ordered otherwise, and page with a cursor — the same contract as
+[timeseries](./timeseries#sorting-and-paging), over the same sortable properties.
 
-:::caution `dataSetIds` here takes ids only
-On a resource filter each entry is `{"id": 12}` — an `externalId` is not accepted, unlike
-the [event filter](./events#filtering), where either works. Resolve the data set's external
-id to its numeric id first.
+:::caution A pattern-less value matches exactly, not as a substring
+`"name": "pipe"` matches a resource named exactly `pipe`, not every name containing it. Add a
+wildcard for the loose match you probably want: `"pipe*"` for a prefix, `"*pipe*"` for a contains
+search. The same holds for `source` and `externalId`.
+:::
+
+:::note Omitting `dataSetId` and sending `[]` are opposites
+Omit the field (or send `null`) for **no data set restriction**. An explicit empty list means
+**narrow to no data sets**, which matches nothing. Every other list field treats empty as "no
+restriction", so this is the one to watch when you build the filter programmatically.
 :::
 
 <Tabs groupId="lang">
@@ -253,8 +269,9 @@ id to its numeric id first.
 ```java
 ResourceRetreiver retriever = new ResourceRetreiver();
 retriever.setLimit(100);
-retriever.getFilter().setName("pipe%");
+retriever.getFilter().setName(List.of("pipe%"));
 retriever.getFilter().setMetadata(Map.of("work_order", "wo-sap-12344"));
+retriever.getFilter().setDataSetId(List.of(IdCollection.createFromId(12L)));
 
 DataWrapper<Resource> matches = client.resources().filter(retriever);
 ```
@@ -266,7 +283,7 @@ DataWrapper<Resource> matches = client.resources().filter(retriever);
 matches = client.resources.filter(
     name="pipe%",
     metadata={"work_order": "wo-sap-12344"},
-    data_set_ids=[12],
+    data_set_id=[12],
     limit=100)
 ```
 
@@ -274,11 +291,19 @@ matches = client.resources.filter(
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::resources::{IdObject, ResourceFilter, ResourceRetreiver};
+use dataplatform_rust_sdk::filters::NodeFilter;
+use dataplatform_rust_sdk::generic::IdAndExtId;
+use dataplatform_rust_sdk::resources::{ResourceFilter, ResourceRetreiver};
 
+// The criteria every node type shares are a flattened `NodeFilter`, so they nest in Rust even
+// though they sit alongside the resource's own fields on the wire.
 let retriever = ResourceRetreiver::new(ResourceFilter {
-    name: Some("pipe%".into()),
-    data_set_ids: Some(vec![IdObject::new(12)]),
+    node: NodeFilter {
+        name: Some(vec!["pipe%".into()]),
+        metadata: Some([("work_order".into(), Some("wo-sap-12344".into()))].into()),
+        ..Default::default()
+    },
+    data_set_id: Some(vec![IdAndExtId::from_id(12)]),
     ..Default::default()
 }).with_limit(100);
 
@@ -294,9 +319,16 @@ Free-text search across resource **names**. Matching is fuzzy and word-aware: se
 and you also get `pipes`, `piping`, and multi-word names containing the term. Results are
 ordered by relevance, not alphabetically.
 
-A search body may carry the same `filter` block as `POST /resources/filter`, so a free-text
-query can be narrowed to a data set or a metadata value. `limit` is capped at **1 000** here,
-lower than the 10 000 of `filter`, and `query` must be 3–140 characters.
+`limit` is capped at **1 000** here, lower than the 10 000 of `filter`, and `query` must be
+3–140 characters.
+
+:::caution The `filter` block on this endpoint is accepted and ignored
+A search body may carry the same `filter` as `POST /resources/filter`, and the SDKs let you pass
+one, but the resource search does not apply it — nor do the dataset and event searches. Only
+`/timeseries/search` reads its filter today. A search you believe is narrowed to a data set is
+not, so narrow it afterwards, or use `filter` and give up the relevance ranking. The gap is
+pinned by strict-xfail tests in the SDK, which turn green when it closes.
+:::
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">

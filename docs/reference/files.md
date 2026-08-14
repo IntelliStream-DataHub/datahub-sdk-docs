@@ -7,7 +7,7 @@ import TabItem from '@theme/TabItem';
 
 # Files
 
-List directories, upload files, and (Java) download content. File metadata travels in
+List directories, upload files, and download content. File metadata travels in
 `X-Datahub-*` headers, which the SDK percent-encodes for you.
 
 ## List
@@ -96,14 +96,44 @@ let uploaded = api.files.upload_file(upload).await?;
 </TabItem>
 </Tabs>
 
-## Download (Java)
+## Download {#download}
 
-The Java client downloads a file's raw bytes by id:
+All three clients download a file's raw bytes by id. Python and Rust add a streaming variant
+that writes straight to a path, so a large file never has to sit in memory whole.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
 
 ```java
 byte[] bytes = client.files().download("99");
 Files.write(Path.of("q2.csv"), bytes);
 ```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+download = client.files.download(99)
+print(download.file_name, download.mime_type, len(download))
+Path("q2.csv").write_bytes(download.content)
+
+# or stream it to disk, which returns the byte count
+written = client.files.download_to_path(99, "q2.csv")
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+let download = api.files.download(99).await?;
+std::fs::write("q2.csv", &download.bytes)?;
+
+// or stream it to disk, which returns the byte count
+let written = api.files.download_to_path(99, "q2.csv").await?;
+```
+
+</TabItem>
+</Tabs>
 
 ## Delete
 
@@ -140,7 +170,8 @@ api.files.delete(&DataWrapper::from(vec![IdAndExtId::from_external_id("report_20
 | List root | `files().list()` | `files.list_root_directory` | `files.list_root_directory` |
 | List a path | `files().list(path)` | `files.list_directory_by_path` | `files.list_directory_by_path` |
 | Upload | `files().upload` | `files.upload_file` | `files.upload_file` |
-| Download | `files().download` | HTTP | HTTP |
+| Download | `files().download` | `files.download` / `files.download_to_path` | `files.download` / `files.download_to_path` |
 | Delete | `files().delete` | `files.delete` | `files.delete` |
 
-Download is Java-only so far — see [above](#download-java).
+Python and Rust add `download_to_path`, which streams to disk instead of holding the whole
+file in memory — see [Download](#download).

@@ -184,7 +184,7 @@ place a missing event is an error rather than an omission.
 ```java
 EventRetreiver retriever = new EventRetreiver();
 retriever.setLimit(50);
-retriever.getFilter().setType("alarm");
+retriever.getFilter().setType(List.of("alarm"));
 DataWrapper<EventModel> events = client.events().filter(retriever);
 ```
 
@@ -205,7 +205,7 @@ events = client.events.filter(filter)
 use dataplatform_rust_sdk::filters::{BasicEventFilter, EventFilter};
 
 let filter = EventFilter::default()
-    .set_filter(BasicEventFilter { r#type: Some("alarm".into()), ..Default::default() })
+    .set_filter(BasicEventFilter { r#type: Some(vec!["alarm".into()]), ..Default::default() })
     .set_limit(50)
     .build();
 let events = api.events.filter(&filter).await?;
@@ -225,36 +225,51 @@ Every field you supply is combined with **AND** — an event must match all of t
 
 | Field | Matching |
 | --- | --- |
-| `type`, `subType`, `status`, `source` | Exact string equality. |
-| `externalIdPrefix` | Prefix match, 3–256 characters. The natural way to sweep one source system's key space. |
+| `type`, `subType`, `status`, `source` | Pattern match. `*` and `%` are wildcards, `_` is literal. |
+| `externalId` | Pattern match, on the same rules. Literal entries are case-sensitive (see the note below). |
 | `metadata` | Every key/value pair given must be present on the event. |
-| `dataSetIds` | Events belonging to these data sets. |
+| `dataSetId` | Events belonging to these data sets. |
 | `relatedResources` | Events attached to these resources. |
 | `eventTime`, `createdTime`, `lastUpdatedTime` | `{ "min": …, "max": … }` bounds — see the note below. |
-| `id` | Present but **not usable**: it is typed as a number while an event's id is a UUID. Use [`byids`](#lookup) to fetch by id. |
 
-`dataSetIds` and `relatedResources` take the same shape — each entry is `{"id": …}` **or**
+Each field above takes **either a bare value or an array**, and the entries of an array are
+combined with **OR**. That is why they are named in the singular: asking for one thing is the
+common case and reads as `"type": "alarm"`, while asking for several reads as
+`"type": ["alarm", "warning"]`. The exceptions are `metadata` and `relatedResources`, whose entries
+must **all** match; they keep plural names for exactly that reason, because adding an entry there
+narrows the result where adding a `type` widens it.
+
+There is no `id` field. An event's id is a UUID string, so use [`byids`](#lookup) to fetch by id.
+
+`dataSetId` and `relatedResources` take the same shape: each entry is `{"id": …}` **or**
 `{"externalId": …}`, and the two can be mixed in one list:
 
 ```json
 {
   "filter": {
-    "type": "alarm",
-    "dataSetIds": [{ "id": "43" }, { "externalId": "data_set_sap" }],
+    "type": ["alarm", "warning"],
+    "dataSetId": [{ "id": "43" }, { "externalId": "data_set_sap" }],
     "relatedResources": [{ "externalId": "klp_pipe_ws_a1212_dl" }]
   },
   "limit": 50
 }
 ```
 
-**Data sets match exactly.** A parent data set does not stand in for its children, so list every
-data set you want rather than relying on the hierarchy. This is the one place data set behaviour
-differs from access control, where a grant on a parent *does* cover its descendants.
+:::note Literal `externalId` entries are case-sensitive here
+Unlike the resource, data set and timeseries filters, an `externalId` entry **without** a wildcard
+is matched case-sensitively: every event writer hashes the external id verbatim, so the stored key
+for `shift_report_1` is not the key for `SHIFT_REPORT_1`. An entry **with** a wildcard is matched
+case-insensitively, so `"SHIFT_REPORT_1*"` is the case-insensitive way to ask the same question.
+:::
+
+**A parent data set stands in for its children.** Naming one covers everything beneath it in the
+`BELONGS_TO` hierarchy, which is the same expansion access control applies to a grant, so the two
+now agree.
 
 An `externalId` that names no data set contributes nothing. That can only ever narrow the
 result — a typo gives you too few events, never events you should not see.
 
-:::caution Omitting `dataSetIds` and sending `[]` are opposites
+:::caution Omitting `dataSetId` and sending `[]` are opposites
 Omit the field (or send `null`) for **no data set restriction**. An explicit empty list means
 **narrow to no data sets**, which matches nothing.
 
@@ -306,7 +321,8 @@ nested path into `metadata`. And every value is compared as a string, so `dataSe
 
 ### Ordering and paging {#paging}
 
-By default a query returns matching events in no particular order. Ask for an order with
+Events come back **`eventTime` ascending** unless you say otherwise — that is the order the
+cursor pages in, so paging does not change the order underneath you. Ask for another with
 `sort`, over `eventTime`, `createdTime`, `lastUpdatedTime`, `externalId`, `type`, `subType`,
 `status`, `source` or `dataSetId`:
 
@@ -316,55 +332,69 @@ By default a query returns matching events in no particular order. Ask for an or
   "limit": 200 }
 ```
 
-A property that is not sortable is ignored rather than rejected, and any `order` that is not
-exactly `desc` sorts ascending — a malformed sort degrades to the default instead of silently
-reversing your results.
+Only the **first** `property` is used, and `id` is appended behind it — a sort column alone is
+not a position unless it is unique, and a page boundary inside a run of equal values repeats or
+drops exactly those rows. A property that is not sortable is ignored rather than rejected, and
+any `order` that is not exactly `desc` sorts ascending — a malformed sort degrades to the
+default instead of silently reversing your results. Null values sort last ascending, first
+descending.
 
-To walk past the first page, send back an `after` rather than an offset. It is
-`<eventTime epoch millis>_<id>`, taken from the last event you saw:
+To walk past the first page, echo back the `nextCursor` the response carried:
 
 ```json
 { "filter": { "type": "alarm" },
-  "after": "1754476522104_0195f3a2-4c1b-7f9e-9c3a-1b2d4e6f8a90",
+  "sort": { "property": ["eventTime"], "order": "desc" },
+  "cursor": "djE6ZXZlbnRUaW1lfGRlc2N8MTc1NDQ3NjUyMjEwNHwwMTk1ZjNhMg",
   "limit": 200 }
 ```
 
-Two things to know about this. Both halves are required: event times are not unique — a
-bulk ingest lands thousands of events in the same millisecond — so paging on the timestamp
-alone would either skip that group or repeat it forever, and the `id` breaks the tie. A value
-that does not parse is ignored and the walk restarts from the beginning, rather than a half-read
-position quietly returning the wrong page. And `after` fixes the order to `eventTime` then `id`
-ascending, overriding `sort`, because a page read back in a different order silently skips
-rows instead of failing.
+The cursor is **opaque** — base64 of a versioned encoding carrying the sort, the boundary value
+and the id — so do not build or parse one. A cursor that does not decode restarts the walk from
+the first page rather than failing, which is obviously wrong to a caller, where guessing at half
+a position would silently skip or repeat the rows around the boundary.
+
+Send it with the **same** `sort` that produced it: a cursor is a position in one particular
+order. Continuing it under another is refused, though today the refusal arrives as an empty
+response rather than a clean 400. Sorting by `subType` or `status` cannot be paged at all —
+both columns are nullable, and a keyset boundary on them would skip the events that have no
+value.
 
 Prefer this to counting pages. Events are stored partitioned by event time, so resuming from
-a timestamp lets whole partitions be skipped, where an offset re-reads everything ahead of it
+a position lets whole partitions be skipped, where an offset re-reads everything ahead of it
 and gets slower the further you page. Page 400 costs what page 1 costs. The trade is that
 there is no random access: you walk forward from where you were and cannot jump to page 7.
-A short page is the last page.
+`nextCursor` is absent on a short page, so "keep going while it is present" is the whole loop —
+and since a full page may still be the last, a complete walk ends with one empty request.
 
-All three clients can sort and page. Rather than assembling `<millis>_<id>` yourself, take it
-from the last event of the page you just read:
+All three clients read the cursor off the response envelope rather than off the last event:
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
 
 ```java
-retriever.setCursor(last.getEventTime().toInstant().toEpochMilli() + "_" + last.getId());
+DataWrapper<EventModel> page = client.events().filter(retriever);
+if (page.getNextCursor() != null) {
+    retriever.setCursor(page.getNextCursor());   // keep the same sort
+}
 ```
 
 </TabItem>
 <TabItem value="python" label="Python">
 
 ```python
-filter.cursor = page[-1].page_cursor
+page = client.events.filter(filter)
+if page.next_cursor is not None:
+    filter.cursor = page.next_cursor             # keep the same sort_by / sort_order
 ```
 
 </TabItem>
 <TabItem value="rust" label="Rust">
 
 ```rust
-if let Some(cursor) = last.page_cursor() { filter.set_cursor(cursor); }
+let page = api.events.filter(&filter).await?;
+if let Some(cursor) = page.next_cursor() {
+    filter.set_cursor(cursor);                   // keep the same sort
+}
 ```
 
 </TabItem>
@@ -404,8 +434,8 @@ Filter on the type, ascending by `eventTime`, and page with [`after`](#paging):
 
 ```java
 EventRetreiver retriever = new EventRetreiver();
-retriever.getFilter().setType("policy_finding");
-retriever.getFilter().setSubType("naming_snake_case");   // one policy; omit for all
+retriever.getFilter().setType(List.of("policy_finding"));
+retriever.getFilter().setSubType(List.of("naming_snake_case"));   // one policy; omit for all
 retriever.setLimit(200);
 retriever.getSort().setProperty(List.of("eventTime"));
 retriever.getSort().setOrder("asc");
@@ -434,8 +464,8 @@ use dataplatform_rust_sdk::filters::{BasicEventFilter, EventFilter};
 
 let filter = EventFilter::default()
     .set_filter(BasicEventFilter {
-        r#type: Some("policy_finding".into()),
-        sub_type: Some("naming_snake_case".into()),   // one policy; omit for all
+        r#type: Some(vec!["policy_finding".into()]),
+        sub_type: Some(vec!["naming_snake_case".into()]),   // one policy; omit for all
         ..Default::default()
     })
     .set_limit(200)
@@ -516,7 +546,7 @@ closed it — the fold then reports a resolved finding as outstanding. It is a w
 not an error, and nothing in the response marks it as partial.
 
 Page until short — a full page is a signal that there is more, never that you have it all.
-Narrowing by `subType` and `dataSetIds` keeps the walk cheap, but it is paging, not narrowing,
+Narrowing by `subType` and `dataSetId` keeps the walk cheap, but it is paging, not narrowing,
 that makes the fold correct.
 :::
 
@@ -533,7 +563,7 @@ findings are raised for resources but never for events — see
 
 `POST /events/search` searches event **descriptions**. Matching is fuzzy and word-aware, and
 results come back ranked by relevance rather than by time. It accepts the same `filter` block
-as `POST /events/filter`, so a free-text query can be narrowed to a type or a data set:
+as `POST /events/filter`:
 
 ```json
 {
@@ -542,6 +572,13 @@ as `POST /events/filter`, so a free-text query can be narrowed to a type or a da
   "limit": 50
 }
 ```
+
+:::caution The `filter` block is accepted and ignored here
+The event search does not apply it — nor do the resource and dataset searches; only
+`/timeseries/search` reads its filter today. A search you believe is narrowed to a type or a
+data set is not, so narrow it afterwards, or use `/events/filter` and give up the relevance
+ranking. The gap is pinned by strict-xfail tests in the SDK, which turn green when it closes.
+:::
 
 `query` must be 3–140 characters of letters, digits and spaces — punctuation is rejected with
 a `400`, so strip it before sending user input straight through. `limit` here is capped at
@@ -715,8 +752,8 @@ api.events.delete(&vec![IdAndExtId::from_external_id("door_open")]).await?;
 
 ## What each client covers {#client-coverage}
 
-The three clients cover the write and read paths; the administrative and facet endpoints are
-HTTP-only so far.
+The three clients cover the write and read paths, including the facet endpoints; the
+administrative ones are HTTP-only so far.
 
 | Operation | Java | Python | Rust |
 | --- | --- | --- | --- |
@@ -730,7 +767,12 @@ HTTP-only so far.
 | Full-text search | `events().search` | `events.search` | `events.search` |
 | Count | `events().count` | `events.count` | `events.count` |
 | Delete | `events().delete` | `events.delete` | `events.delete` |
-| Distinct values | `events().listTypes` etc. | HTTP | HTTP |
+| Distinct values | `events().listTypes` etc. | `events.list_types` etc. | `events.list_types` etc. |
 
-Build the paging value from the last event of a page rather than assembling the two halves
-by hand — `Event::page_cursor()` in Rust, `event.page_cursor` in Python.
+All three carry the same four pairs: `list_types` / `search_types` and the same for sub-types,
+statuses and sources (`listTypes` / `searchTypes` … in Java).
+
+Take the paging value from the response envelope — `getNextCursor()` in Java, `page.next_cursor`
+in Python, `page.next_cursor()` in Rust — and send it back unchanged. It is opaque; the
+`<millis>_<id>` value earlier versions had you assemble by hand no longer decodes, and an
+undecodable cursor restarts the walk from the first page.

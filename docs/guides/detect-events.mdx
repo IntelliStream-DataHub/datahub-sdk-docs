@@ -113,7 +113,7 @@ trail or an incident timeline.
 ```java
 EventRetreiver retriever = new EventRetreiver();
 retriever.setLimit(100);
-retriever.getFilter().setType("overheat");
+retriever.getFilter().setType(List.of("overheat"));
 DataWrapper<EventModel> overheats = client.events().filter(retriever);
 ```
 
@@ -133,7 +133,7 @@ overheats = client.events.filter(datahub_sdk.EventFilter(
 use dataplatform_rust_sdk::filters::{BasicEventFilter, EventFilter};
 
 let filter = EventFilter::default()
-    .set_filter(BasicEventFilter { r#type: Some("overheat".into()), ..Default::default() })
+    .set_filter(BasicEventFilter { r#type: Some(vec!["overheat".into()]), ..Default::default() })
     .set_limit(100)
     .build();
 let overheats = api.events.filter(&filter).await?;

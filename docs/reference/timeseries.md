@@ -116,14 +116,32 @@ combined with AND — a series must match every criterion to be included.
 
 | Criterion | Matching |
 | --- | --- |
-| `dataSetId` | The data set **and every data set beneath it** in the data set hierarchy — a series attached to a child (or grandchild, …) data set matches too. |
-| `unit` | Case-insensitive; `%` works as a wildcard (`"cel%"`). |
-| `unitExternalId` | Exact match on the unit-catalogue external id (e.g. `temperature_deg_c`). |
-| `metadataKey` / `metadataValue` | Together: that key must carry that value. Alone: any entry with that key (or any entry with that value). |
+| `dataSetId` | The data set **and every data set beneath it** in the data set hierarchy, so a series attached to a child (or grandchild, …) data set matches too. Each entry is `{"id": …}` or `{"externalId": …}`. |
+| `unit` | Pattern, case-insensitive. `*` and `%` are wildcards, `_` is literal (`"cel%"`). |
+| `unitExternalId` | Pattern on the unit-catalogue external id (e.g. `temperature_deg_c`), on the same rules. |
+| `valueType` | Exact, case-insensitive, against the closed catalogue: `BIGINT`, `FLOAT`, `FLOAT32`, `NUMERIC`, `DECIMAL32`, `TEXT`, `MIXED`. Not a pattern. |
+| `id`, `externalId`, `name`, `source` | The shared node criteria. Patterns, on the same rules as `unit`. |
+| `labels` | Series carrying **all** of these labels. |
+| `metadata` | Every key/value pair given must be present. **A null value matches the key alone**, whatever it holds. |
+| `createdTime`, `lastUpdatedTime` | `{ "min": …, "max": … }` bounds. |
 
-Results come newest first, capped by `limit` (default 1000, max 10000). Series in data
-sets you lack read access to are silently omitted — the result is what your token may
-see, not an error. For free-text lookups use `POST /timeseries/search` instead.
+Each field above except `labels` and `metadata` takes **either a bare value or an array**, and the
+entries of an array are combined with **OR**. That is why they are named in the singular:
+`"unit": "celsius"` is the common case, and `"unit": ["celsius", "kelvin"]` asks for either.
+`labels` and `metadata` require **all** entries to match and keep their plural names for that
+reason.
+
+Results come newest first unless you ask for another order — see
+[sorting and paging](#sorting-and-paging) — capped by `limit` (default 1000, max 10000; a value
+`<= 0` falls back to the default, and above the ceiling is a 400). Series in data sets you lack
+read access to are silently omitted — the result is what your token may see, not an error. For
+free-text lookups use `POST /timeseries/search` instead.
+
+:::note The `metadataKey` / `metadataValue` pair is gone
+It existed only because `metadata` could not express "has this key, whatever its value". A null
+value in the map says that now, and `{"health": "good", "tier": null}` asks for both conditions at
+once.
+:::
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -132,8 +150,8 @@ see, not an error. For free-text lookups use `POST /timeseries/search` instead.
 import ai.intellistream.datahub.models.datafilters.TimeseriesFilter;
 
 TimeseriesFilter criteria = new TimeseriesFilter();
-criteria.setDataSetId(12L);      // this data set and every data set beneath it
-criteria.setUnit("celsius");
+criteria.setDataSetId(List.of(IdCollection.createFromId(12L)));   // and every data set beneath it
+criteria.setUnit(List.of("celsius"));
 
 DataWrapper<Timeseries> series = client.timeseries().filter(criteria);
 ```
@@ -145,8 +163,8 @@ Pass a `TimeseriesRetreiver` instead of the bare criteria to set an explicit `li
 
 ```python
 form = datahub_sdk.TimeSeriesFilterForm(
-    data_set_id=12,              # this data set and every data set beneath it
-    unit="celsius",
+    data_set_id=[12],            # this data set and every data set beneath it
+    unit="celsius",              # a pattern field also takes a bare value
     limit=100)
 
 series = client.timeseries.filter(form)
@@ -156,11 +174,12 @@ series = client.timeseries.filter(form)
 <TabItem value="rust" label="Rust">
 
 ```rust
+use dataplatform_rust_sdk::generic::IdAndExtId;
 use dataplatform_rust_sdk::{TimeSeriesFilter, TimeSeriesFilterForm};
 
 let criteria = TimeSeriesFilter {
-    data_set_id: Some(12),       // this data set and every data set beneath it
-    unit: Some("celsius".into()),
+    data_set_id: Some(vec![IdAndExtId::from_id(12)]),   // and every data set beneath it
+    unit: Some(vec!["celsius".into()]),
     ..Default::default()
 };
 let series = api.time_series.filter(&TimeSeriesFilterForm::new(criteria, Some(100))).await?;
@@ -172,6 +191,100 @@ let series = api.time_series.filter(&TimeSeriesFilterForm::new(criteria, Some(10
 The hierarchy expansion is what makes "master" data sets useful: filter on the top-level
 data set of a site or project and you get the series of the whole family beneath it, without
 knowing (or maintaining a list of) the sub-data sets.
+
+## Sorting and paging {#sorting-and-paging}
+
+The three node filters — `/timeseries/filter`, `/resources/filter` and `/datasets/filter` —
+share this contract. (`/events/filter` works the same way over its own columns; see
+[events](./events#paging).)
+
+Order a page with `sort`, over `id`, `externalId`, `name`, `source`, `description`,
+`createdTime`, `lastUpdatedTime` or `dataSetId`. The default is `createdTime` descending —
+newest created first.
+
+```json
+{ "filter": { "unit": "celsius" },
+  "sort": { "property": ["name"], "order": "asc" },
+  "limit": 100 }
+```
+
+Only the **first** `property` is used, and `id` is appended behind it: a sort column alone is not
+a position unless it is unique, and a page boundary inside a run of equal values repeats or drops
+exactly those rows. An unrecognised property falls back to the default rather than being
+rejected, and any `order` that is not exactly `desc` sorts ascending. Nulls sort last ascending,
+first descending — most of these columns are nullable, since every node type shares one table.
+
+A page that has a successor carries a `nextCursor`. Echo it back as `cursor` to continue:
+
+```json
+{ "filter": { "unit": "celsius" },
+  "sort": { "property": ["name"], "order": "asc" },
+  "cursor": "djE6bmFtZXxhc2N8N3x2YQ",
+  "limit": 100 }
+```
+
+The cursor is **opaque** — base64 of a versioned encoding carrying the sort, the boundary value
+and the id — so do not build or parse one. Send it with the **same** sort that produced it; a
+cursor is a position in one particular order, and continuing it under another is refused. One
+that does not decode restarts the walk from the first page rather than failing.
+
+`nextCursor` is absent on a short page, so "keep going while it is present" is the whole loop. A
+full page may still be the last, so a complete walk ends with one empty request.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+TimeseriesRetreiver retriever = new TimeseriesRetreiver();
+retriever.getSort().setProperty(List.of("name"));
+retriever.getSort().setOrder("asc");
+
+DataWrapper<Timeseries> page = client.timeseries().filter(retriever);
+while (page.getNextCursor() != null) {
+    retriever.setCursor(page.getNextCursor());
+    page = client.timeseries().filter(retriever);
+}
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+cursor = None
+while True:
+    page = client.timeseries.filter(datahub_sdk.TimeSeriesFilterForm(
+        unit="celsius", limit=100, sort_by="name", sort_order="asc", cursor=cursor))
+    for ts in page:
+        ...
+    cursor = page.next_cursor
+    if cursor is None:
+        break
+```
+
+`filter()` returns a `Page` — a list, so existing code is unaffected, carrying `.next_cursor`.
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use dataplatform_rust_sdk::filters::PageRequest;
+use dataplatform_rust_sdk::{TimeSeriesFilter, TimeSeriesFilterForm};
+
+let mut paging = PageRequest::asc("name");
+loop {
+    let form = TimeSeriesFilterForm::new(TimeSeriesFilter::default(), Some(100))
+        .with_paging(paging.clone());
+    let page = api.time_series.filter(&form).await?;
+    // ... use page.get_items()
+    match page.next_cursor() {
+        Some(cursor) => paging = PageRequest::asc("name").after(cursor),
+        None => break,
+    }
+}
+```
+
+</TabItem>
+</Tabs>
 
 ## Delete a series
 

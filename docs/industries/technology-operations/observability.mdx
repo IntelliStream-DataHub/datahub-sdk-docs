@@ -189,7 +189,7 @@ timeline, or by the `service` metadata to see one service's history.
 
 ```java
 EventRetreiver retriever = new EventRetreiver();
-retriever.getFilter().setType("slo_breach");
+retriever.getFilter().setType(List.of("slo_breach"));
 retriever.setLimit(200);
 DataWrapper<EventModel> breaches = client.events().filter(retriever);
 ```
@@ -209,7 +209,7 @@ breaches = client.events.filter(datahub_sdk.EventFilter(
 use dataplatform_rust_sdk::filters::{BasicEventFilter, EventFilter};
 
 let mut basic = BasicEventFilter::default();
-basic.set_type("slo_breach");
+basic.set_type(&["slo_breach"]);
 let mut filter = EventFilter::default();
 filter.set_filter(basic);
 filter.set_limit(200);
