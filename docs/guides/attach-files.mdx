@@ -42,9 +42,9 @@ System.out.println("stored as id " + uploaded.getItems().iterator().next().getId
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk
+import intellistream_datahub_sdk
 
-uploaded = client.files.upload_file(datahub_sdk.FileUpload(
+uploaded = client.files.upload_file(intellistream_datahub_sdk.FileUpload(
     path="calibration_a12.pdf",                # local file
     destination_path="/certificates/2026/",
     external_id="calibration_pump_esp_a12",
@@ -57,7 +57,7 @@ uploaded = client.files.upload_file(datahub_sdk.FileUpload(
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::files::FileUpload;
+use intellistream_datahub_sdk::files::FileUpload;
 
 // MIME type is inferred from the file content
 let mut upload = FileUpload::new_with_destination_path(
@@ -144,7 +144,7 @@ client.files.delete(["calibration_pump_esp_a12"])
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::generic::{DataWrapper, IdAndExtId};
+use intellistream_datahub_sdk::generic::{DataWrapper, IdAndExtId};
 
 api.files.delete(&DataWrapper::from(
     vec![IdAndExtId::from_external_id("calibration_pump_esp_a12")])).await?;

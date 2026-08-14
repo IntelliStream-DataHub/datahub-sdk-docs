@@ -23,13 +23,13 @@ its unit) and a day of readings — so the daily-average roll-up has data. The u
 catalogue browsed in step 1 is built-in reference data. Safe to re-run.
 
 ```python
-import datahub_sdk, numpy as np, pandas as pd
+import intellistream_datahub_sdk, numpy as np, pandas as pd
 
-client = datahub_sdk.DataHubClient.from_env()
+client = intellistream_datahub_sdk.DataHubClient.from_env()
 
 for s, u in [("station_kirkeveien_pm25", "ug_m3"), ("station_kirkeveien_no2", "ppb"),
              ("station_kirkeveien_co", "ppm")]:
-    client.timeseries.create([datahub_sdk.TimeSeries(external_id=s, name=s, unit=u)])
+    client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id=s, name=s, unit=u)])
 idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=24, freq="1h")
 client.timeseries.insert_from_lists(timestamps=idx, values=np.random.uniform(5, 45, 24), ts="station_kirkeveien_pm25")
 ```
@@ -93,19 +93,19 @@ client.timeseries().create(pm25, no2, co);
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk
+import intellistream_datahub_sdk
 
 client.timeseries.create([
-    datahub_sdk.TimeSeries(external_id="station_kirkeveien_pm25", name="Kirkeveien PM2.5", unit="ug_m3"),
-    datahub_sdk.TimeSeries(external_id="station_kirkeveien_no2", name="Kirkeveien NO2", unit="ppb"),
-    datahub_sdk.TimeSeries(external_id="station_kirkeveien_co", name="Kirkeveien CO", unit="ppm")])
+    intellistream_datahub_sdk.TimeSeries(external_id="station_kirkeveien_pm25", name="Kirkeveien PM2.5", unit="ug_m3"),
+    intellistream_datahub_sdk.TimeSeries(external_id="station_kirkeveien_no2", name="Kirkeveien NO2", unit="ppb"),
+    intellistream_datahub_sdk.TimeSeries(external_id="station_kirkeveien_co", name="Kirkeveien CO", unit="ppm")])
 ```
 
 </TabItem>
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::timeseries::TimeSeries;
+use intellistream_datahub_sdk::timeseries::TimeSeries;
 
 for (id, name, unit) in [
     ("station_kirkeveien_pm25", "Kirkeveien PM2.5", "ug_m3"),
@@ -135,7 +135,7 @@ Chart the day's PM2.5 — now self-describing, because the series carries its `u
 ```python
 import matplotlib.pyplot as plt
 
-rf = datahub_sdk.RetrieveFilter(ts="station_kirkeveien_pm25",
+rf = intellistream_datahub_sdk.RetrieveFilter(ts="station_kirkeveien_pm25",
     start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=1), end=pd.Timestamp.now(tz="UTC"),
     aggregates=["avg"], granularity="1h")
 vals = [dp.average for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()]

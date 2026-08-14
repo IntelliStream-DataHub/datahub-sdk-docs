@@ -44,9 +44,9 @@ cluster — the sub-graph of accounts and the transfers between them.
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk, numpy as np, pandas as pd, networkx as nx
+import intellistream_datahub_sdk, numpy as np, pandas as pd, networkx as nx
 
-client = datahub_sdk.DataHubClient.from_env()
+client = intellistream_datahub_sdk.DataHubClient.from_env()
 
 def network_of(account_external_id):
     return client.resources.fetch_related(external_id=account_external_id, depth=4)
@@ -70,7 +70,7 @@ ResourceNetwork net = client.resources().fetchRelated(form);
 
 ```rust
 // Rust extracts the same sub-graph; the feature engineering below is Python.
-use dataplatform_rust_sdk::resources::RelatedResourcesForm;
+use intellistream_datahub_sdk::resources::RelatedResourcesForm;
 
 let net = api.resources.fetch_related(
     &RelatedResourcesForm::from_external_id("account_77310")
@@ -126,7 +126,7 @@ in goes straight back out (the pass-through ratio that defines a mule).
 ```python
 def behaviour_features(account_external_id, hours=24):
     def agg(metric, *aggregates):
-        rf = datahub_sdk.RetrieveFilter(
+        rf = intellistream_datahub_sdk.RetrieveFilter(
             ts=f"{account_external_id}_{metric}",
             start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=hours),
             end=pd.Timestamp.now(tz="UTC"),
@@ -192,13 +192,13 @@ alert = "account_77310"
 feat = features(alert)
 risk = clf.predict_proba(pd.DataFrame([feat]))[0, 1]
 
-client.timeseries.create([datahub_sdk.TimeSeries(
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(
     external_id=f"{alert}_aml_risk", name="AML risk score", unit="score", value_type="float")])
 client.timeseries.insert_from_lists(
     timestamps=[pd.Timestamp.now(tz="UTC")], values=[risk], ts=f"{alert}_aml_risk")
 
 if risk > 0.7:
-    client.events.create([datahub_sdk.Event(
+    client.events.create([intellistream_datahub_sdk.Event(
         external_id=f"sar_candidate_{alert}_{int(pd.Timestamp.now().timestamp())}",
         type="sar_candidate", status="open",
         event_time=pd.Timestamp.now(tz="UTC"),

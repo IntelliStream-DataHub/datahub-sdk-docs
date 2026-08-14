@@ -61,8 +61,8 @@ client.timeseries.insert_from_lists(
 `insert_datapoints` auto-batches large inputs (chunks above ~100k points).
 
 ```rust
-use dataplatform_rust_sdk::create_api_service;
-use dataplatform_rust_sdk::generic::{DataWrapper, DatapointsCollection};
+use intellistream_datahub_sdk::create_api_service;
+use intellistream_datahub_sdk::generic::{DataWrapper, DatapointsCollection};
 
 let api = create_api_service();
 

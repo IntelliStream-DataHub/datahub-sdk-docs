@@ -25,7 +25,7 @@ dependencies {
 <TabItem value="python" label="Python">
 
 ```bash
-pip install datahub-sdk
+pip install intellistream-datahub-sdk
 ```
 
 </TabItem>
@@ -34,11 +34,27 @@ pip install datahub-sdk
 ```toml
 # Cargo.toml
 [dependencies]
-dataplatform-rust-sdk = "0.1"
+intellistream-datahub-sdk = "0.1"
 ```
 
 </TabItem>
 </Tabs>
+
+:::tip The name is long on purpose, and you can shorten it
+`datahub-sdk` was already taken on PyPI by an unrelated project, and the bare `datahub`
+neighbourhood belongs to a much better-known metadata platform, so the package is qualified
+with the organisation and the Rust crate takes the same name. Alias it if you would rather
+not type it:
+
+```python
+import intellistream_datahub_sdk as dh
+```
+
+```toml
+# Cargo.toml — a crate-wide rename
+dh = { package = "intellistream-datahub-sdk", version = "0.1" }
+```
+:::
 
 ## 2. Configure credentials
 
@@ -72,13 +88,13 @@ client.timeseries().ingest(Map.of(
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk, pandas as pd
-from datahub_sdk import DataHubClient
+import intellistream_datahub_sdk, pandas as pd
+from intellistream_datahub_sdk import DataHubClient
 
 client = DataHubClient.from_env()
 
 client.timeseries.create([
-    datahub_sdk.TimeSeries(external_id="engine_temperature", unit="celsius", value_type="float")])
+    intellistream_datahub_sdk.TimeSeries(external_id="engine_temperature", unit="celsius", value_type="float")])
 
 client.timeseries.insert_from_lists(
     timestamps=[pd.Timestamp.now(tz="UTC")], values=[92.4], ts="engine_temperature")
@@ -88,8 +104,8 @@ client.timeseries.insert_from_lists(
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::create_api_service;
-use dataplatform_rust_sdk::timeseries::TimeSeries;
+use intellistream_datahub_sdk::create_api_service;
+use intellistream_datahub_sdk::timeseries::TimeSeries;
 use chrono::Utc;
 
 let api = create_api_service();
@@ -128,7 +144,7 @@ client.timeseries().retrieve(request).getItems()
 <TabItem value="python" label="Python">
 
 ```python
-rf = datahub_sdk.RetrieveFilter(
+rf = intellistream_datahub_sdk.RetrieveFilter(
     ts="engine_temperature",
     start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=1),
     end=pd.Timestamp.now(tz="UTC"))
@@ -141,7 +157,7 @@ for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+use intellistream_datahub_sdk::generic::{DataWrapper, RetrieveFilter};
 
 let filter = RetrieveFilter {
     external_id: Some("engine_temperature".into()),

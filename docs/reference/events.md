@@ -88,9 +88,9 @@ client.events().create(List.of(event));
 
 ```python
 from datetime import datetime, timezone
-import datahub_sdk
+import intellistream_datahub_sdk
 
-event = datahub_sdk.Event(
+event = intellistream_datahub_sdk.Event(
     external_id="door_open",
     type="alarm",
     event_time=datetime.now(timezone.utc))  # required: when the event occurred
@@ -103,7 +103,7 @@ client.events.create([event])
 
 ```rust
 use chrono::Utc;
-use dataplatform_rust_sdk::events::Event;
+use intellistream_datahub_sdk::events::Event;
 
 let mut event = Event::new("door_open".into());
 event.r#type = Some("alarm".into());
@@ -163,7 +163,7 @@ events = client.events.by_ids([uuid.UUID("0195f3a2-4c1b-7f9e-9c3a-1b2d4e6f8a90")
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::events::EventIdCollection;
+use intellistream_datahub_sdk::events::EventIdCollection;
 
 let events = api.events
     .by_ids(&vec![EventIdCollection::from_external_id("PO-4500171")])
@@ -192,8 +192,8 @@ DataWrapper<EventModel> events = client.events().filter(retriever);
 <TabItem value="python" label="Python">
 
 ```python
-filter = datahub_sdk.EventFilter(
-    basic_filter=datahub_sdk.BasicEventFilter(type="alarm"),
+filter = intellistream_datahub_sdk.EventFilter(
+    basic_filter=intellistream_datahub_sdk.BasicEventFilter(type="alarm"),
     limit=50)
 events = client.events.filter(filter)
 ```
@@ -202,7 +202,7 @@ events = client.events.filter(filter)
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::filters::{BasicEventFilter, EventFilter};
+use intellistream_datahub_sdk::filters::{BasicEventFilter, EventFilter};
 
 let filter = EventFilter::default()
     .set_filter(BasicEventFilter { r#type: Some(vec!["alarm".into()]), ..Default::default() })
@@ -447,8 +447,8 @@ DataWrapper<EventModel> findings = client.events().filter(retriever);
 <TabItem value="python" label="Python">
 
 ```python
-filter = datahub_sdk.EventFilter(
-    basic_filter=datahub_sdk.BasicEventFilter(
+filter = intellistream_datahub_sdk.EventFilter(
+    basic_filter=intellistream_datahub_sdk.BasicEventFilter(
         type="policy_finding",
         sub_type="naming_snake_case"),   # one policy; omit for all
     limit=200)
@@ -460,7 +460,7 @@ findings = client.events.filter(filter)
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::filters::{BasicEventFilter, EventFilter};
+use intellistream_datahub_sdk::filters::{BasicEventFilter, EventFilter};
 
 let filter = EventFilter::default()
     .set_filter(BasicEventFilter {

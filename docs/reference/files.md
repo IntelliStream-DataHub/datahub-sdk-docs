@@ -65,9 +65,9 @@ DataWrapper<IndexNode> uploaded = client.files().upload(
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk
+import intellistream_datahub_sdk
 
-upload = datahub_sdk.FileUpload(
+upload = intellistream_datahub_sdk.FileUpload(
     path="report.csv",                 # local file
     destination_path="/reports/2026/",
     external_id="report_2026_q2",
@@ -82,7 +82,7 @@ uploaded = client.files.upload_file(upload)   # -> list[INode]
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::files::FileUpload;
+use intellistream_datahub_sdk::files::FileUpload;
 
 // mime type is inferred from the file content
 let mut upload = FileUpload::new_with_destination_path("report.csv", "/reports/2026/");
@@ -155,7 +155,7 @@ client.files.delete(["report_2026_q2"])
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::generic::{DataWrapper, IdAndExtId};
+use intellistream_datahub_sdk::generic::{DataWrapper, IdAndExtId};
 
 api.files.delete(&DataWrapper::from(vec![IdAndExtId::from_external_id("report_2026_q2")])).await?;
 ```

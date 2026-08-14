@@ -23,22 +23,22 @@ New workspace? Run this once (Python) to create a rack's inlet-temperature serie
 graph — so step 3 finds the shared unit. Safe to re-run.
 
 ```python
-import datahub_sdk, numpy as np, pandas as pd
+import intellistream_datahub_sdk, numpy as np, pandas as pd
 
-client = datahub_sdk.DataHubClient.from_env()
+client = intellistream_datahub_sdk.DataHubClient.from_env()
 
-client.timeseries.create([datahub_sdk.TimeSeries(external_id="rack_r14_inlet_temp_c", name="Rack R14 inlet temp", unit="deg_c", value_type="float")])
-client.subscriptions.create([datahub_sdk.Subscription(
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id="rack_r14_inlet_temp_c", name="Rack R14 inlet temp", unit="deg_c", value_type="float")])
+client.subscriptions.create([intellistream_datahub_sdk.Subscription(
     external_id="hall_2_thermal", name="Hall 2 thermal", timeseries=["rack_r14_inlet_temp_c"])])
 idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=60, freq="1min")
 t = np.full(60, 24.0); t[-10:] = 29.4                # above the 27 °C band
 client.timeseries.insert_from_lists(timestamps=idx, values=t, ts="rack_r14_inlet_temp_c")
 
 client.resources.create(
-    [datahub_sdk.Resource(external_id=x, name=x, labels=[lbl]) for x, lbl in
+    [intellistream_datahub_sdk.Resource(external_id=x, name=x, labels=[lbl]) for x, lbl in
      [("rack_r14", "Rack"), ("rack_r15", "Rack"), ("crac_unit_2", "Crac")]],
-    [datahub_sdk.RelForm.by_external_ids("rack_r14", "crac_unit_2", "cooled_by"),
-     datahub_sdk.RelForm.by_external_ids("rack_r15", "crac_unit_2", "cooled_by")])
+    [intellistream_datahub_sdk.RelForm.by_external_ids("rack_r14", "crac_unit_2", "cooled_by"),
+     intellistream_datahub_sdk.RelForm.by_external_ids("rack_r15", "crac_unit_2", "cooled_by")])
 ```
 
 ## 1. Catch a thermal problem early
@@ -76,7 +76,7 @@ try (var stream = client.subscriptions().listen(List.of("hall_2_thermal"))
 with client.subscriptions.listen(["hall_2_thermal"]) as listener:
     for msg in listener:
         if inlet_above(msg.payload, 27.0):            # °C — above ASHRAE band
-            client.events.create([datahub_sdk.Event(
+            client.events.create([intellistream_datahub_sdk.Event(
                 external_id=f"thermal_warning_r14_{int(pd.Timestamp.now().timestamp())}",
                 type="thermal_warning", status="open",
                 event_time=pd.Timestamp.now(tz="UTC"),
@@ -88,7 +88,7 @@ with client.subscriptions.listen(["hall_2_thermal"]) as listener:
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::events::Event;
+use intellistream_datahub_sdk::events::Event;
 use chrono::Utc;
 
 let mut listener = api.subscriptions.listen(&["hall_2_thermal"]).await?;
@@ -149,7 +149,7 @@ shared = {n.external_id for n in a.nodes} & {n.external_id for n in b.nodes}
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::resources::RelatedResourcesForm;
+use intellistream_datahub_sdk::resources::RelatedResourcesForm;
 use std::collections::HashSet;
 
 let a = api.resources.fetch_related(

@@ -22,16 +22,16 @@ New workspace? Run this once (Python) to create the site graph and a crane-utili
 series. (The drawing upload in step 1 needs a local file — any PDF works.) Safe to re-run.
 
 ```python
-import datahub_sdk, numpy as np, pandas as pd
+import intellistream_datahub_sdk, numpy as np, pandas as pd
 
-client = datahub_sdk.DataHubClient.from_env()
+client = intellistream_datahub_sdk.DataHubClient.from_env()
 
 client.resources.create(
-    [datahub_sdk.Resource(external_id=x, name=x, labels=[lbl]) for x, lbl in
+    [intellistream_datahub_sdk.Resource(external_id=x, name=x, labels=[lbl]) for x, lbl in
      [("site_harbour_tower", "Site"), ("zone_level_12", "Zone")]],
-    [datahub_sdk.RelForm.by_external_ids("site_harbour_tower", "zone_level_12", "contains")])
+    [intellistream_datahub_sdk.RelForm.by_external_ids("site_harbour_tower", "zone_level_12", "contains")])
 
-client.timeseries.create([datahub_sdk.TimeSeries(external_id="crane_02_hours", name="Crane 02 hours", unit="h", value_type="float")])
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id="crane_02_hours", name="Crane 02 hours", unit="h", value_type="float")])
 idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=14, freq="1d")
 client.timeseries.insert_from_lists(timestamps=idx, values=np.random.uniform(4, 9, 14), ts="crane_02_hours")
 ```
@@ -77,14 +77,14 @@ client.files().upload(
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk
+import intellistream_datahub_sdk
 
 client.resources.create(
-    [datahub_sdk.Resource(external_id="site_harbour_tower", name="Harbour Tower", labels=["Site"]),
-     datahub_sdk.Resource(external_id="zone_level_12", name="Level 12", labels=["Zone"])],
-    [datahub_sdk.RelForm.by_external_ids("site_harbour_tower", "zone_level_12", "contains")])
+    [intellistream_datahub_sdk.Resource(external_id="site_harbour_tower", name="Harbour Tower", labels=["Site"]),
+     intellistream_datahub_sdk.Resource(external_id="zone_level_12", name="Level 12", labels=["Zone"])],
+    [intellistream_datahub_sdk.RelForm.by_external_ids("site_harbour_tower", "zone_level_12", "contains")])
 
-client.files.upload_file(datahub_sdk.FileUpload(
+client.files.upload_file(intellistream_datahub_sdk.FileUpload(
     path="level_12_rev_c.pdf",
     destination_path="/harbour_tower/level_12/drawings/",
     external_id="drawing_level_12_structural_rev_c",
@@ -95,9 +95,9 @@ client.files.upload_file(datahub_sdk.FileUpload(
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::resources::Resource;
-use dataplatform_rust_sdk::relations::RelForm;
-use dataplatform_rust_sdk::files::FileUpload;
+use intellistream_datahub_sdk::resources::Resource;
+use intellistream_datahub_sdk::relations::RelForm;
+use intellistream_datahub_sdk::files::FileUpload;
 
 let mut site = Resource::new();
 site.external_id = "site_harbour_tower".into();
@@ -145,7 +145,7 @@ client.events().create(List.of(incident));
 <TabItem value="python" label="Python">
 
 ```python
-client.events.create([datahub_sdk.Event(
+client.events.create([intellistream_datahub_sdk.Event(
     external_id=f"safety_incident_l12_{int(pd.Timestamp.now().timestamp())}",
     type="safety_incident", sub_type="near_miss", status="open",
     event_time=pd.Timestamp.now(tz="UTC"),
@@ -156,7 +156,7 @@ client.events.create([datahub_sdk.Event(
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::events::Event;
+use intellistream_datahub_sdk::events::Event;
 use chrono::Utc;
 
 let mut incident = Event::new(format!("safety_incident_l12_{}", Utc::now().timestamp()));

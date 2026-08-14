@@ -23,11 +23,11 @@ hourly readings including an overload peak — so the roll-up and overload event
 data. The region/substation graph is created by step 1. Safe to re-run.
 
 ```python
-import datahub_sdk, numpy as np, pandas as pd
+import intellistream_datahub_sdk, numpy as np, pandas as pd
 
-client = datahub_sdk.DataHubClient.from_env()
+client = intellistream_datahub_sdk.DataHubClient.from_env()
 
-client.timeseries.create([datahub_sdk.TimeSeries(external_id="feeder_f12_load_mw", name="Feeder F12 load", unit="mw")])
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id="feeder_f12_load_mw", name="Feeder F12 load", unit="mw")])
 idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=24, freq="1h")
 load = 8 + 4 * np.sin(np.arange(24) / 24 * 2 * np.pi) + np.random.normal(0, 0.5, 24)
 load[18] = 14.8                                   # an evening overload past the 12 MW rating
@@ -65,20 +65,20 @@ client.resources().create(List.of(region, substation), List.of(contains));
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk
+import intellistream_datahub_sdk
 
 client.resources.create(
-    [datahub_sdk.Resource(external_id="grid_region_east", name="Eastern region", labels=["Region"]),
-     datahub_sdk.Resource(external_id="substation_oslo_1", name="Oslo substation 1", labels=["Substation"])],
-    [datahub_sdk.RelForm.by_external_ids("grid_region_east", "substation_oslo_1", "contains")])
+    [intellistream_datahub_sdk.Resource(external_id="grid_region_east", name="Eastern region", labels=["Region"]),
+     intellistream_datahub_sdk.Resource(external_id="substation_oslo_1", name="Oslo substation 1", labels=["Substation"])],
+    [intellistream_datahub_sdk.RelForm.by_external_ids("grid_region_east", "substation_oslo_1", "contains")])
 ```
 
 </TabItem>
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::resources::Resource;
-use dataplatform_rust_sdk::relations::RelForm;
+use intellistream_datahub_sdk::resources::Resource;
+use intellistream_datahub_sdk::relations::RelForm;
 
 let mut region = Resource::new();
 region.external_id = "grid_region_east".into();
@@ -130,7 +130,7 @@ client.timeseries().retrieve(request).getItems().get(0).getDatapoints()
 <TabItem value="python" label="Python">
 
 ```python
-rf = datahub_sdk.RetrieveFilter(
+rf = intellistream_datahub_sdk.RetrieveFilter(
     ts="feeder_f12_load_mw",
     start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=1),
     end=pd.Timestamp.now(tz="UTC"),
@@ -185,7 +185,7 @@ client.events().create(List.of(event));
 <TabItem value="python" label="Python">
 
 ```python
-client.events.create([datahub_sdk.Event(
+client.events.create([intellistream_datahub_sdk.Event(
     external_id=f"feeder_overload_f12_{int(pd.Timestamp.now().timestamp())}",
     type="feeder_overload", status="open",
     event_time=pd.Timestamp.now(tz="UTC"),
@@ -219,7 +219,7 @@ the overload the event flags:
 ```python
 import matplotlib.pyplot as plt
 
-rf = datahub_sdk.RetrieveFilter(ts="feeder_f12_load_mw",
+rf = intellistream_datahub_sdk.RetrieveFilter(ts="feeder_f12_load_mw",
     start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=1), end=pd.Timestamp.now(tz="UTC"),
     aggregates=["max"], granularity="1h")
 peaks = [dp.max for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()]

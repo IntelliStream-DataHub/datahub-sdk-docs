@@ -38,11 +38,11 @@ Pull a long, regularly-sampled history of the quantity you want to forecast.
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk, numpy as np, pandas as pd
+import intellistream_datahub_sdk, numpy as np, pandas as pd
 
-client = datahub_sdk.DataHubClient.from_env()
+client = intellistream_datahub_sdk.DataHubClient.from_env()
 
-rf = datahub_sdk.RetrieveFilter(
+rf = intellistream_datahub_sdk.RetrieveFilter(
     ts="feeder_f12_load_mw",
     start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=120),
     end=pd.Timestamp.now(tz="UTC"),
@@ -77,7 +77,7 @@ var history = client.timeseries().retrieve(request).getItems().get(0).getDatapoi
 
 ```rust
 // Rust pulls the same hourly history; the modelling below is Python.
-use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+use intellistream_datahub_sdk::generic::{DataWrapper, RetrieveFilter};
 use chrono::Utc;
 
 let filter = RetrieveFilter {
@@ -162,7 +162,7 @@ for step in range(HORIZON):
     history.loc[t] = yhat        # feed the prediction forward
 
 forecast = pd.Series(preds)
-client.timeseries.create([datahub_sdk.TimeSeries(
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(
     external_id="feeder_f12_load_mw_forecast", name="Feeder F12 load — 48h forecast", unit="mw", value_type="float")])
 client.timeseries.insert_from_lists(
     timestamps=forecast.index, values=forecast.to_numpy(), ts="feeder_f12_load_mw_forecast")

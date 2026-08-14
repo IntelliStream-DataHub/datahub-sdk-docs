@@ -22,12 +22,12 @@ subscription before we listen**, and push a fault reading — so the loop below 
 `charger_down`. Safe to re-run.
 
 ```python
-import datahub_sdk, pandas as pd
+import intellistream_datahub_sdk, pandas as pd
 
-client = datahub_sdk.DataHubClient.from_env()
+client = intellistream_datahub_sdk.DataHubClient.from_env()
 
-client.timeseries.create([datahub_sdk.TimeSeries(external_id="charger_oslo_14_status", name="Charger Oslo 14 status", unit="status", value_type="float")])
-client.subscriptions.create([datahub_sdk.Subscription(
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id="charger_oslo_14_status", name="Charger Oslo 14 status", unit="status", value_type="float")])
+client.subscriptions.create([intellistream_datahub_sdk.Subscription(
     external_id="network_status", name="Charging network status", timeseries=["charger_oslo_14_status"])])
 
 # status 1 = available; push a 0 (faulted) for the loop to catch
@@ -69,7 +69,7 @@ try (var stream = client.subscriptions().listen(List.of("network_status"))
 with client.subscriptions.listen(["network_status"]) as listener:
     for msg in listener:
         if faulted(msg.payload):
-            client.events.create([datahub_sdk.Event(
+            client.events.create([intellistream_datahub_sdk.Event(
                 external_id=f"charger_down_oslo_14_{int(pd.Timestamp.now().timestamp())}",
                 type="charger_down", status="open",
                 event_time=pd.Timestamp.now(tz="UTC"),
@@ -82,7 +82,7 @@ with client.subscriptions.listen(["network_status"]) as listener:
 
 ```rust
 use chrono::Utc;
-use dataplatform_rust_sdk::events::Event;
+use intellistream_datahub_sdk::events::Event;
 
 let mut listener = api.subscriptions.listen(&["network_status"]).await?;
 while let Some(Ok(msg)) = listener.next().await {
@@ -114,8 +114,8 @@ close it runs to its grid limit — the input to load-balancing. See
 The faulted reading in the demo trips the loop, and a `charger_down` event lands:
 
 ```python
-for e in client.events.filter(datahub_sdk.EventFilter(
-        basic_filter=datahub_sdk.BasicEventFilter(type="charger_down"), limit=5)):
+for e in client.events.filter(intellistream_datahub_sdk.EventFilter(
+        basic_filter=intellistream_datahub_sdk.BasicEventFilter(type="charger_down"), limit=5)):
     print(e.external_id, e.metadata)
 # charger_down_oslo_14_…  {'charger': 'charger_oslo_14', 'connector': '2'}
 ```

@@ -32,7 +32,7 @@ DatahubClient client = DatahubClient.create(DatahubConfig.builder()
 <TabItem value="python" label="Python">
 
 ```python
-from datahub_sdk import DataHubClient
+from intellistream_datahub_sdk import DataHubClient
 
 # from the environment (or an explicit .env file)
 client = DataHubClient.from_env()
@@ -45,7 +45,7 @@ client = DataHubClient(base_url="https://api.intellistream.ai", token="...")
 For `async`/`await`, use `AsyncDataHubClient` instead — same methods, awaited:
 
 ```python
-from datahub_sdk import AsyncDataHubClient
+from intellistream_datahub_sdk import AsyncDataHubClient
 client = AsyncDataHubClient.from_env()
 ```
 
@@ -53,7 +53,7 @@ client = AsyncDataHubClient.from_env()
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::create_api_service;
+use intellistream_datahub_sdk::create_api_service;
 
 // from the environment (BASE_URL, TOKEN or OAuth creds)
 let api = create_api_service();
@@ -63,11 +63,11 @@ Every method is `async`, so call them from an async runtime (e.g. `#[tokio::main
 `.await` the result.
 
 Don't want async? Enable the `blocking` cargo feature and use
-`dataplatform_rust_sdk::blocking` instead — the same services and methods without
+`intellistream_datahub_sdk::blocking` instead — the same services and methods without
 `.await`, driven by the SDK's own runtime (the `reqwest` / `reqwest::blocking` split):
 
 ```rust
-use dataplatform_rust_sdk::blocking;
+use intellistream_datahub_sdk::blocking;
 
 let api = blocking::create_api_service();
 ```
@@ -186,7 +186,7 @@ client = DataHubClient(
 <TabItem value="rust" label="Rust">
 
 ```rust
-let mut api = DataHubApi::from_env()?;
+let mut api = DataHubConfig::from_env()?;
 api.set_assertion_credentials(
     &entra_app_id,
     &entra_secret,
@@ -294,9 +294,9 @@ client = DataHubClient(
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::{ApiService, datahub::DataHubApi};
+use intellistream_datahub_sdk::{ApiService, datahub::DataHubConfig};
 
-let mut config = DataHubApi::from_env().unwrap();
+let mut config = DataHubConfig::from_env().unwrap();
 config
     .enable_buffering()                            // 72 h / 5 GiB defaults
     .set_buffer_retention_secs(3600)               // optional: override the time window
@@ -346,7 +346,7 @@ try {
 Methods return plain `list[T]`. Non-2xx raises `DataHubException`:
 
 ```python
-from datahub_sdk import DataHubException
+from intellistream_datahub_sdk import DataHubException
 
 try:
     resources = client.resources.by_ids(["pump_1"])

@@ -39,13 +39,13 @@ Gaps stay as `NaN` — XGBoost handles missing values without imputation.
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk, numpy as np, pandas as pd
+import intellistream_datahub_sdk, numpy as np, pandas as pd
 
-client = datahub_sdk.DataHubClient.from_env()
+client = intellistream_datahub_sdk.DataHubClient.from_env()
 
 def feature_row(pump, day):
     def agg(metric, *aggs):
-        rf = datahub_sdk.RetrieveFilter(
+        rf = intellistream_datahub_sdk.RetrieveFilter(
             ts=f"{pump}_{metric}", start=day - pd.Timedelta(days=7), end=day,
             aggregates=list(aggs), granularity="7d")
         pts = client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()
@@ -85,7 +85,7 @@ var agg = client.timeseries().retrieve(request).getItems().get(0).getDatapoints(
 
 ```rust
 // Rust pulls each pump's weekly aggregates; the model below is Python.
-use dataplatform_rust_sdk::generic::{DataWrapper, RetrieveFilter};
+use intellistream_datahub_sdk::generic::{DataWrapper, RetrieveFilter};
 use chrono::Utc;
 
 let filter = RetrieveFilter {
@@ -113,8 +113,8 @@ events and label each `(pump, day)` accordingly.
 # failures: DataFrame of (pump, failed_on), pulled from /events (type = esp_failure)
 failures = pd.DataFrame([
     {"pump": e.metadata.get("pump"), "failed_on": pd.to_datetime(e.event_time, utc=True)}
-    for e in client.events.filter(datahub_sdk.EventFilter(
-        datahub_sdk.BasicEventFilter(type="esp_failure"), limit=1000))])
+    for e in client.events.filter(intellistream_datahub_sdk.EventFilter(
+        intellistream_datahub_sdk.BasicEventFilter(type="esp_failure"), limit=1000))])
 
 # one feature row per pump per day across the history you have
 training_grid = [(p, d) for p in ["pump_esp_a12"]
@@ -167,13 +167,13 @@ import_ = dict(sorted(zip(X.columns, clf.feature_importances_),
 today = pd.DataFrame([feature_row("pump_esp_a12", pd.Timestamp.now(tz="UTC"))])
 risk = float(clf.predict_proba(today)[0, 1])
 
-client.timeseries.create([datahub_sdk.TimeSeries(
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(
     external_id="pump_esp_a12_failure_risk", name="ESP A-12 7-day failure risk", unit="score", value_type="float")])
 client.timeseries.insert_from_lists(
     timestamps=[pd.Timestamp.now(tz="UTC")], values=[risk], ts="pump_esp_a12_failure_risk")
 
 if risk > 0.6:
-    client.events.create([datahub_sdk.Event(
+    client.events.create([intellistream_datahub_sdk.Event(
         external_id=f"failure_predicted_a12_{int(pd.Timestamp.now().timestamp())}",
         type="failure_predicted", status="open",
         event_time=pd.Timestamp.now(tz="UTC"),

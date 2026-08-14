@@ -21,12 +21,12 @@ New workspace? Run this once (Python) to create a van's ETA-slack feed, **create
 subscription before we listen**, and push a behind-schedule reading. Safe to re-run.
 
 ```python
-import datahub_sdk, pandas as pd
+import intellistream_datahub_sdk, pandas as pd
 
-client = datahub_sdk.DataHubClient.from_env()
+client = intellistream_datahub_sdk.DataHubClient.from_env()
 
-client.timeseries.create([datahub_sdk.TimeSeries(external_id="van_22_eta_slack_min", name="Van 22 ETA slack", unit="min", value_type="float")])
-client.subscriptions.create([datahub_sdk.Subscription(
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id="van_22_eta_slack_min", name="Van 22 ETA slack", unit="min", value_type="float")])
+client.subscriptions.create([intellistream_datahub_sdk.Subscription(
     external_id="fleet_eta", name="Fleet ETA", timeseries=["van_22_eta_slack_min"])])
 client.timeseries.insert_from_lists(timestamps=[pd.Timestamp.now(tz="UTC")], values=[-12.0], ts="van_22_eta_slack_min")
 ```
@@ -66,7 +66,7 @@ try (var stream = client.subscriptions().listen(List.of("fleet_eta"))
 with client.subscriptions.listen(["fleet_eta"]) as listener:
     for msg in listener:
         if eta_past_window(msg.payload):
-            client.events.create([datahub_sdk.Event(
+            client.events.create([intellistream_datahub_sdk.Event(
                 external_id=f"delivery_at_risk_v22_{int(pd.Timestamp.now().timestamp())}",
                 type="delivery_at_risk", status="open",
                 event_time=pd.Timestamp.now(tz="UTC"),
@@ -78,7 +78,7 @@ with client.subscriptions.listen(["fleet_eta"]) as listener:
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::events::Event;
+use intellistream_datahub_sdk::events::Event;
 use chrono::Utc;
 
 let mut listener = api.subscriptions.listen(&["fleet_eta"]).await?;

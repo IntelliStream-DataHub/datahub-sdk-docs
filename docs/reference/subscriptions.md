@@ -30,9 +30,9 @@ client.subscriptions().delete(List.of(IdCollection.createFromExternalId("engine_
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk
+import intellistream_datahub_sdk
 
-sub = datahub_sdk.Subscription(
+sub = intellistream_datahub_sdk.Subscription(
     external_id="engine_temps",
     name="Engine temps",
     timeseries=["engine_temperature"])
@@ -47,8 +47,8 @@ client.subscriptions.delete(["engine_temps"])
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::subscriptions::{Subscription, SubscriptionRetriever};
-use dataplatform_rust_sdk::generic::IdAndExtId;
+use intellistream_datahub_sdk::subscriptions::{Subscription, SubscriptionRetriever};
+use intellistream_datahub_sdk::generic::IdAndExtId;
 
 let sub = Subscription::new(
     "engine_temps".into(), "Engine temps".into(),

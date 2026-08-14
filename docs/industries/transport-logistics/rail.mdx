@@ -22,16 +22,16 @@ New workspace? Run this once (Python) to create the rail network (stations joine
 `connects_to` track) so the reachability check has a graph to walk. Safe to re-run.
 
 ```python
-import datahub_sdk
+import intellistream_datahub_sdk
 
-client = datahub_sdk.DataHubClient.from_env()
+client = intellistream_datahub_sdk.DataHubClient.from_env()
 
 client.resources.create(
-    [datahub_sdk.Resource(external_id=x, name=x, labels=[x]) for x in
+    [intellistream_datahub_sdk.Resource(external_id=x, name=x, labels=[x]) for x in
      ["station_oslo_s", "junction_lierstranda", "station_drammen", "station_bergen_n"]],
-    [datahub_sdk.RelForm.by_external_ids("station_oslo_s", "junction_lierstranda", "connects_to"),
-     datahub_sdk.RelForm.by_external_ids("junction_lierstranda", "station_drammen", "connects_to"),
-     datahub_sdk.RelForm.by_external_ids("station_drammen", "station_bergen_n", "connects_to")])
+    [intellistream_datahub_sdk.RelForm.by_external_ids("station_oslo_s", "junction_lierstranda", "connects_to"),
+     intellistream_datahub_sdk.RelForm.by_external_ids("junction_lierstranda", "station_drammen", "connects_to"),
+     intellistream_datahub_sdk.RelForm.by_external_ids("station_drammen", "station_bergen_n", "connects_to")])
 ```
 
 ## 1. Model the network
@@ -54,12 +54,12 @@ client.resources().create(stations, track);
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk
+import intellistream_datahub_sdk
 
 track = [
-    datahub_sdk.RelForm.by_external_ids("station_oslo_s", "junction_lierstranda", "connects_to"),
-    datahub_sdk.RelForm.by_external_ids("junction_lierstranda", "station_drammen", "connects_to"),
-    datahub_sdk.RelForm.by_external_ids("station_drammen", "station_bergen_n", "connects_to"),
+    intellistream_datahub_sdk.RelForm.by_external_ids("station_oslo_s", "junction_lierstranda", "connects_to"),
+    intellistream_datahub_sdk.RelForm.by_external_ids("junction_lierstranda", "station_drammen", "connects_to"),
+    intellistream_datahub_sdk.RelForm.by_external_ids("station_drammen", "station_bergen_n", "connects_to"),
 ]
 client.resources.create(stations, track)
 ```
@@ -68,7 +68,7 @@ client.resources.create(stations, track)
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::relations::RelForm;
+use intellistream_datahub_sdk::relations::RelForm;
 
 let track = vec![
     RelForm::by_external_ids("station_oslo_s", "junction_lierstranda", "connects_to"),
@@ -119,7 +119,7 @@ print("route open" if still_connected else "SEVERED — reroute required")
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::resources::RelatedResourcesForm;
+use intellistream_datahub_sdk::resources::RelatedResourcesForm;
 
 let reachable = api.resources.fetch_related(
     &RelatedResourcesForm::from_external_id("station_oslo_s")

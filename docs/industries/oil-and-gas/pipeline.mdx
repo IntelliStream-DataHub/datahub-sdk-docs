@@ -23,23 +23,23 @@ New workspace? Run this once (Python) to create the segment's flow series (with 
 inflow/outflow gap — a leak) and the pipeline graph the locate step walks. Safe to re-run.
 
 ```python
-import datahub_sdk, pandas as pd
+import intellistream_datahub_sdk, pandas as pd
 
-client = datahub_sdk.DataHubClient.from_env()
+client = intellistream_datahub_sdk.DataHubClient.from_env()
 
 # flow series: inflow 1000 vs outflow 940 m³/h → a 60 m³/h imbalance (leak)
 for s, v in [("segment_pn_07_flow_in_m3h", 1000.0), ("segment_pn_07_flow_out_m3h", 940.0)]:
-    client.timeseries.create([datahub_sdk.TimeSeries(external_id=s, name=s, unit="m3h", value_type="float")])
+    client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id=s, name=s, unit="m3h", value_type="float")])
     client.timeseries.insert_from_lists(timestamps=[pd.Timestamp.now(tz="UTC")], values=[v], ts=s)
 
 # the network: stations, the segment, and the valves that isolate it
 client.resources.create(
-    [datahub_sdk.Resource(external_id=x, name=x, labels=[x]) for x in
+    [intellistream_datahub_sdk.Resource(external_id=x, name=x, labels=[x]) for x in
      ["station_kollsnes", "segment_pn_07", "station_mongstad", "valve_v18", "valve_v19"]],
-    [datahub_sdk.RelForm.by_external_ids("station_kollsnes", "segment_pn_07", "connects_to"),
-     datahub_sdk.RelForm.by_external_ids("segment_pn_07", "station_mongstad", "connects_to"),
-     datahub_sdk.RelForm.by_external_ids("segment_pn_07", "valve_v18", "isolated_by"),
-     datahub_sdk.RelForm.by_external_ids("segment_pn_07", "valve_v19", "isolated_by")])
+    [intellistream_datahub_sdk.RelForm.by_external_ids("station_kollsnes", "segment_pn_07", "connects_to"),
+     intellistream_datahub_sdk.RelForm.by_external_ids("segment_pn_07", "station_mongstad", "connects_to"),
+     intellistream_datahub_sdk.RelForm.by_external_ids("segment_pn_07", "valve_v18", "isolated_by"),
+     intellistream_datahub_sdk.RelForm.by_external_ids("segment_pn_07", "valve_v19", "isolated_by")])
 ```
 
 You'll also need small `latest(id)` and `tolerance(flow)` helpers — `latest` reads the
@@ -78,7 +78,7 @@ inflow  = latest("segment_pn_07_flow_in_m3h")
 outflow = latest("segment_pn_07_flow_out_m3h")
 
 if inflow - outflow > tolerance(inflow):
-    client.events.create([datahub_sdk.Event(
+    client.events.create([intellistream_datahub_sdk.Event(
         external_id=f"leak_suspected_pn07_{int(pd.Timestamp.now().timestamp())}",
         type="leak_suspected", status="critical",
         event_time=pd.Timestamp.now(tz="UTC"),
@@ -89,7 +89,7 @@ if inflow - outflow > tolerance(inflow):
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::events::Event;
+use intellistream_datahub_sdk::events::Event;
 use chrono::Utc;
 
 let inflow  = latest("segment_pn_07_flow_in_m3h").await?;
@@ -147,7 +147,7 @@ for node in around.nodes:
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::resources::RelatedResourcesForm;
+use intellistream_datahub_sdk::resources::RelatedResourcesForm;
 
 let around = api.resources.fetch_related(
     &RelatedResourcesForm::from_external_id("segment_pn_07")

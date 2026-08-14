@@ -80,9 +80,9 @@ System.out.println(created.getItems().iterator().next().getId());
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk
+import intellistream_datahub_sdk
 
-contains = datahub_sdk.RelForm(
+contains = intellistream_datahub_sdk.RelForm(
     relationship_type="CONTAINS",
     from_external_id="plant_oslo",
     to_external_id="pump_1",
@@ -101,7 +101,7 @@ unwraps for you — `create` hands back a plain `list[EdgeProxy]`, not a wrapper
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::relations::RelForm;
+use intellistream_datahub_sdk::relations::RelForm;
 
 let contains = RelForm::by_external_ids("plant_oslo", "pump_1", "CONTAINS");
 
@@ -176,7 +176,7 @@ already hold, which is accepted anywhere an id is.
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::generic::IdAndExtId;
+use intellistream_datahub_sdk::generic::IdAndExtId;
 
 let one = api.edges.get(341).await?;
 
@@ -224,7 +224,7 @@ client.edges.delete([341])
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::generic::IdAndExtId;
+use intellistream_datahub_sdk::generic::IdAndExtId;
 
 api.edges.delete(&vec![IdAndExtId::from_id(341)]).await?;
 ```
@@ -256,12 +256,12 @@ client.edges().createTypes(List.of(form));
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk
+import intellistream_datahub_sdk
 
 catalog = client.edges.types()
 
 client.edges.create_types([
-    datahub_sdk.RelTypeForm("FLOWS_TO", description="Flow direction"),
+    intellistream_datahub_sdk.RelTypeForm("FLOWS_TO", description="Flow direction"),
 ])
 ```
 
@@ -269,7 +269,7 @@ client.edges.create_types([
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::relations::RelTypeForm;
+use intellistream_datahub_sdk::relations::RelTypeForm;
 
 let catalog = api.edges.types().await?;
 

@@ -21,17 +21,17 @@ New workspace? Run this once (Python) to create three pumps of the same model in
 so the recall walk in step 2 returns the full pull list. Safe to re-run.
 
 ```python
-import datahub_sdk
+import intellistream_datahub_sdk
 
-client = datahub_sdk.DataHubClient.from_env()
+client = intellistream_datahub_sdk.DataHubClient.from_env()
 
-nodes = [datahub_sdk.Resource(external_id="model_acme_x200", name="Acme X200 infusion pump", labels=["PumpModel"]),
-         datahub_sdk.Resource(external_id="ward_icu", name="Intensive care", labels=["Ward"])]
+nodes = [intellistream_datahub_sdk.Resource(external_id="model_acme_x200", name="Acme X200 infusion pump", labels=["PumpModel"]),
+         intellistream_datahub_sdk.Resource(external_id="ward_icu", name="Intensive care", labels=["Ward"])]
 edges = []
 for u in ["3391", "3392", "3401"]:
-    nodes.append(datahub_sdk.Resource(external_id=f"pump_icu_{u}", name=f"Infusion pump {u}", labels=["Pump"]))
-    edges += [datahub_sdk.RelForm.by_external_ids(f"pump_icu_{u}", "ward_icu", "located_in"),
-              datahub_sdk.RelForm.by_external_ids(f"pump_icu_{u}", "model_acme_x200", "is_model")]
+    nodes.append(intellistream_datahub_sdk.Resource(external_id=f"pump_icu_{u}", name=f"Infusion pump {u}", labels=["Pump"]))
+    edges += [intellistream_datahub_sdk.RelForm.by_external_ids(f"pump_icu_{u}", "ward_icu", "located_in"),
+              intellistream_datahub_sdk.RelForm.by_external_ids(f"pump_icu_{u}", "model_acme_x200", "is_model")]
 client.resources.create(nodes, edges)
 ```
 
@@ -67,20 +67,20 @@ client.resources().create(List.of(pump), List.of(inWard, isModel));
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk
+import intellistream_datahub_sdk
 
 client.resources.create(
-    [datahub_sdk.Resource(external_id="pump_icu_3391", name="Infusion pump 3391", labels=["Pump"])],
-    [datahub_sdk.RelForm.by_external_ids("pump_icu_3391", "ward_icu", "located_in"),
-     datahub_sdk.RelForm.by_external_ids("pump_icu_3391", "model_acme_x200", "is_model")])
+    [intellistream_datahub_sdk.Resource(external_id="pump_icu_3391", name="Infusion pump 3391", labels=["Pump"])],
+    [intellistream_datahub_sdk.RelForm.by_external_ids("pump_icu_3391", "ward_icu", "located_in"),
+     intellistream_datahub_sdk.RelForm.by_external_ids("pump_icu_3391", "model_acme_x200", "is_model")])
 ```
 
 </TabItem>
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::resources::Resource;
-use dataplatform_rust_sdk::relations::RelForm;
+use intellistream_datahub_sdk::resources::Resource;
+use intellistream_datahub_sdk::relations::RelForm;
 
 let mut pump = Resource::new();
 pump.external_id = "pump_icu_3391".into();
@@ -132,7 +132,7 @@ for node in affected.nodes:
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::resources::RelatedResourcesForm;
+use intellistream_datahub_sdk::resources::RelatedResourcesForm;
 
 let affected = api.resources.fetch_related(
     &RelatedResourcesForm::from_external_id("model_acme_x200").with_depth(3)).await?;

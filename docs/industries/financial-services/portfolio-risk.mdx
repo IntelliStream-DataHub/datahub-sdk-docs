@@ -21,12 +21,12 @@ New workspace? Run this once (Python) to create the desk's dataset and a portfol
 mark-to-market series with a month of daily values. Safe to re-run.
 
 ```python
-import datahub_sdk, numpy as np, pandas as pd
+import intellistream_datahub_sdk, numpy as np, pandas as pd
 
-client = datahub_sdk.DataHubClient.from_env()
+client = intellistream_datahub_sdk.DataHubClient.from_env()
 
-desk_id = client.datasets.create([datahub_sdk.Dataset(external_id="desk_equities", name="Equities desk")])[0].id
-client.timeseries.create([datahub_sdk.TimeSeries(external_id="portfolio_growth_mtm_usd",
+desk_id = client.datasets.create([intellistream_datahub_sdk.Dataset(external_id="desk_equities", name="Equities desk")])[0].id
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id="portfolio_growth_mtm_usd",
     name="Growth portfolio — MtM (USD)", unit="usd", value_type="numeric", data_set_id=desk_id)])
 idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=30, freq="1d")
 client.timeseries.insert_from_lists(timestamps=idx,
@@ -53,10 +53,10 @@ long deskId = created.getItems().iterator().next().getId();
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk
+import intellistream_datahub_sdk
 
 created = client.datasets.create([
-    datahub_sdk.Dataset(external_id="desk_equities", name="Equities desk")])
+    intellistream_datahub_sdk.Dataset(external_id="desk_equities", name="Equities desk")])
 desk_id = created[0].id
 ```
 
@@ -64,7 +64,7 @@ desk_id = created[0].id
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::datasets::Dataset;
+use intellistream_datahub_sdk::datasets::Dataset;
 
 let mut ds = Dataset::new("Equities desk".into());
 ds.external_id = "desk_equities".into();
@@ -101,7 +101,7 @@ client.timeseries().ingest(Map.of(
 <TabItem value="python" label="Python">
 
 ```python
-client.timeseries.create([datahub_sdk.TimeSeries(
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(
     external_id="portfolio_growth_mtm_usd",
     name="Growth portfolio — mark-to-market (USD)",
     unit="usd", value_type="numeric", data_set_id=desk_id)])
@@ -115,7 +115,7 @@ client.timeseries.insert_from_lists(
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::timeseries::TimeSeries;
+use intellistream_datahub_sdk::timeseries::TimeSeries;
 use chrono::Utc;
 
 let mut ts = TimeSeries::new("portfolio_growth_mtm_usd", "Growth portfolio — mark-to-market (USD)");
@@ -158,7 +158,7 @@ client.events().create(List.of(breach));
 <TabItem value="python" label="Python">
 
 ```python
-client.events.create([datahub_sdk.Event(
+client.events.create([intellistream_datahub_sdk.Event(
     external_id=f"var_limit_breach_growth_{int(pd.Timestamp.now().timestamp())}",
     type="var_limit_breach", status="open", data_set_id=desk_id,
     event_time=pd.Timestamp.now(tz="UTC"),
@@ -170,7 +170,7 @@ client.events.create([datahub_sdk.Event(
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::events::Event;
+use intellistream_datahub_sdk::events::Event;
 use chrono::Utc;
 
 let mut breach = Event::new(format!("var_limit_breach_growth_{}", Utc::now().timestamp()));
@@ -200,7 +200,7 @@ Chart the portfolio's mark-to-market over the month:
 ```python
 import matplotlib.pyplot as plt
 
-rf = datahub_sdk.RetrieveFilter(ts="portfolio_growth_mtm_usd",
+rf = intellistream_datahub_sdk.RetrieveFilter(ts="portfolio_growth_mtm_usd",
     start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=30), end=pd.Timestamp.now(tz="UTC"))
 s = pd.Series({pd.to_datetime(p.timestamp): float(p.value)
                for p in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()}).sort_index()

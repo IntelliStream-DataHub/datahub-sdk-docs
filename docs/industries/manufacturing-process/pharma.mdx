@@ -23,18 +23,18 @@ from an intermediate, which came from two raw-material lots, produced on a biore
 the upstream walk in step 2 returns a real lineage. Safe to re-run.
 
 ```python
-import datahub_sdk
+import intellistream_datahub_sdk
 
-client = datahub_sdk.DataHubClient.from_env()
+client = intellistream_datahub_sdk.DataHubClient.from_env()
 
 client.resources.create(
-    [datahub_sdk.Resource(external_id=x, name=x, labels=[lbl]) for x, lbl in
+    [intellistream_datahub_sdk.Resource(external_id=x, name=x, labels=[lbl]) for x, lbl in
      [("lot_22f_final", "Lot"), ("lot_int_88", "Lot"), ("lot_raw_acme_41", "Lot"),
       ("lot_raw_acme_42", "Lot"), ("equipment_bioreactor_3", "Equipment")]],
-    [datahub_sdk.RelForm.by_external_ids("lot_22f_final", "lot_int_88", "derived_from"),
-     datahub_sdk.RelForm.by_external_ids("lot_int_88", "lot_raw_acme_41", "derived_from"),
-     datahub_sdk.RelForm.by_external_ids("lot_int_88", "lot_raw_acme_42", "derived_from"),
-     datahub_sdk.RelForm.by_external_ids("lot_22f_final", "equipment_bioreactor_3", "produced_on")])
+    [intellistream_datahub_sdk.RelForm.by_external_ids("lot_22f_final", "lot_int_88", "derived_from"),
+     intellistream_datahub_sdk.RelForm.by_external_ids("lot_int_88", "lot_raw_acme_41", "derived_from"),
+     intellistream_datahub_sdk.RelForm.by_external_ids("lot_int_88", "lot_raw_acme_42", "derived_from"),
+     intellistream_datahub_sdk.RelForm.by_external_ids("lot_22f_final", "equipment_bioreactor_3", "produced_on")])
 ```
 
 ## 1. Record process data exactly
@@ -60,9 +60,9 @@ client.timeseries().ingest(Map.of(
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk, pandas as pd
+import intellistream_datahub_sdk, pandas as pd
 
-client.timeseries.create([datahub_sdk.TimeSeries(
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(
     external_id="batch_22f_ph", name="Batch 22F — pH", unit="ph", value_type="numeric")])
 
 client.timeseries.insert_from_lists(
@@ -73,7 +73,7 @@ client.timeseries.insert_from_lists(
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::timeseries::TimeSeries;
+use intellistream_datahub_sdk::timeseries::TimeSeries;
 use chrono::Utc;
 
 let mut ph = TimeSeries::new("batch_22f_ph", "Batch 22F — pH");
@@ -133,7 +133,7 @@ for node in lineage.nodes:
 <TabItem value="rust" label="Rust">
 
 ```rust
-use dataplatform_rust_sdk::resources::RelatedResourcesForm;
+use intellistream_datahub_sdk::resources::RelatedResourcesForm;
 
 let lineage = api.resources.fetch_related(
     &RelatedResourcesForm::from_external_id("lot_22f_final").with_depth(10)).await?;
