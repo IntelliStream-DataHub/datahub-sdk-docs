@@ -499,6 +499,77 @@ for c in points.get_items() {
 </TabItem>
 </Tabs>
 
+## Delete datapoints
+
+Clears part of a series and leaves the definition alone. To remove the series itself, see
+[delete a series](#delete-a-series).
+
+Each item names one series by `externalId` or `id`, and both window bounds are optional:
+
+| Bounds given | What is deleted |
+| --- | --- |
+| `inclusiveBegin` and `exclusiveEnd` | The half-open window between them |
+| `inclusiveBegin` only | Everything from that instant onward |
+| `exclusiveEnd` only | Everything before that instant |
+| Neither | Every datapoint of the series, leaving its definition, edges and subscriptions |
+
+Over HTTP a bound is either ISO-8601 or epoch milliseconds; anything else is a 400 naming the
+field, as is a series that does not exist. The Python and Rust clients take real datetimes, so
+they can only send the ISO form.
+
+Like a series delete, this is handed off and completes shortly after the call returns, and it
+cannot be undone.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+No Java method for this one; post to `/timeseries/data/delete`:
+
+```json
+{
+  "items": [
+    {
+      "externalId": "engine_temperature",
+      "inclusiveBegin": "2026-01-01T00:00:00Z",
+      "exclusiveEnd": "2026-02-01T00:00:00Z"
+    }
+  ]
+}
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import pandas as pd
+
+client.timeseries.delete_datapoints([
+    intellistream_datahub_sdk.DeleteFilter(
+        ts="engine_temperature",
+        inclusive_begin=pd.Timestamp("2026-01-01", tz="UTC"),
+        exclusive_end=pd.Timestamp("2026-02-01", tz="UTC"))])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use chrono::{TimeZone, Utc};
+use intellistream_datahub_sdk::generic::{DataWrapper, DeleteFilter};
+
+let filter = DeleteFilter {
+    id: None,
+    external_id: Some("engine_temperature".into()),
+    inclusive_begin: Some(Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap()),
+    exclusive_end: Some(Utc.with_ymd_and_hms(2026, 2, 1, 0, 0, 0).unwrap()),
+};
+
+api.time_series.delete_datapoints(&DataWrapper::from_vec(vec![filter])).await?;
+```
+
+</TabItem>
+</Tabs>
+
 ## IngestOptions
 
 The Java `ingest` tuning knobs (Python's `insert_from_lists` and Rust's
@@ -549,4 +620,5 @@ if (!result.isComplete()) {
 | Delete datapoints | HTTP | `timeseries.delete_datapoints` | `time_series.delete_datapoints` |
 
 Java is the one with `ingest` — the chunking, parallelising, retrying path described above.
-It is also the one missing `search`, `list` and `update`, so reach for the endpoint there.
+It is also the one missing `search`, `list`, `update` and datapoint deletes, so reach for the
+endpoint there.
