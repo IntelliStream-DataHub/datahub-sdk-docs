@@ -291,6 +291,10 @@ loop {
 Deletes the series and its datapoints. Remove any referencing subscriptions (and edges) first, or
 the backend responds 409.
 
+The definition is gone when the call returns; the datapoint purge is handed off and completes
+shortly after. Nothing can read those datapoints in the meantime, because every read resolves the
+series first.
+
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
 
