@@ -513,9 +513,9 @@ Each item names one series by `externalId` or `id`, and both window bounds are o
 | `exclusiveEnd` only | Everything before that instant |
 | Neither | Every datapoint of the series, leaving its definition, edges and subscriptions |
 
-Over HTTP a bound is either ISO-8601 or epoch milliseconds; anything else is a 400 naming the
-field, as is a series that does not exist. The Python and Rust clients take real datetimes, so
-they can only send the ISO form.
+A bound is either ISO-8601 or epoch milliseconds; anything else is a 400 naming the field, as is
+a series that does not exist. Python, Rust and Java's `Instant` overload take real datetimes, so
+those always send the ISO form.
 
 Like a series delete, this is handed off and completes shortly after the call returns, and it
 cannot be undone.
@@ -523,18 +523,26 @@ cannot be undone.
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
 
-No Java method for this one; post to `/timeseries/data/delete`:
+```java
+import java.time.Instant;
 
-```json
-{
-  "items": [
-    {
-      "externalId": "engine_temperature",
-      "inclusiveBegin": "2026-01-01T00:00:00Z",
-      "exclusiveEnd": "2026-02-01T00:00:00Z"
-    }
-  ]
-}
+client.timeseries().deleteDatapoints(
+        "engine_temperature",
+        Instant.parse("2026-01-01T00:00:00Z"),
+        Instant.parse("2026-02-01T00:00:00Z"));
+
+// A null bound leaves that side open, so two nulls empty the series:
+client.timeseries().deleteDatapoints("engine_temperature", null, null);
+```
+
+For several series at once, or to name one by id, pass `DeleteDatapoint` items instead:
+
+```java
+DeleteDatapoint window = new DeleteDatapoint();
+window.setId(7L);
+window.setInclusiveBegin("1767225600000");     // epoch millis is the other accepted form
+
+client.timeseries().deleteDatapoints(List.of(window));
 ```
 
 </TabItem>
@@ -557,12 +565,10 @@ client.timeseries.delete_datapoints([
 use chrono::{TimeZone, Utc};
 use intellistream_datahub_sdk::generic::{DataWrapper, DeleteFilter};
 
-let filter = DeleteFilter {
-    id: None,
-    external_id: Some("engine_temperature".into()),
-    inclusive_begin: Some(Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap()),
-    exclusive_end: Some(Utc.with_ymd_and_hms(2026, 2, 1, 0, 0, 0).unwrap()),
-};
+let filter = DeleteFilter::from_external_id(
+    "engine_temperature".to_string(),
+    Some(Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap()),
+    Some(Utc.with_ymd_and_hms(2026, 2, 1, 0, 0, 0).unwrap()));
 
 api.time_series.delete_datapoints(&DataWrapper::from_vec(vec![filter])).await?;
 ```
@@ -617,8 +623,7 @@ if (!result.isComplete()) {
 | Delete | `timeseries().delete` | `timeseries.delete` | `time_series.delete` |
 | Write datapoints | `insertDatapoints` / `ingest` | `insert_datapoints` / `insert_from_lists` | `insert_datapoint` / `insert_datapoints` |
 | Read datapoints | `retrieve` / `retrieveAggregated` | `retrieve_datapoints` / `retrieve_latest_datapoints` | `retrieve_datapoints` / `retrieve_latest_datapoint` |
-| Delete datapoints | HTTP | `timeseries.delete_datapoints` | `time_series.delete_datapoints` |
+| Delete datapoints | `deleteDatapoints` | `timeseries.delete_datapoints` | `time_series.delete_datapoints` |
 
 Java is the one with `ingest` — the chunking, parallelising, retrying path described above.
-It is also the one missing `search`, `list`, `update` and datapoint deletes, so reach for the
-endpoint there.
+It is also the one missing `search`, `list` and `update`, so reach for the endpoint there.
