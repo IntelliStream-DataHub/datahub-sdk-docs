@@ -144,6 +144,13 @@ check the count rather than the status.
 to resolve endpoints. Unlike the single lookup, ids that match nothing are **silently
 omitted** — compare what comes back against what you asked for.
 
+Both lookups are gated by dataset grants: reading an edge requires **read access to the data
+sets of both endpoints**, mirroring the write rule, because an edge reveals both ends. A denied
+edge behaves exactly like a missing one: `byids` omits it just as it omits an unknown id, and
+the single lookup answers `404`, so an edge you may not read is indistinguishable from one that
+does not exist. The MCP `edge_get` tool follows the same rule.
+[Dataset access control →](./datasets#access-control)
+
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
 
@@ -162,7 +169,7 @@ for (Resource endpoint : many.getNodes()) {
 <TabItem value="python" label="Python">
 
 ```python
-one = client.edges.get(341)          # EdgeProxy, or None if nothing has that id
+one = client.edges.get(341)          # EdgeProxy, or None if missing or not readable
 
 many = client.edges.by_ids([341, 342])
 for endpoint in many.nodes:
