@@ -192,6 +192,44 @@ The hierarchy expansion is what makes "master" data sets useful: filter on the t
 data set of a site or project and you get the series of the whole family beneath it, without
 knowing (or maintaining a list of) the sub-data sets.
 
+## Search series {#search}
+
+`POST /timeseries/search` is a free-text search over series. The phrase is matched against `name`,
+`externalId` and `description`, fuzzily and word-aware, so `temp` also finds `temperature` and
+`tempered`. `limit` defaults to 100 and caps at **1 000**, lower than the 10 000 of
+[`filter`](#filter-series), and `query` must be 3 to 140 characters.
+
+Results are **ranked by relevance** (`ts_rank`), strongest match first, with `id` as a tie-break so
+equal-scoring rows keep a stable order and repeated identical searches agree. Ranking means the
+database scores and sorts every match before applying `limit`, so a very broad phrase costs more
+than a narrow one.
+
+`filter` is optional and takes the same `TimeseriesFilter` as `POST /timeseries/filter`. It only
+ever removes matches: the phrase decides what the candidates are. `dataSetId` is applied by the
+search query itself, everything else is applied to the hits afterwards.
+
+```json
+{
+  "search": { "query": "temperature" },
+  "filter": { "unit": ["deg_*"], "valueType": ["FLOAT"] },
+  "limit": 50
+}
+```
+
+:::warning `search.name` and `search.description` are gone
+The phrase block is now a single `query`, the same shape the other three searches take. The two
+alternatives it used to carry were removed rather than kept: `name` matched by **exact equality**
+under an endpoint documented as full-text, and `description` ran a differently configured query
+over one column.
+
+Both have a better replacement. `filter.name` matches names as a case-insensitive pattern list
+(`["pump_*", "PMP-1"]`), which is more than `search.name` could do, and `query` already covers the
+description column.
+
+Clients exposing these as separate calls (`search_by_name`, `search_by_description`) need updating
+to match.
+:::
+
 ## Sorting and paging {#sorting-and-paging}
 
 The three node filters — `/timeseries/filter`, `/resources/filter` and `/datasets/filter` —
@@ -617,7 +655,7 @@ if (!result.isComplete()) {
 | Create | `timeseries().create` | `timeseries.create` | `time_series.create` / `create_one` |
 | Look up by id / external id | `timeseries().byIds` | `timeseries.by_ids` | `time_series.by_ids` |
 | Filter | `timeseries().filter` | `timeseries.filter` | `time_series.filter` |
-| Search | HTTP | `timeseries.search` | `time_series.search` (+ `_by_name` / `_by_description`) |
+| Search | `timeseries().search` | `timeseries.search` | `time_series.search` |
 | List | HTTP | `timeseries.list` | `time_series.list` / `list_with_limit` |
 | Update | HTTP | `timeseries.update` | `time_series.update` |
 | Delete | `timeseries().delete` | `timeseries.delete` | `time_series.delete` |
@@ -625,5 +663,6 @@ if (!result.isComplete()) {
 | Read datapoints | `retrieve` / `retrieveAggregated` | `retrieve_datapoints` / `retrieve_latest_datapoints` | `retrieve_datapoints` / `retrieve_latest_datapoint` |
 | Delete datapoints | `deleteDatapoints` | `timeseries.delete_datapoints` | `time_series.delete_datapoints` |
 
-Java is the one with `ingest` — the chunking, parallelising, retrying path described above.
-It is also the one missing `search`, `list` and `update`, so reach for the endpoint there.
+Java is the one with `ingest`, the chunking, parallelising, retrying path described above.
+It is missing `list` and `update`, so reach for the endpoint there. It gained `search` alongside
+the resource, data set and event searches it already had.

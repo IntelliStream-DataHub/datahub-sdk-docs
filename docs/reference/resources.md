@@ -315,19 +315,45 @@ let matches = api.resources.filter(&retriever).await?;
 
 ## Search {#search}
 
-Free-text search across resource **names**. Matching is fuzzy and word-aware: search `pipe`
-and you also get `pipes`, `piping`, and multi-word names containing the term. Results are
-ordered by relevance, not alphabetically.
+Free-text search across **every node type** (assets, timeseries, functions, resources, data sets
+and policies), the same breadth as `POST /resources/filter`. The phrase is matched against `name`,
+`externalId` and `description`. Matching is fuzzy and word-aware: search `pipe` and you also get
+`pipes`, `piping`, and multi-word names containing the term.
+
+Results are **ranked by relevance** (`ts_rank`), strongest match first, with `id` as a tie-break so
+equal-scoring rows keep a stable order and repeated identical searches agree. Ranking means the
+database scores and sorts every match before applying `limit`, so a very broad phrase costs more
+than a narrow one.
 
 `limit` is capped at **1 000** here, lower than the 10 000 of `filter`, and `query` must be
-3–140 characters.
+3 to 140 characters.
 
-:::caution The `filter` block on this endpoint is accepted and ignored
-A search body may carry the same `filter` as `POST /resources/filter`, and the SDKs let you pass
-one, but the resource search does not apply it — nor do the dataset and event searches. Only
-`/timeseries/search` reads its filter today. A search you believe is narrowed to a data set is
-not, so narrow it afterwards, or use `filter` and give up the relevance ranking. The gap is
-pinned by strict-xfail tests in the SDK, which turn green when it closes.
+### Narrowing with `filter` {#search-filter}
+
+`filter` is optional and takes the same criteria as `POST /resources/filter`. It only ever removes
+matches: the phrase decides what the candidates are. `nodeType` and `dataSetId` are applied by the
+search query itself, everything else is applied to the hits afterwards.
+
+```json
+{
+  "search": { "query": "pump" },
+  "filter": { "nodeType": ["timeseries"], "dataSetId": [{ "id": "12" }] },
+  "limit": 50
+}
+```
+
+:::note What changed
+`filter` used to be accepted and silently ignored here, as it was on the data set and event
+searches. All four searches now apply it.
+
+The phrase and the filter are now one query, so the database plans them together. They were briefly
+two, with the phrase capped at a 10 000-row candidate set that the filter then narrowed, which
+quietly dropped matches past that cap.
+
+Two other things moved with this. The search originally ran one query per node type and concatenated
+the results, so `limit` applied per type (a request for 50 could return 250) and results came back
+grouped by type. Policies were never searched at all, and now are, so a search with no `nodeType`
+can return rows it did not before.
 :::
 
 <Tabs groupId="lang">
