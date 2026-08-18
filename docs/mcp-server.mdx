@@ -178,7 +178,7 @@ neighbour ("the time series measuring this pump").
 | `timeseries_list` | Browse when you do not yet have a search term |
 | `timeseries_search` | Full-text search over name, description and metadata |
 | `timeseries_get` | Look up by externalId or numeric id |
-| `timeseries_create` | Create one timeseries, returns the assigned id |
+| `timeseries_create` | Create one timeseries, returns the assigned id. Needs a `unit` or a `unitExternalId` (see `unit_list`) |
 | `timeseries_update` | Update common fields by id |
 | `timeseries_delete` | Delete the definition. Existing datapoints are not removed |
 | `timeseries_get_latest` | Most recent datapoint, for "what is it reading now?" |
