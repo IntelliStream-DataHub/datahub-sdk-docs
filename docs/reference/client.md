@@ -113,6 +113,13 @@ using Keycloak Organizations only issues it when the request names `organization
 `organization:<alias>`. When the claim is missing, every call fails `401 invalid_token`,
 which looks like a credentials problem but is not.
 
+When the claim is present but names an organization this deployment holds no tenant for
+(never onboarded, or since removed), every call fails **`403`** with an
+`application/problem+json` body of `type: ".../errors/unknown-tenant"` naming the refused
+`organizationId`. Retrying never helps: an administrator has to register the organization.
+This previously surfaced as a `500`, so retry logic that keys on 5xx should be told to give
+up on it.
+
 | Variable | Java builder | Python kwarg | Rust setter | When you need it |
 | --- | --- | --- | --- | --- |
 | `SCOPE` | `.scope(...)` | `scope=` | `set_scope(...)` | `organization:*` if your realm issues the organization claim through Keycloak Organizations (see above). Entra ID requires `api://<app-id-uri>/.default`. Space-separate several. |
