@@ -16,10 +16,16 @@ From zero to a stored datapoint in about five minutes.
 
 ```kotlin
 // build.gradle.kts
+repositories {
+    mavenCentral()
+}
+
 dependencies {
-    implementation("ai.intellistream:datahub-sdk:0.1.0")
+    implementation("ai.intellistream:datahub-sdk:0.2.0")
 }
 ```
+
+The SDK targets Java 25, so the consuming project needs a JDK 25 toolchain.
 
 </TabItem>
 <TabItem value="python" label="Python">
