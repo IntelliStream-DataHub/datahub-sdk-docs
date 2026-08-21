@@ -160,7 +160,7 @@ document:
 
 ```json
 {
-  "type": "https://datahub.intellistream.ai/errors/naming-policy",
+  "type": "https://intellistream.ai/errors/naming-policy",
   "title": "Bad Request",
   "status": 400,
   "detail": "2 of 500 external ids violate naming policy 'snake_case'. Nothing was created.",
