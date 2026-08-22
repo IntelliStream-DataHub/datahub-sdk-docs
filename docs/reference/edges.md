@@ -144,6 +144,15 @@ check the count rather than the status.
 to resolve endpoints. Unlike the single lookup, ids that match nothing are **silently
 omitted** — compare what comes back against what you asked for.
 
+:::info Reading an edge needs read access to both ends
+An edge has no data set of its own, so reading one is authorised on the two resources it
+connects, the same rule the write side uses: you need **read access to both endpoints'** data
+sets. An edge you may not read looks exactly like one that doesn't exist: `404` from
+`GET /edges/{id}`, silently omitted from `POST /edges/byids`. So a missing edge in either
+response can mean "no such id" *or* "not yours to see"; don't infer that two resources are
+unlinked from it.
+:::
+
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
 
