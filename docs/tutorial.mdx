@@ -54,8 +54,10 @@ the token variant shown in step 1. See
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
 
-One dependency and a main class — memory and swap come from a JDK-builtin API, so
-nothing extra is needed for that:
+One dependency and a main class. Memory and swap come from a JDK-builtin API, so
+nothing extra is needed for that. The SDK comes from your local Maven repository, so run
+the `publishToMavenLocal` step from the [quick start](/quickstart#1-install) first if you
+have not already:
 
 ```kotlin
 // build.gradle.kts
@@ -63,8 +65,13 @@ plugins {
     application
 }
 
+repositories {
+    mavenLocal()
+    mavenCentral()
+}
+
 dependencies {
-    implementation("ai.intellistream:datahub-sdk:0.1.0")
+    implementation("ai.intellistream:datahub-sdk:0.1.0-SNAPSHOT")
 }
 
 application {
