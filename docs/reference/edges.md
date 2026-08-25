@@ -144,14 +144,13 @@ check the count rather than the status.
 to resolve endpoints. Unlike the single lookup, ids that match nothing are **silently
 omitted** — compare what comes back against what you asked for.
 
-:::info Reading an edge needs read access to both ends
-An edge has no data set of its own, so reading one is authorised on the two resources it
-connects, the same rule the write side uses: you need **read access to both endpoints'** data
-sets. An edge you may not read looks exactly like one that doesn't exist: `404` from
-`GET /edges/{id}`, silently omitted from `POST /edges/byids`. So a missing edge in either
-response can mean "no such id" *or* "not yours to see"; don't infer that two resources are
-unlinked from it.
-:::
+Both lookups are gated by dataset grants: reading an edge requires **read access to the data
+sets of both endpoints**, mirroring the write rule, because an edge reveals both ends. A denied
+edge behaves exactly like a missing one: `byids` omits it just as it omits an unknown id, and
+the single lookup answers `404`, so an edge you may not read is indistinguishable from one that
+does not exist — don't infer that two resources are unlinked from a missing edge. The MCP
+`edge_get` tool follows the same rule.
+[Dataset access control →](./datasets#access-control)
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -171,7 +170,7 @@ for (Resource endpoint : many.getNodes()) {
 <TabItem value="python" label="Python">
 
 ```python
-one = client.edges.get(341)          # EdgeProxy, or None if nothing has that id
+one = client.edges.get(341)          # EdgeProxy, or None if missing or not readable
 
 many = client.edges.by_ids([341, 342])
 for endpoint in many.nodes:
