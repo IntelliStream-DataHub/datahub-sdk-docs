@@ -183,7 +183,9 @@ Two consequences worth knowing when you code against this:
 - **A missing grant is a `403`** with an `application/problem+json` body naming the
   `dataSetId` and the `permission` (read or write) you lack. List, filter and search
   endpoints never 403 on grants: rows in data sets you cannot read are silently
-  omitted instead.
+  omitted instead. Edge reads hide rather than refuse too: reading an edge needs read
+  on both endpoints' data sets, and one you may not read is a `404` from
+  `GET /edges/{id}` and omitted from `/edges/byids`, as if it did not exist.
 - **Managing a data set itself is stricter.** Creating, updating or deleting a data set
   (as opposed to the data in it) requires the `/datasets/*/write` grant or `DATAHUB_ADMIN`;
   grants on individual data sets are never enough, deliberately: a data set is the unit
