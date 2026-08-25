@@ -38,6 +38,13 @@ build, and free-form labels ride alongside it. That is also why one `/resources/
 can hold a mix of node types — a time-series next to an asset — rather than needing one
 endpoint per type.
 
+Two of those type-labels are privileged. A create carrying `DATASET` or `POLICY` builds a
+data set or a policy, and managing those is stricter than writing data: it requires the
+`/datasets/*/write` grant or `DATAHUB_ADMIN`, whichever endpoint the request arrives
+through. Without it the call is a `403`, even when you can write the data set named in
+`dataSetId`. The same rule guards updating or deleting such a node via `/resources`, and
+edges onto a data set node. See [Access control](./datasets#access-control).
+
 :::note Numeric ids cross the wire as JSON strings
 `id` and `dataSetId` serialize as `"5677892"`, not `5677892` — ids can exceed the 53-bit
 integer a JSON number is safe for in JavaScript. The clients parse them back for you. The same

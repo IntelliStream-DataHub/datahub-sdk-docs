@@ -188,7 +188,9 @@ Two consequences worth knowing when you code against this:
   (as opposed to the data in it) requires the `/datasets/*/write` grant or `DATAHUB_ADMIN`;
   grants on individual data sets are never enough, deliberately: a data set is the unit
   access is granted on, so renaming or re-parenting one changes what existing grants
-  cover. The `403` detail spells this out.
+  cover. The rule follows the node, not the endpoint: a `DATASET`- or `POLICY`-labelled
+  node reached through `/resources` answers the same way. The `403` detail spells this
+  out.
 
 The API reads grants from the identity provider's UserInfo endpoint, not from the token,
 so a changed grant takes effect within about a minute, without a new token.
