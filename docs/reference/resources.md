@@ -27,8 +27,8 @@ it, and compared without case. Mirror the tag your operation already maintains �
 | `metadata` | map&lt;string, string&gt; | Flat key/value, filterable by exact match. |
 | `source` | string, 2–128 | The upstream system of record this came from (`SAP`, a historian, a file drop). |
 | `dataSetId` | number | The data set the resource belongs to. |
-| `geoLocation` | GeoJSON geometry | `Point`, `Polygon`, … Validated on write; stored verbatim. |
-| `isRoot` | boolean | Whether the resource is a navigation root. Deletes are checked against reachability from a root — see [Delete](#delete). |
+| `geoLocation` | GeoJSON geometry | `Point`, `Polygon`, … Validated on write; stored verbatim. Returned only on [assets](#typed-reads). |
+| `isRoot` | boolean | Whether the resource is a navigation root. Deletes are checked against reachability from a root — see [Delete](#delete). Returned only on resources and assets. |
 | `relatedResources` | object[] | Read-only view of the graph: `{ id, externalId, relationshipType, direction }` per connected node. Populated where the graph is loaded, empty otherwise. |
 | `createdTime`, `lastUpdatedTime` | epoch millis | Server-set. |
 
@@ -36,13 +36,53 @@ Labels are how the platform types a node. The type-label (`ASSET`, `TIMESERIES`,
 `POLICY`, `FUNCTION`) is what the create pipeline reads to decide which kind of entity to
 build, and free-form labels ride alongside it. That is also why one `/resources/create` call
 can hold a mix of node types — a time-series next to an asset — rather than needing one
-endpoint per type.
+endpoint per type. The same label types what a read returns: see
+[Reads come back typed](#typed-reads).
 
 :::note Numeric ids cross the wire as JSON strings
 `id` and `dataSetId` serialize as `"5677892"`, not `5677892` — ids can exceed the 53-bit
 integer a JSON number is safe for in JavaScript. The clients parse them back for you. The same
 holds for the ids on an [edge](./edges#body), `start` and `end` included.
 :::
+
+## Reads come back typed {#typed-reads}
+
+The read endpoints (`/resources/{id}`, `byids`, `filter`, `search`, `fetch-related`,
+`fetch-nearest`) return each node in the shape of its kind, and the type-label inside
+`labels` is the discriminator. There is deliberately no separate type property on the wire:
+an element whose labels contain `TIMESERIES` *is* the time-series shape.
+
+| Type-label present | Shape returned |
+| --- | --- |
+| `ASSET` | An asset: the body above, `geoLocation` included. |
+| `TIMESERIES` | A [time-series](./timeseries): `unit`, `unitExternalId`, `securityCategories`, `valueType`, `tableEngine`. |
+| `DATASET` | A [data set](./datasets). |
+| `POLICY` | A policy: `type`, `value`, `deactivated`, `templateId`. |
+| `FUNCTION` | A function. |
+| none | A plain resource, the body above. |
+
+What changed on the JSON, if you consumed the old flat shape:
+
+- Time-series report their **full label set**, not just `["TIMESERIES"]`.
+- `isRoot` appears only on resources and assets; `geoLocation` only on assets. A create
+  still accepts `geoLocation` on a flat resource body, it is just never echoed back except
+  on assets.
+- Policy responses drop the redundant `nodeType` field: the `POLICY` label carries the type.
+
+In the Java SDK (0.3.0, source-breaking) these calls return `DataWrapper<NodeModel>`, and
+the concrete class of each item is the subtype, so pattern-match to reach type-specific
+fields. `fetchRelated`/`fetchNearest` still return a `ResourceNetwork`; its `nodes` are
+`NodeModel` too.
+
+```java
+for (NodeModel node : client.resources().filter(retriever).getItems()) {
+    if (node instanceof Timeseries ts) {
+        System.out.println(ts.getExternalId() + " in " + ts.getUnit());
+    }
+}
+```
+
+Create, update and delete echoes still use the flat resource shape.
 
 ## Look up
 
@@ -57,9 +97,9 @@ compare the returned items against what you asked for when a miss matters.
 ```java
 import ai.intellistream.datahub.models.IdCollection;
 
-Resource pump = client.resources().getById(5677892).getItems().iterator().next();
+NodeModel pump = client.resources().getById(5677892).getItems().iterator().next();
 
-DataWrapper<Resource> some = client.resources().byIds(List.of(
+DataWrapper<NodeModel> some = client.resources().byIds(List.of(
         IdCollection.createFromExternalId("pump_1"),
         IdCollection.createFromId(5677892)));
 ```
@@ -273,7 +313,7 @@ retriever.getFilter().setName(List.of("pipe%"));
 retriever.getFilter().setMetadata(Map.of("work_order", "wo-sap-12344"));
 retriever.getFilter().setDataSetId(List.of(IdCollection.createFromId(12L)));
 
-DataWrapper<Resource> matches = client.resources().filter(retriever);
+DataWrapper<NodeModel> matches = client.resources().filter(retriever);
 ```
 
 </TabItem>
@@ -337,7 +377,7 @@ pinned by strict-xfail tests in the SDK, which turn green when it closes.
 ResourceSearch search = new ResourceSearch();
 search.setLimit(10);
 search.getSearch().setQuery("pump");
-DataWrapper<Resource> matches = client.resources().search(search);
+DataWrapper<NodeModel> matches = client.resources().search(search);
 ```
 
 </TabItem>
@@ -495,6 +535,11 @@ That `limit` is the one to watch: it is a silent truncation, not an error. On a 
 connected site an unbounded `depth` will hit 5 000 nodes long before it runs out of graph,
 and what you get back is a *neighbourhood*, not the component you asked for. Bound `depth`
 to 1–3 unless you know the graph is sparse.
+
+Nodes from `fetchRelated` and `fetch-nearest` come back
+[typed by label](#typed-reads) but sparsely populated: the graph stores a subset of
+columns, so a `TIMESERIES` node here has no `unit` or `securityCategories`. Fetch by id
+when you need the full record.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">

@@ -333,7 +333,7 @@ import ai.intellistream.datahub.models.IdCollection;
 import ai.intellistream.datahub.sdk.http.DatahubApiException;
 
 try {
-    DataWrapper<Resource> r = client.resources().byIds(List.of(IdCollection.createFromExternalId("pump_1")));
+    DataWrapper<NodeModel> r = client.resources().byIds(List.of(IdCollection.createFromExternalId("pump_1")));
     r.getItems().forEach(System.out::println);
 } catch (DatahubApiException e) {
     System.err.println(e.statusCode() + ": " + e.body());
