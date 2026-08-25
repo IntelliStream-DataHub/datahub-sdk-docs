@@ -102,6 +102,11 @@ names every offending item, not just the first. If the policy is set to warn ins
 response carries a [`warnings` array](./external-ids#warnings-on-the-response) next to
 `items`.
 
+One request carries at most **1 000 nodes and 1 000 relations**, and one node at most 10 000
+characters of `description`, 256 metadata entries, 64 labels and 64 KiB of raw GeoJSON in
+`geoLocation`. Past any of those is a `400` before anything is written; the same caps apply on
+[update](#update), to `set` and `add` alike. See [Limits & quotas](./limits#field-caps).
+
 A relation may reference a node being created in the same request by its `externalId`, or
 point at one that already exists. An edge whose endpoint is neither is a `400` naming the
 endpoint it could not resolve. Re-using an `externalId` that already exists in the tenant is

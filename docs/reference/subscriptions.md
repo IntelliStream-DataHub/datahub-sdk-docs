@@ -162,6 +162,20 @@ an exception raised from the iterator in Python — so a refused subscription is
 looking like an indefinitely silent stream.
 :::
 
+:::note Sockets and subscriptions are capped
+Ten concurrent connections per organisation, ten per user, and ten subscriptions multiplexed
+over one socket, by default. The two refusals behave differently, on purpose:
+
+| Over the cap on | The server | The socket |
+| --- | --- | --- |
+| Connections | Sends `reason: "websocket-limit-reached"`, then closes with **1008** | Closed |
+| Subscriptions on one socket | Sends `reason: "subscription-limit-reached"` for the one that did not fit | **Stays open** |
+
+The second arrives on the same per-subscription error path as `forbidden` and `not-found`
+above, so a client that handles those handles it. Frame shapes and the configurable numbers
+are in [Limits & quotas](./limits#websockets).
+:::
+
 :::tip Acking is at-least-once
 Ack a message only after you've durably handled it. If your process dies before the ack,
 the server redelivers it — so make your handler idempotent.

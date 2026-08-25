@@ -18,6 +18,21 @@ transient failures (HTTP 429/5xx, network) are retried. The Java client returns 
 `IngestResult` summarising what landed and what didn't.
 :::
 
+:::caution Stay inside the ingest caps
+The defaults already fit, so this only matters if you have tuned something:
+
+| Cap | Value |
+| --- | --- |
+| `items` in one request | **10,000**, exactly the default `batchSize` |
+| Datapoints in one collection, numeric | 100,000 |
+| Datapoints in one collection, `TEXT` / `MIXED` | **10,000** |
+| Body of `POST /timeseries/data` | 16 MiB (10,000 numeric points is roughly 500 KB) |
+
+Over a cap is a `400`; an oversized body is a `413`, which no retry will fix. Sustained
+volume is bounded separately by a per-minute rate limit and a daily ingest quota, both `429`
+and both retried for you. See [Limits & quotas](/reference/limits).
+:::
+
 ## Ingest a million readings
 
 <Tabs groupId="lang">
@@ -84,7 +99,7 @@ The `ingest` knobs let you trade throughput against load on the server:
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `batchSize` | `10_000` | Datapoints per request. |
+| `batchSize` | `10_000` | Datapoints per request. Do not raise it above `10_000`, the server's [`items` cap](/reference/limits#batch-caps). |
 | `parallelism` | `8` | Concurrent in-flight requests. |
 | `maxRetries` | `3` | Retries for transient failures. |
 | `failFast` | `false` | Abort on the first failed batch instead of collecting errors. |

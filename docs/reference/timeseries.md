@@ -72,6 +72,12 @@ else:
 | `mixed` | Heterogeneous values in one series. |
 
 A float written to a `bigint` series is rejected, so pick the type that matches the data.
+
+`text` and `mixed` also carry a tighter write cap than the numeric types: **10 000 datapoints
+per collection** rather than 100 000, and a lifetime ceiling of their own. The check runs once
+the series' value type is resolved, so it names the series type rather than a field. See
+[Limits & quotas](./limits#batch-caps).
+
 For a value that must reconcile exactly, use `numeric`:
 
 <Tabs groupId="lang">
@@ -327,7 +333,9 @@ api.time_series
 
 ## Write datapoints
 
-A datapoint is a `(timestamp, value)` pair grouped under a series' external id.
+A datapoint is a `(timestamp, value)` pair grouped under a series' external id. A `value` is
+capped at **64 characters** on the wire, which fits any number and any status code, and one
+collection holds at most **100 000** datapoints (10 000 for a `text` or `mixed` series).
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -583,7 +591,7 @@ The Java `ingest` tuning knobs (Python's `insert_from_lists` and Rust's
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `batchSize` | `10_000` | Maximum items per request. |
+| `batchSize` | `10_000` | Maximum items per request. Also the server's [cap](./limits#batch-caps), so do not raise it. |
 | `parallelism` | `8` | Concurrent in-flight requests. |
 | `maxRetries` | `3` | Retries for transient failures (HTTP 429/5xx, network). |
 | `failFast` | `false` | If `true`, abort on the first failed batch instead of collecting errors. |
@@ -600,8 +608,11 @@ boolean           isComplete()   // true when nothing failed and nothing was buf
 List<BatchError>  errors()       // one entry per failed batch
 ```
 
-`BatchError` is a record `(int datapointCount, int statusCode, String message)` —
-`statusCode` is `0` when the failure was a network error rather than an HTTP status.
+`BatchError` is a record `(int datapointCount, int statusCode, String message, String body)`.
+`statusCode` is `0` when the failure was a network error rather than an HTTP status, and
+`body` carries the raw response when the server sent one, so a
+[problem `type`](./limits) is readable without a second request. A three-argument constructor
+leaves `body` null, so existing call sites are unaffected.
 
 ```java
 if (!result.isComplete()) {
