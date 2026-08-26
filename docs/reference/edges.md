@@ -148,7 +148,8 @@ Both lookups are gated by dataset grants: reading an edge requires **read access
 sets of both endpoints**, mirroring the write rule, because an edge reveals both ends. A denied
 edge behaves exactly like a missing one: `byids` omits it just as it omits an unknown id, and
 the single lookup answers `404`, so an edge you may not read is indistinguishable from one that
-does not exist. The MCP `edge_get` tool follows the same rule.
+does not exist — don't infer that two resources are unlinked from a missing edge. The MCP
+`edge_get` tool follows the same rule.
 [Dataset access control →](./datasets#access-control)
 
 <Tabs groupId="lang">
