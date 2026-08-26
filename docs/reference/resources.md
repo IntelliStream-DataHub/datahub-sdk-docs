@@ -69,10 +69,15 @@ What changed on the JSON, if you consumed the old flat shape:
   on assets.
 - Policy responses drop the redundant `nodeType` field: the `POLICY` label carries the type.
 
-In the Java SDK (0.3.0, source-breaking) these calls return `DataWrapper<NodeModel>`, and
-the concrete class of each item is the subtype, so pattern-match to reach type-specific
-fields. `fetchRelated`/`fetchNearest` still return a `ResourceNetwork`; its `nodes` are
-`NodeModel` too.
+All three SDKs follow the wire here, and all three released this as **0.3.0**, which is
+source-breaking: a read that used to hand back one flat type now hands back six.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+These calls return `DataWrapper<NodeModel>`, and the concrete class of each item is the
+subtype, so pattern-match to reach type-specific fields. `fetchRelated`/`fetchNearest` still
+return a `ResourceNetwork`; its `nodes` are `NodeModel` too.
 
 ```java
 for (NodeModel node : client.resources().filter(retriever).getItems()) {
@@ -82,7 +87,57 @@ for (NodeModel node : client.resources().filter(retriever).getItems()) {
 }
 ```
 
-Create, update and delete echoes still use the flat resource shape.
+</TabItem>
+<TabItem value="python" label="Python">
+
+Each item is the same class the type's own endpoint returns, so `isinstance` works and a
+time-series from `resources.filter()` behaves exactly like one from `timeseries.by_ids()`.
+Two new classes join the set: `Asset` and `Policy`.
+
+```python
+from intellistream_datahub_sdk import TimeSeries
+
+for node in client.resources.filter(external_id="pump_*"):
+    if isinstance(node, TimeSeries):
+        print(node.external_id, node.unit)
+```
+
+When you are dispatching from data rather than branching, every node class also carries
+`node_type`, one of `asset`, `timeseries`, `function`, `resource`, `dataset`, `policy`:
+
+```python
+by_type = {}
+for node in client.resources.filter(external_id="pump_*"):
+    by_type.setdefault(node.node_type, []).append(node)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+Reads return `DataWrapper<Node>` (or `GraphDataWrapper<Node>`), where `Node` is an enum with
+one variant per type. Match it, or use the accessors for the fields every node shares.
+
+```rust
+use intellistream_datahub_sdk::Node;
+
+for node in api.resources.filter(&form).await?.get_items() {
+    match node {
+        Node::TimeSeries(ts) => println!("{} in {:?}", ts.external_id, ts.unit),
+        other => println!("{} ({:?})", other.external_id(), other.kind()),
+    }
+}
+```
+
+`Node` is `#[non_exhaustive]`, so a node type added later is not a breaking change for a
+`match` that already has a catch-all arm.
+
+</TabItem>
+</Tabs>
+
+Create echoes are typed the same way. Update and delete echoes are not: they still use the
+flat resource shape, so a time-series updated through `/resources/update` comes back as a
+resource even though the same node reads back as a time-series. Re-read it if you need the
+typed form.
 
 ## Look up
 
