@@ -161,6 +161,36 @@ Both were removed server-side as inert. The api drops unknown keys silently, so 
 carrying one looked like it was narrowing and was not.
 :::
 
+## Search {#search}
+
+`POST /datasets/search` is a free-text search over data sets. The phrase is matched against
+`name`, `externalId` and `description`, fuzzily and word-aware. `limit` defaults to 100 and caps at
+**1 000**, lower than the 10 000 of `filter`, and `query` must be 3 to 140 characters.
+
+Results are **ranked by relevance** (`ts_rank`), strongest match first, with `id` as a tie-break so
+equal-scoring rows keep a stable order and repeated identical searches agree. Ranking means the
+database scores and sorts every match before applying `limit`, so a very broad phrase costs more
+than a narrow one.
+
+`filter` is optional and takes the same criteria as [`POST /datasets/filter`](#filter). It only
+ever removes matches: the phrase decides what the candidates are.
+
+```json
+{
+  "search": { "query": "work order" },
+  "filter": { "metadata": { "source_system": "sap" } },
+  "limit": 50
+}
+```
+
+No match is an empty list, not a `404`.
+
+:::note What changed
+`filter` used to be accepted and silently ignored here, as it was on the resource and event
+searches. All four searches now apply it, as one query rather than a phrase pass followed by a
+narrowing pass.
+:::
+
 ## Access control {#access-control}
 
 Access to a data set is administered in Keycloak (or the directory behind it), not in

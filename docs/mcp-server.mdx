@@ -140,7 +140,7 @@ items, documents.
 
 | Tool | What it does |
 | --- | --- |
-| `resource_search` | Full-text search over name, description and metadata |
+| `resource_search` | Full-text search over name, externalId and description, across every node type, ranked by relevance |
 | `resource_get` | Fetch one or more by id or externalId |
 | `resource_create` | Create one node. At least one label is required |
 | `resource_update` | Update common fields by id |
@@ -176,7 +176,7 @@ neighbour ("the time series measuring this pump").
 | Tool | What it does |
 | --- | --- |
 | `timeseries_list` | Browse when you do not yet have a search term |
-| `timeseries_search` | Full-text search over name, description and metadata |
+| `timeseries_search` | Full-text search over name, externalId and description, ranked by relevance |
 | `timeseries_get` | Look up by externalId or numeric id |
 | `timeseries_create` | Create one timeseries, returns the assigned id. Needs a `unit` or a `unitExternalId` (see `unit_list`) |
 | `timeseries_update` | Update common fields by id |
@@ -189,7 +189,7 @@ neighbour ("the time series measuring this pump").
 
 | Tool | What it does |
 | --- | --- |
-| `event_search` | Full-text search, returns compact events |
+| `event_search` | Substring search over externalId, description and metadata values, newest first |
 | `event_filter` | Structured query by time range or exact field values |
 | `event_get` | Full detail for specific events by externalId and/or UUID |
 | `event_create` | Record something that happened: an alarm, a state transition |

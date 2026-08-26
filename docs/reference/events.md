@@ -566,28 +566,34 @@ findings are raised for resources but never for events — see
 
 ## Full-text search {#search}
 
-`POST /events/search` searches event **descriptions**. Matching is fuzzy and word-aware, and
-results come back ranked by relevance rather than by time. It accepts the same `filter` block
-as `POST /events/filter`:
+`POST /events/search` is a case-insensitive **substring** match over `externalId`, `description`
+and the metadata values, returned newest first by `eventTime`.
+
+It is not word-aware, and it does not rank: events live in ClickHouse and have no full-text index,
+so `pump` finds `pump` and `pumps` but not `pumping`, and rows come back newest first rather than
+best-match first. The three node-backed searches do rank by relevance. It accepts the same `filter` block as `POST /events/filter`, which
+narrows the phrase's hits:
 
 ```json
 {
   "search": { "query": "overpressure" },
-  "filter": { "type": "alarm" },
+  "filter": { "type": ["alarm"], "eventTime": { "min": 1745241600000 } },
   "limit": 50
 }
 ```
 
-:::caution The `filter` block is accepted and ignored here
-The event search does not apply it — nor do the resource and dataset searches; only
-`/timeseries/search` reads its filter today. A search you believe is narrowed to a type or a
-data set is not, so narrow it afterwards, or use `/events/filter` and give up the relevance
-ranking. The gap is pinned by strict-xfail tests in the SDK, which turn green when it closes.
+:::note What changed
+`filter` used to be accepted and silently ignored here, as it was on the resource and data set
+searches. All four searches now apply it. `dataSetId` covers everything beneath the data sets you
+name, exactly as it does on `/events/filter`.
+
+The description above is also a correction: this endpoint never was fuzzy, word-aware or
+relevance-ranked, whatever the previous wording said.
 :::
 
-`query` must be 3–140 characters of letters, digits and spaces — punctuation is rejected with
-a `400`, so strip it before sending user input straight through. `limit` here is capped at
-**1 000**, lower than the 10 000 of `filter`.
+`query` must be 3 to 140 characters. There is no character restriction beyond that: punctuation,
+underscores and non-Latin scripts are all accepted, so an externalId or a Cyrillic asset name can
+be searched for directly. `limit` here is capped at **1 000**, lower than the 10 000 of `filter`.
 
 Reach for `filter` instead whenever the question is structured (a time range, an exact type, a
 related resource). It is faster and its results are predictable.
