@@ -308,6 +308,12 @@ called. If your agent should pause for a human before it writes, **that gate bel
 agent you build**, not in the server. Give the agent a read-only token if it has no business
 writing at all.
 
+**The tools spend the REST budget.** `/mcp` sits on the same chain as everything else, so an
+agent's calls count against the same per-minute [rate limit](/reference/limits#rate-limits)
+and daily ingest quota as your own jobs, and hit the same field, batch and body-size caps. An
+agent that lists in a loop can rate-limit the pipeline it shares a tenant with. The refusal
+comes back as a `429` carrying `Retry-After`, which is worth teaching the agent to honour.
+
 **Deletes do not cascade.** Deleting a dataset leaves its resources and timeseries in place;
 deleting a timeseries leaves its datapoints. This is deliberate, but it means an agent
 tidying up will need more than one call, and a half-finished tidy leaves orphans.

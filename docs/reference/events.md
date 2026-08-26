@@ -119,6 +119,11 @@ written. Attaching the event to resources that do not exist is a `400`, as is a
 `dataSetId` naming no data set — so a typo surfaces at write time rather than as an event
 that quietly relates to nothing.
 
+Create, update and delete each take at most **10 000 events** per request, and one event
+carries at most 10 000 characters of `description`, 256 metadata entries and 100
+`relatedResources`. Past any of those is a `400`. [Limits & quotas](./limits) has the rest,
+including the daily and lifetime ceilings on how many events an organisation may hold.
+
 :::note Event ids are time-ordered UUID v7
 The ingestion paths stamp every event that has no `id` with a **UUID v7** before sending —
 `create` in the Python and Rust clients, `ingest(...)` in Java (a plain Java `create` sends

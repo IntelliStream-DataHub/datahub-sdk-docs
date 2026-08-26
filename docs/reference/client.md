@@ -311,6 +311,15 @@ Or via the environment (read by `create_api_service()`): `ENABLE_BUFFERING=true`
 </TabItem>
 </Tabs>
 
+:::note One `403` is never spooled
+A [lifetime ceiling](./limits#lifetime-ceilings) answers `403` too, and that one is
+**surfaced, not buffered**. The auth failures are worth spooling because a rotated token or a
+missing grant is fixed out of band and the data then flushes; a ceiling never becomes
+acceptable by being replayed, so spooling it would fill the buffer with data the server
+refuses every time. The client matches the problem `type`, so an ordinary permission `403`
+still buffers exactly as before.
+:::
+
 :::note Retries are idempotent
 A flush re-sends buffered data, which is safe: datapoints are keyed by `(series, timestamp)` and
 events by `id`, so the backend collapses duplicates. The SDK stamps each event with a time-ordered
@@ -375,6 +384,21 @@ match api.resources.by_ids(&vec![IdAndExtId::from_external_id("pump_1")]).await 
 limit. Each client reads them back into a native integer, so this only matters if you
 inspect raw responses.
 :::
+
+### Which failures are worth retrying {#retryable-failures}
+
+The API answers a limit it will forgive differently from one it will not, so a client can tell
+them apart from the status alone:
+
+| Response | Meaning | Do |
+| --- | --- | --- |
+| `429` + `Retry-After` | A [rate limit or daily quota](./limits) | Wait the seconds it names and replay |
+| `413` | The [request body](./limits#request-body-size) is too large | Split the batch, never retry as-is |
+| `403` with `type: ".../errors/tenant-limit-reached"` | A [lifetime ceiling](./limits#lifetime-ceilings) | Nothing to wait for: it is raised by asking |
+| `400` / `422` | Validation, including the [field and batch caps](./limits#field-caps) | Fix the request |
+
+The ingest paths act on that split for you: `429`, `5xx` and network failures are retried with
+backoff, and everything else is surfaced. [Limits & quotas](./limits) has the numbers.
 
 ### Batch writes are all-or-nothing
 
