@@ -30,7 +30,7 @@ it, and compared without case. Mirror the tag your operation already maintains �
 | `geoLocation` | GeoJSON geometry | `Point`, `Polygon`, … Validated on write; stored verbatim. Returned only on [assets](#typed-reads). |
 | `isRoot` | boolean | Whether the resource is a navigation root. Deletes are checked against reachability from a root — see [Delete](#delete). Returned only on resources and assets. |
 | `relatedResources` | object[] | Read-only view of the graph: `{ id, externalId, relationshipType, direction }` per connected node. Populated where the graph is loaded, empty otherwise. |
-| `createdTime`, `lastUpdatedTime` | epoch millis | Server-set. |
+| `createdTime`, `lastUpdatedTime` | epoch millis | Server-set. A create body may carry them, but they are ignored: the stored values are the server's. |
 
 Labels are how the platform types a node. The type-label (`ASSET`, `TIMESERIES`, `DATASET`,
 `POLICY`, `FUNCTION`) is what the create pipeline reads to decide which kind of entity to
@@ -134,10 +134,11 @@ for node in api.resources.filter(&form).await?.get_items() {
 </TabItem>
 </Tabs>
 
-Create echoes are typed the same way. Update and delete echoes are not: they still use the
-flat resource shape, so a time-series updated through `/resources/update` comes back as a
-resource even though the same node reads back as a time-series. Re-read it if you need the
-typed form.
+Create and update echoes are typed the same way, so an asset updated through
+`/resources/update` comes back as an asset carrying its `geoLocation`. One difference on the
+update echo: `relatedResources` is left empty on purpose. The request touched only some of the
+node's edges, and answering with those alone would be indistinguishable from answering with all
+of them. A delete has no echo at all, being a `204` with no body.
 
 ## Look up
 
@@ -199,9 +200,31 @@ response carries a [`warnings` array](./external-ids#warnings-on-the-response) n
 
 A relation may reference a node being created in the same request by its `externalId`, or
 point at one that already exists. An edge whose endpoint is neither is a `400` naming the
-endpoint it could not resolve. Re-using an `externalId` that already exists in the tenant is
-a `409` whose `duplicated` list names which ones — use [update](#update) to change the
-existing resource instead.
+endpoint it could not resolve.
+
+Two more checks run over the whole batch before anything is written, and they run on **every** node
+create endpoint: `/resources`, `/assets`, `/datasets`, `/functions`, `/policies` and
+`/timeseries` alike. Only `/timeseries/create` used to make them; everywhere else the database
+refused the row and you got a `500` for what is plainly a caller mistake.
+
+| Refused | Status | Named in |
+| --- | --- | --- |
+| An `externalId` already taken in the tenant, or repeated within the same batch. Compared without case. | `409` | `error.duplicated`, one entry per offending id |
+| A `dataSetId` that does not exist, or that resolves to a node which is not a data set. | `400` | `error.fields`, one entry per offending id |
+
+```json
+{
+  "error": {
+    "code": 409,
+    "message": "A node with that externalId already exists.",
+    "duplicated": [{ "externalId": "pump_1" }]
+  }
+}
+```
+
+Use [update](#update) to change an existing resource rather than re-creating it. Access is
+decided before either check, so a caller who may not write the data set is told that (`403`)
+instead of being handed a `400` about an id they were never allowed to name.
 
 :::note Edges into datasets and time-series are validated
 Two endpoint rules apply to every edge, on create and on update (an update can retarget an
@@ -593,8 +616,12 @@ to 1–3 unless you know the graph is sparse.
 
 Nodes from `fetchRelated` and `fetch-nearest` come back
 [typed by label](#typed-reads) but sparsely populated: the graph stores a subset of
-columns, so a `TIMESERIES` node here has no `unit` or `securityCategories`. Fetch by id
-when you need the full record.
+columns, so a `TIMESERIES` node here has no `unit`, no `tableEngine` and no
+`securityCategories`. Fetch by id when you need the full record.
+
+`valueType` is the one to read carefully. The graph does carry it, but only on nodes written
+since it started to, so treat it as **optional** on a graph-sourced time-series rather than
+guaranteed: present, use it; absent, fetch the series by id instead of assuming a default.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -710,6 +737,68 @@ let nearest = api.resources.fetch_nearest(
 
 </TabItem>
 </Tabs>
+
+## The `/assets` endpoints {#assets}
+
+An **asset** is the node type that can be a navigation root and the only one that carries a
+`geoLocation`. It has its own endpoint family, and every call in it is the pipeline above with
+the `ASSET` type pinned: the same ACLs, the same [naming policy](./external-ids#the-naming-policy),
+the same [create checks](#create-resources-and-relations), the same status codes. Reach for it
+when a call should only ever see assets, and for `/resources` when one call carries or returns
+several node types.
+
+| Endpoint | Behaves as | Worth knowing |
+| --- | --- | --- |
+| `POST /assets/create` | [create](#create-resources-and-relations) | Nodes only, no `relations` array. `201`, and the echo is asset-shaped. `labels` may be omitted: `ASSET` is added for you. |
+| `GET /assets/{id}` | [look up](#look-up) | One asset, wrapped in `items` like every other read. |
+| `POST /assets/byids` | [look up](#look-up) | Ids that are missing, are not assets, or are not readable are omitted rather than failing the call. |
+| `POST /assets/filter` | [filter](#filter) | The same criteria, the same paging. A `nodeType` in the body is replaced, see below. |
+| `POST /assets/search` | [search](#search) | Same replacement, and the `filter` block is still [accepted and ignored](#search). |
+| `POST /assets/update` | [update](#update) | Takes `nodes` and `relations` exactly as `/resources/update` does. |
+| `POST` or `DELETE /assets/delete` | [delete](#delete) | `204`, and the same [connectivity check](#delete). |
+
+```http
+POST /assets/create
+{
+  "items": [
+    {
+      "externalId": "plant_oslo",
+      "name": "Oslo Plant",
+      "labels": ["Plant"],
+      "isRoot": true,
+      "geoLocation": { "type": "Point", "coordinates": [10.75, 59.91] }
+    }
+  ]
+}
+```
+
+:::caution `nodeType` in the body is replaced, not merged
+A `nodeType` you send to `/assets/filter` or `/assets/search` is overwritten with `asset`.
+`nodeType` entries are combined with **OR**, so honouring a supplied `["timeseries"]` would
+*widen* a request made to `/assets` into a mixed query instead of narrowing it. Ask
+`/resources/filter` when you want a mixed set.
+:::
+
+:::note A `404` here answers three questions at once
+`GET /assets/{id}` replies the same way to an id that does not exist, an id belonging to a node
+of some other type, and an asset in a data set you may not read. That is deliberate: a
+distinguishable `403` would confirm that an id exists.
+:::
+
+## The `/functions` endpoints {#functions}
+
+A **function** is a plain node distinguished by its `FUNCTION` label, with the same shape as a
+resource. Its family is `POST /functions/create`, `GET /functions/list`, `GET /functions/{id}`,
+`POST /functions/update` and `POST` or `DELETE /functions/delete`, on the same shared pipeline.
+`GET /functions/list` takes no filter: the inventory is expected to be small.
+
+`GET /functions/{id}` is new, and completes the read surface: it returns the one function
+wrapped in `items`, and reports a function you may not read as missing (`404`) rather than
+forbidden, exactly as `GET /assets/{id}` does.
+
+The Java client has no `assets()` or `functions()` service, so reach for the endpoints there.
+Creating an asset through `resources().create` with an `ASSET` label is the same pipeline and
+gives you the same asset back.
 
 ## What each client covers {#client-coverage}
 
