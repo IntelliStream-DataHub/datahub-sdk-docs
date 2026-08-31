@@ -69,8 +69,6 @@ Three rules govern which fields appear where:
   refused rather than accepted and dropped. Send an `ASSET`-labelled body instead.
 - A policy carries no `nodeType` field. The `POLICY` label is the type.
 
-All three SDKs model this shape.
-
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
 
