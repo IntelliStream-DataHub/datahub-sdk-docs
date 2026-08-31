@@ -67,7 +67,7 @@ forever.
 A convention an administrator configures on top of the floor. It applies to **every node type
 whose external id is an identity**: resources and assets, data sets, time-series, functions and
 policies. Enforcement sits on the one write path they share, so it cannot cover one create
-endpoint and miss another. (`POST /policies` was the last one it missed, and no longer is.)
+endpoint and miss another.
 
 | Preset | Accepts |
 | --- | --- |

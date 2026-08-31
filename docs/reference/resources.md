@@ -61,16 +61,15 @@ an element whose labels contain `TIMESERIES` *is* the time-series shape.
 | `FUNCTION` | A function. |
 | none | A plain resource, the body above. |
 
-What changed on the JSON, if you consumed the old flat shape:
+Three rules govern which fields appear where:
 
-- Time-series report their **full label set**, not just `["TIMESERIES"]`.
-- `isRoot` appears only on resources and assets; `geoLocation` only on assets. A create
-  still accepts `geoLocation` on a flat resource body, it is just never echoed back except
-  on assets.
-- Policy responses drop the redundant `nodeType` field: the `POLICY` label carries the type.
+- A time-series carries its **full label set**, not only `["TIMESERIES"]`.
+- `isRoot` belongs to resources and assets; `geoLocation` belongs to assets. A flat resource
+  body naming a `geoLocation` is a `400`: a plain resource has nowhere to store one, so it is
+  refused rather than accepted and dropped. Send an `ASSET`-labelled body instead.
+- A policy carries no `nodeType` field. The `POLICY` label is the type.
 
-All three SDKs follow the wire here, and all three released this as **0.3.0**, which is
-source-breaking: a read that used to hand back one flat type now hands back six.
+All three SDKs model this shape as of **0.3.0**.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -202,10 +201,9 @@ A relation may reference a node being created in the same request by its `extern
 point at one that already exists. An edge whose endpoint is neither is a `400` naming the
 endpoint it could not resolve.
 
-Two more checks run over the whole batch before anything is written, and they run on **every** node
-create endpoint: `/resources`, `/assets`, `/datasets`, `/functions`, `/policies` and
-`/timeseries` alike. Only `/timeseries/create` used to make them; everywhere else the database
-refused the row and you got a `500` for what is plainly a caller mistake.
+Two more checks run over the whole batch before anything is written, on **every** node create
+endpoint: `/resources`, `/assets`, `/datasets`, `/functions`, `/policies` and `/timeseries`
+alike. Both refuse the whole request, so a rejected batch creates nothing.
 
 | Refused | Status | Named in |
 | --- | --- | --- |
@@ -619,14 +617,13 @@ Nodes from `fetchRelated` and `fetch-nearest` come back
 node's columns, so a node from these endpoints is not the full record. Fetch by id when you
 need everything.
 
-The subset is larger than it used to be. A `TIMESERIES` node now carries its `unit`,
-`unitExternalId` and `valueType`, and every node carries its `metadata`. What is still absent
-is anything the graph does not store.
+A `TIMESERIES` node from these endpoints carries `unit`, `unitExternalId` and `valueType`.
+Every node carries its `metadata`.
 
-Treat all of these as **optional** rather than guaranteed. Each one is only on nodes written
-since the graph started carrying it, so an older node reports it missing: present, use it;
-absent, fetch by id rather than assuming a default. That distinction matters most for
-`valueType`, where a default would claim a storage type the series may not have.
+Treat each of those as **optional** rather than guaranteed. The graph is a projection, and not
+every node in it carries every field: present, use it; absent, fetch the node by id rather than
+assuming a default. That matters most for `valueType`, where a default would claim a storage
+type the series may not have.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
