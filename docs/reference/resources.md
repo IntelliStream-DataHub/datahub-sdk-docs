@@ -69,7 +69,7 @@ Three rules govern which fields appear where:
   refused rather than accepted and dropped. Send an `ASSET`-labelled body instead.
 - A policy carries no `nodeType` field. The `POLICY` label is the type.
 
-All three SDKs model this shape as of **0.3.0**.
+All three SDKs model this shape.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -619,11 +619,6 @@ need everything.
 
 A `TIMESERIES` node from these endpoints carries `unit`, `unitExternalId` and `valueType`.
 Every node carries its `metadata`.
-
-Treat each of those as **optional** rather than guaranteed. The graph is a projection, and not
-every node in it carries every field: present, use it; absent, fetch the node by id rather than
-assuming a default. That matters most for `valueType`, where a default would claim a storage
-type the series may not have.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
