@@ -55,7 +55,7 @@ an element whose labels contain `TIMESERIES` *is* the time-series shape.
 | Type-label present | Shape returned |
 | --- | --- |
 | `ASSET` | An asset: the body above, `geoLocation` included. |
-| `TIMESERIES` | A [time-series](./timeseries): `unit`, `unitExternalId`, `securityCategories`, `valueType`, `tableEngine`. |
+| `TIMESERIES` | A [time-series](./timeseries): `unit`, `unitExternalId`, `valueType`. |
 | `DATASET` | A [data set](./datasets). |
 | `POLICY` | A policy: `type`, `value`, `deactivated`, `templateId`. |
 | `FUNCTION` | A function. |
@@ -615,13 +615,18 @@ and what you get back is a *neighbourhood*, not the component you asked for. Bou
 to 1–3 unless you know the graph is sparse.
 
 Nodes from `fetchRelated` and `fetch-nearest` come back
-[typed by label](#typed-reads) but sparsely populated: the graph stores a subset of
-columns, so a `TIMESERIES` node here has no `unit`, no `tableEngine` and no
-`securityCategories`. Fetch by id when you need the full record.
+[typed by label](#typed-reads) but sparsely populated: the graph holds a subset of each
+node's columns, so a node from these endpoints is not the full record. Fetch by id when you
+need everything.
 
-`valueType` is the one to read carefully. The graph does carry it, but only on nodes written
-since it started to, so treat it as **optional** on a graph-sourced time-series rather than
-guaranteed: present, use it; absent, fetch the series by id instead of assuming a default.
+The subset is larger than it used to be. A `TIMESERIES` node now carries its `unit`,
+`unitExternalId` and `valueType`, and every node carries its `metadata`. What is still absent
+is anything the graph does not store.
+
+Treat all of these as **optional** rather than guaranteed. Each one is only on nodes written
+since the graph started carrying it, so an older node reports it missing: present, use it;
+absent, fetch by id rather than assuming a default. That distinction matters most for
+`valueType`, where a default would claim a storage type the series may not have.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
