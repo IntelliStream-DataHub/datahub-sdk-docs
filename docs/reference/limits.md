@@ -19,6 +19,7 @@ second.
 | [Rate limit](#rate-limits) | `429` + `Retry-After` | `.../errors/rate-limit-exceeded` | Wait the seconds it names |
 | [Daily ingest quota](#daily-ingest-quotas) | `429` + `Retry-After` | `.../errors/ingest-quota-exceeded` | Wait until 00:00 UTC |
 | [Lifetime ceiling](#lifetime-ceilings) | `403`, no `Retry-After` | `.../errors/tenant-limit-reached` | Ask for it to be raised |
+| [Graph transfer](#graph-transfer) | `400` on export, `413` on import | an `error` body, not a problem document | It does not: the component is too large to move as one file |
 
 Every `type` above is prefixed `https://intellistream.ai/errors/`, and the `429` and `413`
 bodies are [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) problem documents served as
@@ -96,6 +97,26 @@ them not being real is not.
 
 A `413` is **terminal**. The same request will never become acceptable by being sent again,
 so split the batch instead of retrying it.
+
+`POST /resources/import` is under the 4 MiB cap like everything else, even though the
+[graph file format](./resources#graph-transfer) itself allows up to 512 MB. A deployment that
+imports larger graphs raises `datahub.limits.max-body-bytes`, which is deployment-wide, and
+the ceiling on any reverse proxy in front of it.
+
+## Graph transfer {#graph-transfer}
+
+[Export and import](./resources#graph-transfer) of a graph component have ceilings of their
+own, fixed in the file format rather than set by the deployment:
+
+| Limit | Cap | Answered with |
+| --- | --- | --- |
+| Nodes in one component or file | 2 000 000 | `400` on export, `413` on import |
+| Relationships in one component or file | 2 000 000 | `400` on export, `413` on import |
+| Compressed file size on import | 512 MB | `413` |
+
+These answer with the `{ "error": { "code", "message" } }` body the resource endpoints use,
+not a problem document, and none of them clears by waiting: a component over the cap cannot
+be exported as one file at all.
 
 ## Rate limits {#rate-limits}
 
