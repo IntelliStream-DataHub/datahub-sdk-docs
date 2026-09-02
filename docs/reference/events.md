@@ -53,14 +53,11 @@ HTTP caller should expect the quotes.
 :::
 
 :::note One list, not two parallel ones
-A client still sending the retired `relatedResourceIds` / `relatedResourceExternalIds` names
-is refused with a `400` naming them as [unknown fields](./client#unknown-fields).
-
 Supply an `id`, an `externalId`, or both. The server resolves whichever side you left out and
 returns both, so a read always gives you the pair. Sending both when they name *different*
 resources is a `400` rather than a guess about which one you meant. The field names
 `relatedResourceIds` and `relatedResourceExternalIds` are unknown to the API and are refused
-with a `400` (`type: ".../errors/unreadable-request-body"`), like any other unknown field.
+with a `400`, like any other [unknown field](./client#unknown-fields).
 :::
 
 ## Create {#create}
