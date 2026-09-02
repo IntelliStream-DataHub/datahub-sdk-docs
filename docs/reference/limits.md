@@ -6,7 +6,7 @@ description: The size, rate and volume ceilings the API enforces, the status cod
 
 # Limits & quotas
 
-The API enforces a handful of ceilings, and the status code says which one you hit and what to
+The API enforces six kinds of ceiling, and the status code says which one you hit and what to
 do about it. That is the whole design: **what clears by waiting answers `429` and carries a
 `Retry-After`, and what does not answers something else.** Retry the first kind, fix the
 second.
@@ -70,12 +70,9 @@ The tighter [`TEXT`/`MIXED`](./timeseries#value-types) cap is checked in the ser
 series' value type has been resolved, so it comes back naming the series type rather than the
 field. Split a text series into collections of 10 000 points or fewer.
 
-:::caution The OpenAPI schema used to advertise caps nothing enforced
-Some endpoints, `/events/delete` among them, carried a documented maximum in the schema that
-the runtime never checked, so an oversized batch went through. Those caps are **enforced
-now**. Code written against the advertised numbers is unaffected; code that quietly relied on
-them not being real is not.
-:::
+The `items` cap is enforced wherever the handler validates the body. `/events/update` and
+`/events/delete` do not, so an oversized update or delete batch is bounded only by the
+[request body size](#request-body-size).
 
 ## Request body size {#request-body-size}
 
@@ -120,7 +117,7 @@ be exported as one file at all.
 
 ## Rate limits {#rate-limits}
 
-Counted per organisation and per user in a fixed one-minute window, with separate budgets for
+Counted per organization and per user in a fixed one-minute window, with separate budgets for
 reads and writes.
 
 Which budget a request spends follows what it **does**, not which method it uses. A `GET` is a
@@ -133,7 +130,7 @@ allowance, which is the larger of the two.
 
 | Scope | Writes / min | Reads / min |
 | --- | --- | --- |
-| Organisation | 2 000 | 6 000 |
+| Organization | 2 000 | 6 000 |
 | User | 600 | 1 200 |
 
 ```json
@@ -157,7 +154,7 @@ ingest job share one allowance.
 
 ## Daily ingest quotas {#daily-ingest-quotas}
 
-Per organisation, per UTC day, reset at 00:00 UTC. `Retry-After` points at that reset, so it
+Per organization, per UTC day, reset at 00:00 UTC. `Retry-After` points at that reset, so it
 can be hours.
 
 | `metric` | Default per day |
@@ -185,8 +182,8 @@ functions: they are one population, not five.
 
 ## Lifetime ceilings {#lifetime-ceilings}
 
-Totals, not rates: how large an organisation may grow. Unlike everything above, these are
-**off unless a deployment turns them on**, and the numbers size a free or trial organisation.
+Totals, not rates: how large an organization may grow. Unlike everything above, these are
+**off unless a deployment turns them on**, and the numbers size a free or trial organization.
 Handle the `403`, but do not plan your data model around these figures: ask whoever runs your
 deployment what applies to you.
 
@@ -210,7 +207,7 @@ deployment what applies to you.
 
 There is deliberately **no `Retry-After`**: waiting does not clear a ceiling, and the status
 is `403` rather than `429` so no client mistakes it for one that does. The ceiling moves when
-someone raises it, which is a conversation with IntelliStream, not a retry.
+someone raises it, which is a conversation with whoever operates the deployment, not a retry.
 
 Whether deleting helps depends on the metric:
 
@@ -226,7 +223,7 @@ Both endpoints, `/timeseries/datapoints/subscription/listen/**` and
 
 | Cap | Default |
 | --- | --- |
-| Concurrent connections per organisation | 10 |
+| Concurrent connections per organization | 10 |
 | Concurrent connections per user | 10 |
 | Subscriptions multiplexed over one socket | 10 |
 
@@ -265,12 +262,10 @@ So rate limits and daily quotas take care of themselves: the client backs off an
 A `413` or a validation failure reaches your code, which is the right place for it, since
 neither is fixed by trying again.
 
-A lifetime ceiling is the one `403` that does **not** spool. The others are worth spooling
-because an expired token or a missing grant is fixed out of band and the data then flushes; a
-ceiling never becomes acceptable by being replayed, so buffering it would fill the spool with
-data the server refuses every time and bury the one message that says the limit is raised by
-asking. The client tells them apart on the problem `type`, so the ceiling surfaces on the call
-that hit it, in `errors()` on the [`IngestResult`](./timeseries#ingestresult).
+A lifetime ceiling is the one `403` that does **not** spool: it surfaces on the call that hit
+it, in `errors()` on the [`IngestResult`](./timeseries#ingestresult). Why the client treats it
+differently from the other `403`s is under
+[durable ingest buffering](./client#durable-ingest-buffering).
 
 Two things to check in your own configuration:
 

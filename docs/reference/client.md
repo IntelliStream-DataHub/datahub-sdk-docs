@@ -80,7 +80,7 @@ let api = blocking::create_api_service();
 | Service | Java | Python | Rust |
 | --- | --- | --- | --- |
 | Resources | `client.resources()` | `client.resources` | `api.resources` |
-| Time-series | `client.timeseries()` | `client.timeseries` | `api.time_series` |
+| Time series | `client.timeseries()` | `client.timeseries` | `api.time_series` |
 | Datasets | `client.datasets()` | `client.datasets` | `api.datasets` |
 | Events | `client.events()` | `client.events` | `api.events` |
 | Units | `client.units()` | `client.units` | `api.units` |
@@ -97,7 +97,6 @@ bearer token **or** OAuth2 client-credentials (the SDK fetches and refreshes the
 | `BASE_URL` | API base URL (required) |
 | `TOKEN` | Static bearer token |
 | `CLIENT_ID` / `CLIENT_SECRET` / `TOKEN_URI` | OAuth2 client-credentials (all three) |
-| `PROJECT_NAME` | Optional project/tenant hint |
 
 `fromEnv()` / `from_env()` / `create_api_service()` read these from the environment,
 falling back to a `.env` file in the working directory (real environment variables win).
@@ -117,8 +116,6 @@ When the claim is present but names an organization this deployment holds no ten
 (never onboarded, or since removed), every call fails **`403`** with an
 `application/problem+json` body of `type: ".../errors/unknown-tenant"` naming the refused
 `organizationId`. Retrying never helps: an administrator has to register the organization.
-This previously surfaced as a `500`, so retry logic that keys on 5xx should be told to give
-up on it.
 
 | Variable | Java builder | Python kwarg | Rust setter | When you need it |
 | --- | --- | --- | --- | --- |
@@ -135,8 +132,8 @@ up on it.
 | The identity provider refused the token | Calls succeed, then start failing part-way through a run | Get a new token |
 
 The second one catches long-running processes. The API checks your token locally (signature,
-expiry, issuer) and separately reads your dataset grants from the identity provider's UserInfo
-endpoint, so a token can pass the first check and still be refused by the second: it is unexpired,
+expiry, issuer) and separately reads your data set grants from the identity provider's UserInfo
+endpoint. A token can pass the first check and still be refused by the second: it is unexpired,
 but the session behind it has ended, because an idle or maximum session lifetime elapsed or
 somebody signed out. The response carries `WWW-Authenticate: Bearer error="invalid_token"` and a
 problem+json body with `type: ".../errors/token-rejected"`.
@@ -249,9 +246,10 @@ starts from a fresh request.
 The identity provider must be configured to trust the external issuer, and the external identity
 must map to a real user on that side. For Keycloak that means an Identity Provider with **JWT
 Authorization Grant** enabled (Keycloak 26.5+), a client with the matching capability, and a
-linked user carrying the roles and tenant claim. See `EntraID.md` in the platform repository for
-the full walkthrough, including the audience and assertion-lifetime settings that trip up a first
-attempt.
+linked user carrying the roles and tenant claim. See
+[`EntraID.md`](https://github.com/IntelliStream-DataHub/datahub-platform/blob/master/EntraID.md)
+in the platform repository for the full walkthrough, including the audience and
+assertion-lifetime settings that trip up a first attempt.
 :::
 
 ### From HashiCorp Vault (Java)
@@ -269,8 +267,8 @@ DatahubConfig cfg = DatahubConfig.fromVaultAppRoleEnv("datahub/sdk");          /
 ## Durable ingest buffering
 
 Optional and **off by default**. When enabled, datapoint and event ingestion that can't reach the
-API — or is rejected with an auth failure (HTTP 401/403, e.g. an expired or rotated token) — spools
-to disk and is flushed automatically on the next ingest call, so neither a transient outage nor a
+API, or is rejected with an auth failure (HTTP 401/403, e.g. an expired or rotated token), spools
+to disk and is flushed automatically on the next ingest call. Neither a transient outage nor a
 credential hiccup loses data or raises. The buffer is a segmented, compressed log (gzip in Java,
 zstd in Rust/Python) bounded on two axes, either of which may be left unset; an unset axis defaults
 to **72 hours** / **5 GiB** once buffering is on:
@@ -347,7 +345,7 @@ A [lifetime ceiling](./limits#lifetime-ceilings) answers `403` too, and that one
 missing grant is fixed out of band and the data then flushes; a ceiling never becomes
 acceptable by being replayed, so spooling it would fill the buffer with data the server
 refuses every time. The client matches the problem `type`, so an ordinary permission `403`
-still buffers exactly as before.
+is buffered.
 :::
 
 :::note Retries are idempotent
@@ -442,8 +440,7 @@ Two responses are worth recognising by shape:
   configured [naming policy](./external-ids#the-naming-policy). Nothing was created; the
   `violations` array names each one and suggests a replacement.
 - **A `warnings` array beside `items` on a `2xx`** — the write succeeded, and the ids in it
-  are in a data steward's queue. The field is absent when empty, so existing code is
-  unaffected.
+  are in a data steward's queue. The field is absent when empty.
 
 Both shapes, and the rules behind them, are in
 [External ids & naming](./external-ids).

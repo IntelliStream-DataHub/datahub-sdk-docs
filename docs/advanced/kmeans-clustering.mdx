@@ -19,15 +19,14 @@ centre. That one idea answers three different operational questions, all covered
 (cohorts), and *which parts of the network belong together?* (communities). The trick is
 always the same: turn the thing you want to group into a **feature vector**.
 
-:::tip Need data to run this?
+:::info Needs a sandbox
 These steps read series (and a graph for section 3) that already exist.
-[Generate a sandbox](/advanced/generate-sample-data) first.
+[Generate a sandbox](/advanced/generate-sample-data) first: sections I and F.
 :::
 
 :::tip New to machine learning?
 No background needed. Skim the [gentle primer](/advanced/machine-learning-gently) for the
-ideas in plain language — model, feature, training, and the algorithm itself — and use
-[Generate sample data](/advanced/generate-sample-data) for a sandbox to run this against.
+ideas in plain language — model, feature, training, and the algorithm itself.
 :::
 
 ## 1. Asset cohorts — group assets that behave alike
@@ -60,7 +59,8 @@ assets = ["pump_07", "pump_08", "pump_11", "pump_19"]   # ...your fleet
 X = pd.DataFrame([signature(a) for a in assets], index=assets)
 Xs = StandardScaler().fit_transform(X)
 
-km = KMeans(n_clusters=4, n_init=10, random_state=0).fit(Xs)
+# k must be well below the number of assets, or every asset is its own cluster
+km = KMeans(n_clusters=2, n_init=10, random_state=0).fit(Xs)
 X["cohort"] = km.labels_
 ```
 
@@ -119,6 +119,10 @@ for asset, d in zip(assets, dist):
             type="peer_outlier", status="open",
             event_time=pd.Timestamp.now(tz="UTC"),
             metadata={"asset": asset, "cohort": str(int(km.labels_[assets.index(asset)]))})])
+
+outliers = list(client.events.filter(intellistream_datahub_sdk.EventFilter(
+    basic_filter=intellistream_datahub_sdk.BasicEventFilter(type="peer_outlier"), limit=100)))
+print(f"{len(outliers)} peer outlier(s) on record")
 ```
 
 ## 2. Operating regimes — group an asset's *states*
@@ -191,7 +195,7 @@ the k that separates clusters best:
 ```python
 from sklearn.metrics import silhouette_score
 scores = {k: silhouette_score(Xs, KMeans(k, n_init=10, random_state=0).fit_predict(Xs))
-          for k in range(2, 8)}
+          for k in range(2, len(Xs))}          # the silhouette needs fewer clusters than points
 best_k = max(scores, key=scores.get)
 ```
 

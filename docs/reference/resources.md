@@ -29,13 +29,13 @@ it, and compared without case. Mirror the tag your operation already maintains �
 | `dataSetId` | number | The data set the resource belongs to. |
 | `geoLocation` | GeoJSON geometry | `Point`, `Polygon`, … Validated on write; stored verbatim. Returned only on [assets](#typed-reads). |
 | `isRoot` | boolean | Whether the resource is a navigation root. Deletes are checked against reachability from a root — see [Delete](#delete). Returned only on resources and assets. |
-| `relatedResources` | object[] | Read-only view of the graph: `{ id, externalId, relationshipType, direction }` per connected node. Populated where the graph is loaded, empty otherwise. |
+| `relatedResources` | object[] | Read-only view of the graph: `{ id, externalId, relationshipType, direction, edgeId }` per connected node. Populated on the create echo and on `fetch-related` / `fetch-nearest`; empty on `/resources/{id}`, `byids`, `filter` and `search`. |
 | `createdTime`, `lastUpdatedTime` | epoch millis | Server-set. A create body may carry them, but they are ignored: the stored values are the server's. |
 
 Labels are how the platform types a node. The type-label (`ASSET`, `TIMESERIES`, `DATASET`,
 `POLICY`, `FUNCTION`) is what the create pipeline reads to decide which kind of entity to
 build, and free-form labels ride alongside it. That is also why one `/resources/create` call
-can hold a mix of node types — a time-series next to an asset — rather than needing one
+can hold a mix of node types — a time series next to an asset — rather than needing one
 endpoint per type. The same label types what a read returns: see
 [Reads come back typed](#typed-reads).
 
@@ -57,12 +57,12 @@ holds for the ids on an [edge](./edges#body), `start` and `end` included.
 The read endpoints (`/resources/{id}`, `byids`, `filter`, `search`, `fetch-related`,
 `fetch-nearest`) return each node in the shape of its kind, and the type-label inside
 `labels` is the discriminator. There is deliberately no separate type property on the wire:
-an element whose labels contain `TIMESERIES` *is* the time-series shape.
+an element whose labels contain `TIMESERIES` *is* the time series shape.
 
 | Type-label present | Shape returned |
 | --- | --- |
 | `ASSET` | An asset: the body above, `geoLocation` included. |
-| `TIMESERIES` | A [time-series](./timeseries): `unit`, `unitExternalId`, `valueType`. |
+| `TIMESERIES` | A [time series](./timeseries): `unit`, `unitExternalId`, `valueType`. |
 | `DATASET` | A [data set](./datasets). |
 | `POLICY` | A policy: `type`, `value`, `deactivated`, `templateId`. |
 | `FUNCTION` | A function. |
@@ -70,7 +70,7 @@ an element whose labels contain `TIMESERIES` *is* the time-series shape.
 
 Three rules govern which fields appear where:
 
-- A time-series carries its **full label set**, not only `["TIMESERIES"]`.
+- A time series carries its **full label set**, not only `["TIMESERIES"]`.
 - `isRoot` belongs to resources and assets; `geoLocation` belongs to assets. A flat resource
   body naming a `geoLocation` is a `400`: a plain resource has nowhere to store one, so it is
   refused rather than accepted and dropped. Send an `ASSET`-labelled body instead.
@@ -95,8 +95,8 @@ for (NodeModel node : client.resources().filter(retriever).getItems()) {
 <TabItem value="python" label="Python">
 
 Each item is the same class the type's own endpoint returns, so `isinstance` works and a
-time-series from `resources.filter()` behaves exactly like one from `timeseries.by_ids()`.
-Two new classes join the set: `Asset` and `Policy`.
+time series from `resources.filter()` behaves exactly like one from `timeseries.by_ids()`.
+`Asset` and `Policy` are in the set.
 
 ```python
 from intellistream_datahub_sdk import TimeSeries
@@ -234,17 +234,17 @@ Use [update](#update) to change an existing resource rather than re-creating it.
 decided before either check, so a caller who may not write the data set is told that (`403`)
 instead of being handed a `400` about an id they were never allowed to name.
 
-:::note Edges into datasets and time-series are validated
-Two endpoint rules apply to every edge, on create and on update (an update can retarget an
-edge or change its type):
+:::note Relationships into data sets and time series are validated
+Two endpoint rules apply to every relationship, on create and on update (an update can
+retarget a relationship or change its type):
 
-- A relation **to a dataset** must use the `BELONGS_TO` relationship type — that is the
-  relation the dataset hierarchy and membership are built from, and anything else is
+- A relationship **to a data set** must use the `BELONGS_TO` relationship type — that is the
+  relationship the data set hierarchy and membership are built from, and anything else is
   rejected with a `400`.
-- A **dataset → time-series** edge is accepted only when the series has no dataset yet, or
-  already belongs to that very dataset (creating a series inside a dataset produces exactly
-  that membership edge). A series in a *different* dataset is rejected with a `400` — a
-  time-series has one dataset.
+- A **data set → time series** relationship is accepted only when the series has no data set
+  yet, or already belongs to that very data set (creating a series inside a data set produces
+  exactly that membership relationship). A series in a *different* data set is rejected with a
+  `400` — a time series has one data set.
 :::
 
 <Tabs groupId="lang">
@@ -328,8 +328,8 @@ nodes and relations together, in one transaction. `POST /edges/create` sends the
 themselves, for when both ends already exist and repeating them would be noise — same fields,
 same rules, same edges back.
 
-That endpoint, and the rest of the `/edges` surface (reading an edge back, deleting one
-without touching its endpoints, the relationship-type catalog), has its own page.
+That endpoint, and the rest of the `/edges` surface (reading a relationship back, deleting one
+without touching its endpoints, the relationship-type catalogue), has its own page.
 [Edges →](./edges)
 
 To disconnect two resources without touching either of them, [delete the edge](./edges#delete).
@@ -452,7 +452,7 @@ database scores and sorts every match before applying `limit`, so a very broad p
 than a narrow one.
 
 `limit` is capped at **1 000** here, lower than the 10 000 of `filter`, and `query` must be
-3 to 140 characters.
+3 to 140 characters. `limit` applies across all node types, and `POLICY` nodes are searched.
 
 ### Narrowing with `filter` {#search-filter}
 
@@ -467,20 +467,6 @@ search query itself, everything else is applied to the hits afterwards.
   "limit": 50
 }
 ```
-
-:::note What changed
-`filter` used to be accepted and silently ignored here, as it was on the data set and event
-searches. All four searches now apply it.
-
-The phrase and the filter are now one query, so the database plans them together. They were briefly
-two, with the phrase capped at a 10 000-row candidate set that the filter then narrowed, which
-quietly dropped matches past that cap.
-
-Two other things moved with this. The search originally ran one query per node type and concatenated
-the results, so `limit` applied per type (a request for 50 could return 250) and results came back
-grouped by type. Policies were never searched at all, and now are, so a search with no `nodeType`
-can return rows it did not before.
-:::
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -561,8 +547,7 @@ Updatable node fields are `externalId`, `name`, `description`, `source`, `dataSe
 Sending both `set` and `setNull` for one field is a `400`: the request is contradictory, so
 it is refused rather than resolved by precedence. `setNull` against `name` or `externalId`
 is also a `400`, for the same reason a create cannot omit them: every resource has to have
-both. Rename with `set` instead. (This used to return `200` and quietly change nothing, so
-check the value rather than the status if you are working against an older deployment.)
+both. Rename with `set` instead.
 Changing `externalId` runs it past the
 [naming policy](./external-ids#the-naming-policy), which reports violations per item in an
 RFC 9457 problem response. The whole batch is **all-or-nothing**.
@@ -652,13 +637,12 @@ connected site an unbounded `depth` will hit 5 000 nodes long before it runs out
 and what you get back is a *neighbourhood*, not the component you asked for. Bound `depth`
 to 1–3 unless you know the graph is sparse.
 
-Nodes from `fetchRelated` and `fetch-nearest` come back
-[typed by label](#typed-reads) but sparsely populated: the graph holds a subset of each
-node's columns, so a node from these endpoints is not the full record. Fetch by id when you
-need everything.
-
-A `TIMESERIES` node from these endpoints carries `unit`, `unitExternalId` and `valueType`.
-Every node carries its `metadata`.
+Nodes from `fetchRelated` and `fetch-nearest` come back [typed by label](#typed-reads) and
+carry the fields the graph mirror holds: `id`, `externalId`, `name`, `description`, `source`,
+`dataSetId`, `labels`, `metadata`, `createdTime` and `lastUpdatedTime`, plus `relatedResources`
+built from the edges of the network you fetched. By type: `isRoot` on resources and assets,
+`geoLocation` on assets, `unit`, `unitExternalId` and `valueType` on time series, and
+`isDeactivated` on policies. Fetch by id when you need a field outside that list.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -712,7 +696,7 @@ for node in net.nodes() {
 ### The nearest N of a kind {#fetch-nearest}
 
 `POST /resources/fetch-nearest` answers a question `fetchRelated` cannot: *the ten nearest
-time-series to this pump*. It walks breadth-first and caps on the number of **matching
+time series to this pump*. It walks breadth-first and caps on the number of **matching
 end-nodes**, not on hops or total nodes — so "the 10 nearest `TIMESERIES`" is exactly ten
 however many intermediate nodes lie between them. You get those nodes plus the sub-graph
 connecting them back to the start.
@@ -898,7 +882,7 @@ several node types.
 | `GET /assets/{id}` | [look up](#look-up) | One asset, wrapped in `items` like every other read. |
 | `POST /assets/byids` | [look up](#look-up) | Ids that are missing, are not assets, or are not readable are omitted rather than failing the call. |
 | `POST /assets/filter` | [filter](#filter) | The same criteria, the same paging. A `nodeType` in the body is replaced, see below. |
-| `POST /assets/search` | [search](#search) | Same replacement, and the `filter` block is still [accepted and ignored](#search). |
+| `POST /assets/search` | [search](#search) | Same replacement, and the `filter` block is applied exactly as on [`/resources/search`](#search-filter). |
 | `POST /assets/update` | [update](#update) | Takes `nodes` and `relations` exactly as `/resources/update` does. |
 | `POST` or `DELETE /assets/delete` | [delete](#delete) | `204`, and the same [connectivity check](#delete). |
 
@@ -937,9 +921,8 @@ resource. Its family is `POST /functions/create`, `GET /functions/list`, `GET /f
 `POST /functions/update` and `POST` or `DELETE /functions/delete`, on the same shared pipeline.
 `GET /functions/list` takes no filter: the inventory is expected to be small.
 
-`GET /functions/{id}` is new, and completes the read surface: it returns the one function
-wrapped in `items`, and reports a function you may not read as missing (`404`) rather than
-forbidden, exactly as `GET /assets/{id}` does.
+`GET /functions/{id}` returns the one function wrapped in `items`, and reports a function
+you may not read as missing (`404`) rather than forbidden, exactly as `GET /assets/{id}` does.
 
 The Java client has no `assets()` or `functions()` service, so reach for the endpoints there.
 Creating an asset through `resources().create` with an `ASSET` label is the same pipeline and

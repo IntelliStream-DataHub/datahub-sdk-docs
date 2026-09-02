@@ -1,29 +1,29 @@
 ---
 sidebar_position: 5
-title: Datasets
+title: Data sets
 ---
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-# Datasets
+# Data sets
 
-Logical groupings of resources and time-series. Datasets can be nested (a dataset can
-belong to a parent dataset), and that hierarchy is live in queries: filtering time-series
-by a dataset also matches everything beneath it.
+Logical groupings of resources and time series. Data sets can be nested (a data set can
+belong to a parent data set), and that hierarchy is live in queries: filtering time series
+by a data set also matches everything beneath it.
 [Filter series →](./timeseries#filter-series)
 
-The hierarchy is built from `BELONGS_TO` edges, and the server enforces that: a relation
-pointing at a dataset must be `BELONGS_TO`, and a dataset can only claim a time-series
-that isn't already in another dataset.
-[Edge rules →](./resources#create-resources-and-relations)
+The hierarchy is built from `BELONGS_TO` relationships, and the server enforces that: a
+relationship pointing at a data set must be `BELONGS_TO`, and a data set can only claim a
+time series that isn't already in another data set.
+[Relationship rules →](./resources#create-resources-and-relations)
 
 :::note External ids are stored exactly as you send them
-The server does not rewrite a dataset external id: `Plant-A` stays `Plant-A`. Some clients
-*derive* one from the name as a convenience (the Rust `Dataset::new` below), and that
-derivation is snake_case — but it is a client-side default, not a server rule.
+The server does not rewrite a data set external id: `Plant-A` stays `Plant-A`. The Rust
+`Dataset::new` derives one from the name, in snake_case; that is a client-side default,
+not a server rule.
 
 Uniqueness and lookup both ignore case, so `plant_a` collides with `PLANT_A` and either
-spelling finds the same dataset. Datasets are also subject to the
+spelling finds the same data set. Data sets are also subject to the
 [naming policy](./external-ids#the-naming-policy) if an administrator has set one.
 [External ids & naming →](./external-ids)
 :::
@@ -156,10 +156,9 @@ let matches = api.datasets.filter(&DatasetFilter::from_filter(criteria)).await?;
 </TabItem>
 </Tabs>
 
-:::note There is no `writeProtected` or `deactivated`
-Both were removed server-side as inert. A filter or a create still carrying either is refused
-as an [unknown field](./client#unknown-fields), so a stale client fails on the first call
-rather than filtering on nothing.
+:::note There is no `writeProtected` or `deactivated` criterion
+A filter carrying either, or any other unknown field, is refused with a `400` as an
+[unknown field](./client#unknown-fields).
 :::
 
 ## Search {#search}
@@ -186,12 +185,6 @@ ever removes matches: the phrase decides what the candidates are.
 
 No match is an empty list, not a `404`.
 
-:::note What changed
-`filter` used to be accepted and silently ignored here, as it was on the resource and event
-searches. All four searches now apply it, as one query rather than a phrase pass followed by a
-narrowing pass.
-:::
-
 ## Access control {#access-control}
 
 Access to a data set is administered in Keycloak (or the directory behind it), not in
@@ -214,19 +207,22 @@ Two consequences worth knowing when you code against this:
 - **A missing grant is a `403`** with an `application/problem+json` body naming the
   `dataSetId` and the `permission` (read or write) you lack. List, filter and search
   endpoints never 403 on grants: rows in data sets you cannot read are silently
-  omitted instead. Edge reads hide rather than refuse too: reading an edge needs read
-  on both endpoints' data sets, and one you may not read is a `404` from
-  `GET /edges/{id}` and omitted from `/edges/byids`, as if it did not exist.
+  omitted instead.
+- **Relationship reads hide rather than refuse too.** Reading a relationship needs read
+  on both endpoints' data sets. One you may not read is a `404` from `GET /edges/{id}`
+  and omitted from `/edges/byids`, as if it did not exist.
 - **Managing a data set itself is stricter.** Creating, updating or deleting a data set
-  (as opposed to the data in it) requires the `/datasets/*/write` grant or `DATAHUB_ADMIN`;
-  grants on individual data sets are never enough, deliberately: a data set is the unit
+  (as opposed to the data in it) requires the `/datasets/*/write` grant or `DATAHUB_ADMIN`.
+  Grants on individual data sets are never enough, deliberately: a data set is the unit
   access is granted on, so renaming or re-parenting one changes what existing grants
-  cover. The rule follows the node, not the endpoint: a `DATASET`- or `POLICY`-labelled
+  cover.
+- **The rule follows the node, not the endpoint.** A `DATASET`- or `POLICY`-labelled
   node reached through `/resources` answers the same way. The `403` detail spells this
   out.
 
-The API reads grants from the identity provider's UserInfo endpoint, not from the token,
-so a changed grant takes effect within about a minute, without a new token.
+The API reads grants from the identity provider's UserInfo endpoint, not from the token, and
+caches them: the grant cache refreshes after 45 seconds, behind a 10-second in-process cache.
+A changed grant therefore takes effect within about a minute, without a new token.
 
 ## What each client covers {#client-coverage}
 
@@ -239,7 +235,7 @@ so a changed grant takes effect within about a minute, without a new token.
 | Search | `datasets().search` | `datasets.search` | `datasets.search` |
 | Update | `datasets().update` | `datasets.update` | `datasets.update` |
 | Delete | `datasets().delete` | `datasets.delete` | `datasets.delete` |
-| Access policies | HTTP | `datasets.policies` | `datasets.policies` |
+| Policies (`GET /datasets/policies`) | HTTP | `datasets.policies` | `datasets.policies` |
 
-All three clients now cover the whole surface bar the access-policy read in Java, which still
-goes through the endpoint directly.
+Java has no policies call; use `GET /datasets/policies` directly. It returns every policy in
+the tenant that a data set can be associated with.

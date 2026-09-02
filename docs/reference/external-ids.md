@@ -16,7 +16,7 @@ Same field name, different jobs.
 
 | On | What `externalId` is | Unique? |
 | --- | --- | --- |
-| **Resources, data sets, time-series** | The **identity** of one thing — your key for it, and what every integration matches on. | Yes, per tenant, compared without case |
+| **Resources, data sets, time series** | The **identity** of one thing — your key for it, and what every integration matches on. | Yes, per tenant, compared without case |
 | **Events** | A **correlation key** — the source system's key for the *subject* the event is about. | **No, and deliberately never** |
 
 An order that is created, amended and then shipped produces three events all carrying
@@ -59,13 +59,12 @@ P1                  rejected: shorter than 3 characters
 
 Byte-for-byte storage is what lets you join on identifiers you already maintain. The
 historian, the maintenance system and DataHub hold the same string, so a match is a string
-comparison instead of a normalisation each integration has to reimplement identically,
-forever.
+comparison instead of a normalisation each integration has to reimplement identically.
 
 ### Layer 2 — the naming policy {#the-naming-policy}
 
 A convention an administrator configures on top of the floor. It applies to **every node type
-whose external id is an identity**: resources and assets, data sets, time-series, functions and
+whose external id is an identity**: resources and assets, data sets, time series, functions and
 policies. Enforcement sits on the one write path they share, so it cannot cover one create
 endpoint and miss another.
 
@@ -93,8 +92,8 @@ than merging with it.
 
 :::caution The naming policy never applies to events
 Only the charset floor does. An event external id is not a name someone chose, it is the
-source system's key for the subject, so the platform does not impose a convention on data you
-do not own — and the policy's other rules would be meaningless there anyway, since events
+source system's key for the subject. The platform does not impose a convention on data you do
+not own, and the policy's other rules would be meaningless there anyway, since events
 deliberately share external ids.
 
 With a `snake_case` policy active and set to reject, `client.resources().create(...)` with
@@ -104,7 +103,7 @@ correct behaviour, not a gap.
 
 ## Case: compared without it, stored with it
 
-Uniqueness on resources, data sets and time-series ignores case. Creating `com-99-pt-1034`
+Uniqueness on resources, data sets and time series ignores case. Creating `com-99-pt-1034`
 when `COM-99-PT-1034` already exists is a duplicate and comes back as **`409`**, with a
 message naming the id it collides with — it is the ordinary "this external id already
 exists" path, not a naming-policy rejection.
@@ -242,7 +241,7 @@ Two things it is good for:
 
 Every warning and every rejection carries a `suggestion` where one can be derived — a
 conforming external id you can offer as a one-click fix. It is **offered, never applied**:
-the platform stopped rewriting external ids, which is the whole point of this change.
+the server never rewrites an external id.
 
 Two guarantees make it safe to wire straight into a form:
 
@@ -349,34 +348,34 @@ does not change that.
 
 ### Paging the queue {#findings-paging}
 
-Findings from a bulk import arrive in the thousands, so page with `after` rather than an
-offset — `<eventTime epoch millis>_<id>`, from the last event you saw — and keep folding into the
-same state as pages arrive: a `RESOLVED` on page 3 closes a finding whose `OPEN` came on page 1:
+Findings from a bulk import arrive in the thousands, so page with the cursor rather than an
+offset, and keep folding into the same state as pages arrive: a `RESOLVED` on page 3 closes a
+finding whose `OPEN` came on page 1. Sort by `eventTime` ascending, which is the order a fold
+needs, and echo each response's `nextCursor` back as `cursor` with the same `sort`:
 
 ```http
 POST /events/filter
 {
   "filter": { "type": "policy_finding" },
-  "after": "1754476522104_0195f3a2-4c1b-7f9e-9c3a-1b2d4e6f8a90",
+  "sort": { "property": ["eventTime"], "order": "asc" },
+  "cursor": "djE6ZXZlbnRUaW1lfGFzY3wxNzU0NDc2NTIyMTA0fDAxOTVmM2Ey",
   "limit": 200
 }
 ```
 
-No `sort` here, and no `status` either. `after` fixes the order to `eventTime` then `id`
-ascending on its own, which is exactly the order a fold needs — and narrowing to `OPEN` would
-drop the `RESOLVED` events that close the findings you are folding.
+No `status` in the filter: narrowing to `OPEN` would drop the `RESOLVED` events that close the
+findings you are folding.
 
-Both halves of `after` are required. Event times are not unique — an import lands thousands
-of findings in the same millisecond — so paging on the timestamp alone would either skip that
-group or repeat it forever. A short page is the last page.
+The cursor is opaque and carries both the boundary event's time and its id, so an import that
+lands thousands of findings in the same millisecond pages cleanly. `nextCursor` is absent on
+the last page.
 
 [Fetching and folding the queue, with SDK examples →](./events#policy-findings)
 
 ## Practical advice
 
-- **Send the identifier your source system already uses.** Pre-normalising to snake_case
-  still works and nothing that worked before has stopped, but it costs you the byte-for-byte
-  join the platform is built around.
+- **Send the identifier your source system already uses.** Pre-normalising to snake_case is
+  accepted but loses the byte-for-byte match with the source system.
 - **Never change an external id after the fact.** It is a promise other systems have written
   down. The platform permits it; your integrations will not forgive it.
 - **Read `warnings` if you have a steward.** It is the difference between finding out now and

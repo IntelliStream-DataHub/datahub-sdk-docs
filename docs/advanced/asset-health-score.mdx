@@ -20,23 +20,22 @@ can rank a whole fleet at a glance and a dashboard can show green/amber/red. It'
 lightweight cousin of [predictive maintenance](/advanced/predictive-maintenance): no
 model to train, just a transparent, tunable index.
 
-:::tip New to machine learning?
-No background needed. Skim the [gentle primer](/advanced/machine-learning-gently) for the
-ideas in plain language — model, feature, training, and the algorithm itself — and use
-[Generate sample data](/advanced/generate-sample-data) for a sandbox to run this against.
-:::
-
-:::tip Need data to run this?
+:::info Needs a sandbox
 This reads several pump signals. [Generate a sandbox](/advanced/generate-sample-data)
 first — section A ingests `pump_07_bearing_temp_c`, `pump_07_oil_pressure_kpa` and a
 stand-in `pump_07_vibration_anomaly` (or run [predictive maintenance](/advanced/predictive-maintenance)
 to produce the real one).
 :::
 
+:::tip New to machine learning?
+No background needed. Skim the [gentle primer](/advanced/machine-learning-gently) for the
+ideas in plain language — model, feature, training, and the algorithm itself.
+:::
+
 ## 1. Pull the latest value of each signal
 
-Take the most recent reading (or short average) of each contributing series for the
-asset.
+Take the most recent reading of each contributing series for the asset. The seed writes
+these hourly, so ask for the latest datapoint rather than a short window that may be empty.
 
 <Tabs groupId="lang">
 <TabItem value="python" label="Python">
@@ -47,13 +46,8 @@ import intellistream_datahub_sdk, pandas as pd
 client = intellistream_datahub_sdk.DataHubClient.from_env()
 
 def latest(external_id):
-    rf = intellistream_datahub_sdk.RetrieveFilter(
-        ts=external_id,
-        start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(minutes=15),
-        end=pd.Timestamp.now(tz="UTC"),
-        aggregates=["avg"], granularity="15m")
-    pts = client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()
-    return float(pts[-1].average)
+    pts = client.timeseries.retrieve_latest_datapoints([external_id])[0].get_datapoints()
+    return float(pts[-1].value)
 
 signals = {
     "vibration": latest("pump_07_vibration_anomaly"),   # 0..~1, from the anomaly model
@@ -66,13 +60,13 @@ signals = {
 <TabItem value="java" label="Java">
 
 ```java
-// The same retrieve, per signal; the scoring arithmetic below is shown in Python.
+// Java has no latest-datapoint call: read the last day and take the newest point.
+// The scoring arithmetic below is shown in Python.
 var filter = new RetrieveFilter();
 filter.setExternalId("pump_07_bearing_temp_c");
-filter.setStart(ZonedDateTime.now().minusMinutes(15));
+filter.setStart(ZonedDateTime.now().minusHours(24));
 filter.setEnd(ZonedDateTime.now());
-filter.setAggregates(List.of("avg"));
-filter.setGranularity("15m");
+filter.setLimit(100);
 
 var request = new DataRetriever<RetrieveFilter>();
 request.setItems(List.of(filter));
@@ -84,21 +78,14 @@ double bearingTemp = Double.parseDouble(pts.get(pts.size() - 1).getValue());
 <TabItem value="rust" label="Rust">
 
 ```rust
-// The same retrieve, per signal; the scoring arithmetic below is shown in Python.
-use intellistream_datahub_sdk::generic::{DataWrapper, RetrieveFilter};
-use chrono::Utc;
+// The latest datapoint, per signal; the scoring arithmetic below is shown in Python.
+use intellistream_datahub_sdk::generic::{DataWrapper, IdAndExtId};
 
-let filter = RetrieveFilter {
-    external_id: Some("pump_07_bearing_temp_c".into()),
-    start: Some(Utc::now() - chrono::Duration::minutes(15)),
-    end: Some(Utc::now()),
-    aggregates: Some(vec!["avg".into()]),
-    granularity: Some("15m".into()),
-    ..Default::default()
-};
-let s = api.time_series
-    .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?
+let latest = api.time_series
+    .retrieve_latest_datapoint(&DataWrapper::from(vec![
+        IdAndExtId::from_external_id("pump_07_bearing_temp_c")])).await?
     .get_items().remove(0);
+let bearing_temp = latest.datapoints.last().and_then(|p| p.value).unwrap_or(f64::NAN);
 ```
 
 </TabItem>
@@ -156,6 +143,11 @@ if band == "critical":
         event_time=pd.Timestamp.now(tz="UTC"),
         metadata={"asset": "pump_07", "score": str(score),
                   "worst_signal": max(parts, key=parts.get)})])
+
+# read the score back
+stored = client.timeseries.retrieve_latest_datapoints(["pump_07_health_score"])[0].get_datapoints()
+print(f"health {stored[-1].value:.1f} ({band})")
+assert abs(stored[-1].value - score) < 0.01, "the score was not written"
 ```
 
 Run it across the fleet on a schedule and you have a single ranked health view —

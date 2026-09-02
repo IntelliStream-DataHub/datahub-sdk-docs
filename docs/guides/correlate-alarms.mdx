@@ -9,8 +9,7 @@ import TabItem from '@theme/TabItem';
 
 Two alarms fire within seconds of each other. Are they one incident or two? A flat
 lookup can't tell you — but the **relationship graph** can. If both alarmed sensors
-sit under the same subsystem, it's almost certainly one root cause, not two
-coincidences.
+sit under the same subsystem, the two alarms share a subsystem.
 
 `fetchRelated` walks the graph outward from a node and returns the connected
 sub-graph. Walk the neighbourhood of each alarm and intersect the two: a shared
@@ -29,9 +28,10 @@ chain; a single-hop read stops at the first neighbour.
 
 ## 1. From alarms to resources
 
-An alarm is an [event](./detect-events.mdx) that references the resource it concerns
-(`relatedResources`). Start from the two resources the alarms point at —
-here `sensor_a` and `sensor_b`.
+An alarm is an [event](./detect-events.mdx) that names the resource it concerns. The two
+alarms the sandbox seeds carry the sensor in `metadata.resource`, so the ids are given here:
+`sensor_a` and `sensor_b`. In production an alarm carries the resource in `relatedResources`,
+and a read of the event gives you the id.
 
 ## 2. Walk each alarm's neighbourhood
 
@@ -104,8 +104,9 @@ Set<String> shared = nb.nodes().stream()
 shared.remove("sensor_a");
 shared.remove("sensor_b");
 
-if (!shared.isEmpty()) {
-    System.out.println("Both alarms are part of: " + shared);  // e.g. [cooling_system]
+System.out.println("Both alarms are part of: " + shared);      // [cooling_system, skid_1]
+if (!shared.contains("cooling_system")) {
+    throw new AssertionError("expected cooling_system, found " + shared);
 }
 ```
 
@@ -117,8 +118,8 @@ a_nodes = {n.external_id for n in na.nodes}
 shared = {n.external_id for n in nb.nodes} & a_nodes
 shared -= {"sensor_a", "sensor_b"}
 
-if shared:
-    print("Both alarms are part of:", shared)   # e.g. {'cooling_system'}
+print("Both alarms are part of:", shared)       # {'cooling_system', 'skid_1'}
+assert "cooling_system" in shared, f"expected cooling_system, found {shared}"
 ```
 
 </TabItem>
@@ -135,9 +136,8 @@ let mut shared: HashSet<&str> = nb.nodes().iter()
 shared.remove("sensor_a");
 shared.remove("sensor_b");
 
-if !shared.is_empty() {
-    println!("Both alarms are part of: {:?}", shared);  // e.g. {"cooling_system"}
-}
+println!("Both alarms are part of: {:?}", shared);      // {"cooling_system", "skid_1"}
+assert!(shared.contains("cooling_system"), "expected cooling_system, found {:?}", shared);
 ```
 
 </TabItem>
