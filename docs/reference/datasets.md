@@ -157,8 +157,9 @@ let matches = api.datasets.filter(&DatasetFilter::from_filter(criteria)).await?;
 </Tabs>
 
 :::note There is no `writeProtected` or `deactivated`
-Both were removed server-side as inert. The api drops unknown keys silently, so a filter still
-carrying one looked like it was narrowing and was not.
+Both were removed server-side as inert. A filter or a create still carrying either is refused
+as an [unknown field](./client#unknown-fields), so a stale client fails on the first call
+rather than filtering on nothing.
 :::
 
 ## Search {#search}
