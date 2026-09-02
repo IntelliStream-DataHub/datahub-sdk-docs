@@ -1,0 +1,40 @@
+page = "docs/industries/energy-utilities/wind.mdx"
+
+# Blocks on this page:
+#   python #1   L24    Set up demo data
+#   java   #1   L45    1. Ingest per-turbine output
+#   python #2   L60    1. Ingest per-turbine output
+#   rust   #1   L77    1. Ingest per-turbine output
+#   java   #2   L115   2. Roll up to a capacity factor
+#   python #3   L135   2. Roll up to a capacity factor
+#   rust   #2   L152   2. Roll up to a capacity factor
+#   python #4   L186   See the result
+
+[blocks]
+python = 4
+java = 2
+rust = 2
+
+[python]
+timeout = 600
+
+prologue = """
+from tutorial_support import Recorder
+
+# Placeholders the page leaves to the reader; a Recorder keeps what it is handed.
+record_capacity_factor = Recorder("record_capacity_factor")
+
+"""
+
+# Step 1 ingests 'your' arrays — the ones the demo block above sampled.
+[[python.inject]]
+before = 2
+code = """
+timestamps, power_kw, wind_ms = idx, power, wind
+"""
+
+[owns]
+timeseries = ["turbine_t14_power_kw", "turbine_t14_wind_ms"]
+
+[expect]
+timeseries = ["turbine_t14_power_kw", "turbine_t14_wind_ms"]

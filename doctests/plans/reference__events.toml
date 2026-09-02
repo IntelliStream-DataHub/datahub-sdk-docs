@@ -1,0 +1,44 @@
+page = "docs/reference/events.md"
+
+# Blocks on this page:
+#   java   #1   L34    Create
+#   python #1   L46    Create
+#   rust   #1   L61    Create
+#   java   #2   L91    Query
+#   python #2   L101   Query
+#   rust   #2   L111   Query
+#   java   #3   L133   High-throughput ingestion
+#   python #3   L143   High-throughput ingestion
+#   rust   #3   L152   High-throughput ingestion
+#   java   #4   L164   Delete
+#   python #4   L171   Delete
+#   rust   #4   L178   Delete
+
+[blocks]
+python = 4
+java = 4
+rust = 4
+
+[python]
+timeout = 600
+# An API reference, not a tutorial: each fence is a self-contained example, and they
+# are meant to be read independently. Running them as one program would invent
+# conflicts a reader never meets — the delete example removing what the write example
+# needs — so each block runs on its own.
+independent = true
+
+# Each example needs a client. Composing the quickstart in to get one would also
+# create its `engine_temperature`, which several of these pages create themselves;
+# `from_env()` is the constructor this section documents, so this is the reader's
+# own call.
+prologue = """
+import intellistream_datahub_sdk
+client = intellistream_datahub_sdk.DataHubClient.from_env()
+"""
+
+[owns]
+events = ["door_open"]
+
+# The create example must leave its event behind.
+[expect]
+events = ["door_open"]

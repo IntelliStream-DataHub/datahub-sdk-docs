@@ -1,0 +1,53 @@
+page = "docs/reference/files.md"
+
+# Blocks on this page:
+#   java   #1   L18    List
+#   python #1   L26    List
+#   rust   #1   L34    List
+#   java   #2   L50    Upload
+#   python #2   L67    Upload
+#   rust   #2   L84    Upload
+#   java   #3   L103   Download (Java)
+#   java   #4   L113   Delete
+#   python #3   L120   Delete
+#   rust   #3   L127   Delete
+
+[blocks]
+python = 3
+java = 4
+rust = 3
+
+[python]
+timeout = 600
+# An API reference, not a tutorial: each fence is a self-contained example, and they
+# are meant to be read independently. Running them as one program would invent
+# conflicts a reader never meets — the delete example removing what the write example
+# needs — so each block runs on its own.
+independent = true
+
+# Each example needs a client. Composing the quickstart in to get one would also
+# create its `engine_temperature`, which several of these pages create themselves;
+# `from_env()` is the constructor this section documents, so this is the reader's
+# own call.
+prologue = """
+import intellistream_datahub_sdk
+client = intellistream_datahub_sdk.DataHubClient.from_env()
+
+# The upload examples reference a local file the reader is assumed to have.
+import pathlib as _pathlib
+_pathlib.Path("report.csv").write_text("timestamp,value" + chr(10) + "2026-01-01T00:00:00Z,1" + chr(10))
+"""
+
+# KNOWN PLATFORM LIMITATION — this page cannot be made repeatable yet.
+# Deleting a file moves it to trash but keeps its *path* reserved, and the SDK
+# exposes no way to purge trash (`list_trash` and `restore` exist; nothing removes).
+# So the second upload to `/reports/2026/q2.csv` fails with
+# "File with submitted path or externalId already exists" forever, on any stack where
+# this page has run once. Verified directly: delete reports success, trash size does
+# not change, and re-upload still conflicts.
+#
+# Left failing on purpose. It is a real defect a reader meets the moment they upload,
+# delete and re-upload — not something to hide by renaming the path in this plan.
+
+[owns]
+files = ["report_2026_q2"]

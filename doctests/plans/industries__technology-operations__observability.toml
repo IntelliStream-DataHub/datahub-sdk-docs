@@ -1,0 +1,67 @@
+page = "docs/industries/technology-operations/observability.mdx"
+
+# Blocks on this page:
+#   python #1   L24    Set up demo data
+#   java   #1   L53    1. Model services and hosts
+#   python #2   L75    1. Model services and hosts
+#   rust   #1   L87    1. Model services and hosts
+#   java   #2   L123   2. Alert in real time on an SLO breach
+#   python #3   L145   2. Alert in real time on an SLO breach
+#   rust   #2   L160   2. Alert in real time on an SLO breach
+#   java   #3   L190   3. Review the incident afterward
+#   python #4   L200   3. Review the incident afterward
+#   rust   #3   L208   3. Review the incident afterward
+#   java   #4   L233   4. Which services share a failing dependency?
+#   python #5   L248   4. Which services share a failing dependency?
+#   rust   #4   L260   4. Which services share a failing dependency?
+
+[blocks]
+python = 5
+java = 4
+rust = 4
+
+[python]
+timeout = 600
+
+prologue = """
+from tutorial_support import Recorder, feed, take
+
+# Placeholders the page leaves to the reader; a Recorder keeps what it is handed.
+breaches_slo = Recorder("breaches_slo")
+"""
+
+# The page's payoff is the listen loop, so it runs — bounded, not skipped. Two
+# declared substitutions make that possible: one starts a background writer so
+# messages actually arrive (a silent stream would prove nothing), the other caps
+# the loop at three messages and 45 seconds. Both must keep matching the page, so
+# a rewritten loop fails here rather than hanging CI.
+[[python.replace]]
+find = """with client.subscriptions.listen(["checkout_slo"]) as listener:"""
+repl = """with client.subscriptions.listen(["checkout_slo"]) as listener:
+    feed(client, ["service_checkout_request_latency_ms"], points=40, every=0.3)"""
+
+[[python.replace]]
+find = """    for msg in listener:"""
+repl = """    for msg in take(listener, 3, 45):"""
+
+# The page models the network and traverses it in the next breath. The graph read
+# path trails writes by a second or two, and an empty neighbourhood is a valid
+# answer rather than an error — so without this the page prints the wrong
+# conclusion and the test cannot tell that from a real one.
+[[python.inject]]
+before = 5
+code = """
+from tutorial_support import wait_for_related
+wait_for_related(client, "service_checkout")
+"""
+
+[owns]
+events = ["slo_breach_checkout_*"]
+resources = ["host_web_01", "order_db", "service_checkout", "service_payments"]
+subscriptions = ["checkout_slo"]
+timeseries = ["service_checkout_request_latency_ms"]
+
+[expect]
+resources = ["host_web_01", "order_db", "service_checkout", "service_payments"]
+subscriptions = ["checkout_slo"]
+timeseries = ["service_checkout_request_latency_ms"]

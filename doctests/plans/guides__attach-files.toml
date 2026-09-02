@@ -1,0 +1,44 @@
+page = "docs/guides/attach-files.mdx"
+
+# python #1 L44  — Upload a file
+# python #2 L98  — List a directory
+# python #3 L139 — Delete
+[blocks]
+python = 3
+java = 4
+rust = 3
+
+[python]
+requires = ["quickstart"]
+timeout = 180
+
+# The page says "# local file" against the path, so the reader is expected to
+# have one. Creating it is fixture work; the upload call is the code under test.
+prologue = """
+import pathlib as _pathlib
+_pathlib.Path("calibration_a12.pdf").write_bytes(b"%PDF-1.4\\n% doc-test fixture\\n%%EOF\\n")
+"""
+
+# Block 3 deletes the file itself, which is the page's own teardown; the sweep is
+# the backstop for a run that fails before reaching it.
+# KNOWN PLATFORM LIMITATION — this page cannot be made repeatable yet.
+# Deleting a file moves it to trash but keeps its *path* reserved, and the SDK
+# exposes no way to purge trash (`list_trash` and `restore` exist; nothing removes).
+# So the second upload to `/certificates/2026/calibration_a12.pdf` fails with
+# "File with submitted path or externalId already exists" forever, on any stack where
+# this page has run once. Verified directly: delete reports success, trash size does
+# not change, and re-upload still conflicts.
+#
+# Left failing on purpose. It is a real defect a reader meets the moment they upload,
+# delete and re-upload — not something to hide by renaming the path in this plan.
+
+[owns]
+timeseries = ["engine_temperature"]
+files = ["calibration_pump_esp_a12"]
+
+# The page's last block deletes the file on purpose, so asserting it survives the
+# run would be asserting against the tutorial's own final step. What must be true
+# is that the upload and the directory listing worked — the listing prints the
+# file, so that is the evidence.
+[expect]
+stdout = ["calibration_a12.pdf"]

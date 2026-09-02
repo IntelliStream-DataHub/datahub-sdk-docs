@@ -1,0 +1,57 @@
+page = "docs/reference/resources.md"
+
+# Blocks on this page:
+#   java   #1   L27    Look up
+#   python #1   L40    Look up
+#   rust   #1   L48    Look up
+#   java   #2   L91    Create resources and relations
+#   python #2   L117   Create resources and relations
+#   rust   #2   L131   Create resources and relations
+#   java   #3   L160   Search
+#   python #3   L172   Search
+#   rust   #3   L180   Search
+#   java   #4   L201   Delete
+#   python #4   L208   Delete
+#   rust   #4   L215   Delete
+#   java   #5   L234   Traverse the graph
+#   python #5   L251   Traverse the graph
+#   rust   #5   L264   Traverse the graph
+
+[blocks]
+python = 5
+java = 5
+rust = 5
+
+[python]
+timeout = 600
+# An API reference, not a tutorial: each fence is a self-contained example, and they
+# are meant to be read independently. Running them as one program would invent
+# conflicts a reader never meets — the delete example removing what the write example
+# needs — so each block runs on its own.
+independent = true
+
+# Each example needs a client. Composing the quickstart in to get one would also
+# create its `engine_temperature`, which several of these pages create themselves;
+# `from_env()` is the constructor this section documents, so this is the reader's
+# own call.
+prologue = """
+import intellistream_datahub_sdk
+client = intellistream_datahub_sdk.DataHubClient.from_env()
+"""
+
+# The page models the network and traverses it in the next breath. The graph read
+# path trails writes by a second or two, and an empty neighbourhood is a valid
+# answer rather than an error — so without this the page prints the wrong
+# conclusion and the test cannot tell that from a real one.
+[[python.inject]]
+before = 5
+code = """
+from tutorial_support import wait_for_related
+wait_for_related(client, "sensor_a")
+"""
+
+[owns]
+resources = ["plant_oslo", "pump_1"]
+
+[expect]
+resources = ["plant_oslo", "pump_1"]

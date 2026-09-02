@@ -1,0 +1,149 @@
+# Run the documentation tutorials against a real backend.
+#
+# Two tiers, because they need very different things:
+#
+#   structure  — no backend, no SDK, under a second. Catches the failures that come
+#                from editing a page: a fence added or removed under a plan that
+#                selects by index, a new page with no plan, a bounded-run
+#                substitution that has stopped matching, a malformed plan. This
+#                runs everywhere, always.
+#
+#   tutorials  — needs a live stack, and builds the SDK from source so the docs are
+#                tested against the code under review rather than a release. Skips
+#                with a notice when no stack is configured, because a missing
+#                backend is not a broken tutorial and failing on it teaches people
+#                to ignore red.
+name: Doc tutorials
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      sdk_ref:
+        description: "dataplatform-rust-sdk ref to test the docs against"
+        default: main
+  # Sent by the SDK repo after it builds, so an SDK change that breaks a tutorial
+  # is reported here too. See dataplatform-rust-sdk/.github/workflows/ci.yml.
+  repository_dispatch:
+    types: [sdk-updated]
+
+concurrency:
+  # One live run at a time: the suite creates and deletes entities under the docs'
+  # own external ids, so two concurrent runs would sweep each other's data.
+  group: doc-tutorials-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  structure:
+    name: Plans match the docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install --quiet pytest
+      - name: Block-count pins, coverage gate, plan validation, harness self-tests
+        # No backend and no SDK: every live tutorial test skips, and what remains is
+        # the part that guards against the docs and the plans drifting apart. The
+        # API-surface checks skip here too — they need the SDK, which the api-surface
+        # job below builds.
+        run: pytest doctests -q --tb=short
+
+  api-surface:
+    name: Docs match the SDK's API
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Check out the SDK
+        uses: actions/checkout@v6
+        with:
+          repository: IntelliStream-DataHub/dataplatform-rust-sdk
+          ref: ${{ github.event.client_payload.sdk_ref || inputs.sdk_ref || 'main' }}
+          token: ${{ secrets.SDK_REPO_TOKEN || github.token }}
+          path: .sdk
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: .sdk
+      - name: Build the SDK bindings
+        env:
+          DOCTEST_RUST_SDK_PATH: ${{ github.workspace }}/.sdk
+        run: ./doctests/setup.sh
+      # Needs the SDK built and nothing else — no stack, no credentials. This is the
+      # check worth running from the SDK's own CI: it turns "we removed a symbol" into
+      # a failure in the pull request that removed it, rather than a broken tutorial
+      # someone trips over months later.
+      - name: Every symbol and method the docs use still exists
+        run: ./doctests/run.sh -q --tb=short doctests/test_api_surface.py
+
+  tutorials:
+    name: Tutorials run end to end
+    runs-on: ubuntu-latest
+    needs: structure
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Is a stack configured?
+        id: stack
+        env:
+          BASE_URL: ${{ secrets.DOCTEST_BASE_URL }}
+        run: |
+          if [ -n "$BASE_URL" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "### Tutorials not run" >> "$GITHUB_STEP_SUMMARY"
+            echo "No \`DOCTEST_BASE_URL\` secret, so there is no backend to run the" \
+                 "tutorials against. The structure job still checked that every page" \
+                 "has a plan and that no plan has drifted from its page." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Check out the SDK
+        if: steps.stack.outputs.configured == 'true'
+        uses: actions/checkout@v6
+        with:
+          repository: IntelliStream-DataHub/dataplatform-rust-sdk
+          # The SDK commit under test when the SDK triggered us; its default branch
+          # otherwise. This is the whole point: docs tested against that code.
+          ref: ${{ github.event.client_payload.sdk_ref || inputs.sdk_ref || 'main' }}
+          token: ${{ secrets.SDK_REPO_TOKEN || github.token }}
+          path: .sdk
+
+      - uses: actions/setup-python@v5
+        if: steps.stack.outputs.configured == 'true'
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@stable
+        if: steps.stack.outputs.configured == 'true'
+      - uses: Swatinem/rust-cache@v2
+        if: steps.stack.outputs.configured == 'true'
+        with:
+          workspaces: .sdk
+
+      - name: Build the SDK and install the test dependencies
+        if: steps.stack.outputs.configured == 'true'
+        env:
+          DOCTEST_RUST_SDK_PATH: ${{ github.workspace }}/.sdk
+        run: ./doctests/setup.sh
+
+      - name: Run every tutorial
+        if: steps.stack.outputs.configured == 'true'
+        env:
+          BASE_URL: ${{ secrets.DOCTEST_BASE_URL }}
+          TOKEN: ${{ secrets.DOCTEST_TOKEN }}
+          CLIENT_ID: ${{ secrets.DOCTEST_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.DOCTEST_CLIENT_SECRET }}
+          TOKEN_URI: ${{ secrets.DOCTEST_TOKEN_URI }}
+          DOCTEST_RUST_SDK_PATH: ${{ github.workspace }}/.sdk
+        # Never point this at production: the suite creates and deletes entities
+        # under the docs' own external ids.
+        run: ./doctests/run.sh -q --tb=short

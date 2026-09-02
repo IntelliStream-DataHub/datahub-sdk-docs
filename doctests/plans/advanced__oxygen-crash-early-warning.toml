@@ -1,0 +1,24 @@
+page = "docs/advanced/oxygen-crash-early-warning.mdx"
+
+# Blocks on this page:
+#   python #1   L43    1. Load the signals that precede a crash
+#   python #2   L69    2. Engineer features and a *forward-looking* label
+#   python #3   L92    3. Train the classifier
+#   python #4   L113   4. Score live and warn ahead of time
+
+[blocks]
+python = 4
+
+[python]
+timeout = 600
+# Every series this recipe reads is seeded by the sample-data page, which the
+# docs tell the reader to run first. It runs once per session rather than being
+# composed into all thirteen recipes.
+requires_once = ["advanced__generate-sample-data"]
+
+[owns]
+events = ["oxygen_crash_predicted_h07_*"]
+timeseries = ["pen_h_07_crash_risk"]
+
+[expect]
+timeseries = ["pen_h_07_crash_risk"]

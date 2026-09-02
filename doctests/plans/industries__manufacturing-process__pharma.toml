@@ -1,0 +1,37 @@
+page = "docs/industries/manufacturing-process/pharma.mdx"
+
+# Blocks on this page:
+#   python #1   L25    Set up demo data
+#   java   #1   L48    1. Record process data exactly
+#   python #2   L62    1. Record process data exactly
+#   rust   #1   L75    1. Record process data exactly
+#   java   #2   L108   2. Walk the genealogy upstream
+#   python #3   L122   2. Walk the genealogy upstream
+#   rust   #2   L135   2. Walk the genealogy upstream
+
+[blocks]
+python = 3
+java = 2
+rust = 2
+
+[python]
+timeout = 600
+
+# The page models the network and traverses it in the next breath. The graph read
+# path trails writes by a second or two, and an empty neighbourhood is a valid
+# answer rather than an error — so without this the page prints the wrong
+# conclusion and the test cannot tell that from a real one.
+[[python.inject]]
+before = 3
+code = """
+from tutorial_support import wait_for_related
+wait_for_related(client, "lot_22f_final")
+"""
+
+[owns]
+resources = ["equipment_bioreactor_3", "lot_22f_final", "lot_int_88", "lot_raw_acme_41", "lot_raw_acme_42"]
+timeseries = ["batch_22f_ph"]
+
+[expect]
+resources = ["equipment_bioreactor_3", "lot_22f_final", "lot_int_88", "lot_raw_acme_41", "lot_raw_acme_42"]
+timeseries = ["batch_22f_ph"]

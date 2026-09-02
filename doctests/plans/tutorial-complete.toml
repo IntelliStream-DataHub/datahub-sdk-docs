@@ -1,0 +1,60 @@
+page = "docs/tutorial.mdx"
+
+# "The complete program" — the file the page tells the reader to copy and run.
+# This is the page's strongest promise and the one most likely to rot, because
+# nobody re-reads a 90-line listing when they change an API.
+[blocks]
+python = 5
+java = 6
+rust = 10
+
+[python]
+only = [5]
+timeout = 180
+requires_env = ["CLIENT_ID", "CLIENT_SECRET", "TOKEN_URI"]
+requires_python = ["psutil"]
+
+[python.env]
+HOST_ID = "doctest"
+
+# The program is a daemon: it ticks forever by design, which is correct for the
+# reader and impossible for a test. Two declared substitutions bound it to a few
+# ticks. Both are `required`, so if the loop or the sleep is ever rewritten this
+# plan fails loudly instead of hanging the suite for its full timeout.
+[[python.replace]]
+find = "    while True:"
+repl = "    for _doctest_tick in range(3):"
+
+[[python.replace]]
+find = "        time.sleep(INTERVAL_SECS)"
+repl = "        time.sleep(0.1)"
+
+# The program swallows every per-tick exception to keep the loop alive — the right
+# call for a daemon, and a trap for a test, which would see exit 0 while nothing
+# worked. The [expect] block below is what closes that hole: it goes to the
+# backend and checks the datapoints actually landed.
+[java]
+disabled = "see tutorial.toml — the Java scenario for this page is not written yet."
+
+[rust]
+disabled = "see tutorial.toml — the Rust scenario for this page is not written yet."
+
+[owns]
+timeseries = [
+  "system_memory_used_doctest",
+  "system_memory_available_doctest",
+  "system_swap_used_doctest",
+]
+
+[expect]
+timeseries = [
+  "system_memory_used_doctest",
+  "system_memory_available_doctest",
+  "system_swap_used_doctest",
+]
+stdout = ["ingested 3 datapoints"]
+
+[expect.datapoints]
+system_memory_used_doctest = 3
+system_memory_available_doctest = 3
+system_swap_used_doctest = 3

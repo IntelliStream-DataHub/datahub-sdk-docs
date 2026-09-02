@@ -1,0 +1,32 @@
+page = "docs/advanced/lstm-anomaly-detection.mdx"
+
+# Blocks on this page:
+#   python #1   L41    1. Load the normal multivariate window
+#   java   #1   L67    1. Load the normal multivariate window
+#   rust   #1   L83    1. Load the normal multivariate window
+#   python #2   L109   2. Build sequences and the autoencoder
+#   python #3   L135   3. Score by reconstruction error and set a limit
+#   python #4   L147   4. Watch live and raise an event
+
+[blocks]
+python = 4
+java = 1
+rust = 1
+
+[python]
+timeout = 600
+# The page tells the reader to install this; without it the test skips with that
+# reason rather than failing, because a missing optional dependency says nothing
+# about whether the tutorial is correct.
+requires_python = ["tensorflow"]
+# Every series this recipe reads is seeded by the sample-data page, which the
+# docs tell the reader to run first. It runs once per session rather than being
+# composed into all thirteen recipes.
+requires_once = ["advanced__generate-sample-data"]
+
+[owns]
+events = ["kick_detected_dw1_*"]
+timeseries = ["rig_dw1_anomaly_score"]
+
+[expect]
+timeseries = ["rig_dw1_anomaly_score"]

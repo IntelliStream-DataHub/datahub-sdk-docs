@@ -1,0 +1,27 @@
+page = "docs/industries/transport-logistics/retail.mdx"
+
+# Blocks on this page:
+#   python #1   L23    Set up demo data
+#   java   #1   L44    1. A dataset per region
+#   python #2   L61    1. A dataset per region
+#   rust   #1   L75    1. A dataset per region
+#   java   #2   L103   2. Roll up demand per region
+#   python #3   L112   2. Roll up demand per region
+#   rust   #2   L119   2. Roll up demand per region
+#   python #4   L138   See the result
+
+[blocks]
+python = 4
+java = 2
+rust = 2
+
+[python]
+timeout = 600
+
+[owns]
+datasets = ["region_nordics"]
+timeseries = ["store_oslo_01_sku_4471_sales"]
+
+[expect]
+datasets = ["region_nordics"]
+timeseries = ["store_oslo_01_sku_4471_sales"]

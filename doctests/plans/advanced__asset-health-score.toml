@@ -1,0 +1,28 @@
+page = "docs/advanced/asset-health-score.mdx"
+
+# Blocks on this page:
+#   python #1   L44    1. Pull the latest value of each signal
+#   java   #1   L68    1. Pull the latest value of each signal
+#   rust   #1   L86    1. Pull the latest value of each signal
+#   python #2   L113   2. Normalise each signal to a "badness" in 0–1
+#   python #3   L132   3. Weight, combine, and classify
+#   python #4   L146   4. Publish the score and flag the bad ones
+
+[blocks]
+python = 4
+java = 1
+rust = 1
+
+[python]
+timeout = 600
+# Every series this recipe reads is seeded by the sample-data page, which the
+# docs tell the reader to run first. It runs once per session rather than being
+# composed into all thirteen recipes.
+requires_once = ["advanced__generate-sample-data"]
+
+[owns]
+events = ["health_critical_pump_07_*"]
+timeseries = ["pump_07_health_score"]
+
+[expect]
+timeseries = ["pump_07_health_score"]

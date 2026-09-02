@@ -1,0 +1,35 @@
+page = "docs/industries/healthcare/medical-devices.mdx"
+
+# Blocks on this page:
+#   python #1   L23    Set up demo data
+#   java   #1   L47    1. Model the fleet and watch availability
+#   python #2   L69    1. Model the fleet and watch availability
+#   rust   #1   L81    1. Model the fleet and watch availability
+#   java   #2   L112   2. A recall lands — find every affected unit
+#   python #3   L123   2. A recall lands — find every affected unit
+#   rust   #2   L134   2. A recall lands — find every affected unit
+
+[blocks]
+python = 3
+java = 2
+rust = 2
+
+[python]
+timeout = 600
+
+# The page models the network and traverses it in the next breath. The graph read
+# path trails writes by a second or two, and an empty neighbourhood is a valid
+# answer rather than an error — so without this the page prints the wrong
+# conclusion and the test cannot tell that from a real one.
+[[python.inject]]
+before = 3
+code = """
+from tutorial_support import wait_for_related
+wait_for_related(client, "model_acme_x200")
+"""
+
+[owns]
+resources = ["model_acme_x200", "pump_icu_3391", "pump_icu_3392", "pump_icu_3401", "ward_icu"]
+
+[expect]
+resources = ["model_acme_x200", "pump_icu_3391", "pump_icu_3392", "pump_icu_3401", "ward_icu"]

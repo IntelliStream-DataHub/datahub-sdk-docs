@@ -1,0 +1,31 @@
+page = "docs/guides/detect-events.mdx"
+
+# python #1 L52  — Detect a threshold breach and record it
+# python #2 L123 — Query the events later
+[blocks]
+python = 2
+java = 2
+rust = 2
+
+[python]
+requires = ["quickstart"]
+timeout = 180
+
+# The guide's premise is a series that has breached its limit. The quickstart
+# leaves 92.4 °C behind, under the 110 threshold, so the detection branch would
+# never be entered and the test would pass without testing anything. Putting a
+# breach in the data is the reader's situation, not a workaround.
+prologue = """
+import pandas as _pd
+client.timeseries.insert_from_lists(
+    timestamps=[_pd.Timestamp.now(tz="UTC")], values=[115.0], ts="engine_temperature")
+"""
+
+# The event id carries a timestamp, so it cannot be named ahead of the run; the
+# sweep resolves the pattern against the backend instead.
+[owns]
+timeseries = ["engine_temperature"]
+events = ["overheat_press_07_*"]
+
+[expect]
+timeseries = ["engine_temperature"]
