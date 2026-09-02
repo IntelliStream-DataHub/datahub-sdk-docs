@@ -14,10 +14,14 @@ linked in the graph, so the whole `raw → … → result` chain is traceable bo
 **Stack:** the SDK for data and graph, plus `pandas`, `numpy`.
 :::
 
-:::tip New to this?
-No data-science background needed — see the [gentle primer](/advanced/machine-learning-gently)
-for any unfamiliar term, and [generate a sandbox](/advanced/generate-sample-data) to run
-this against.
+:::info Needs a sandbox
+This reads two raw sensors that already exist. [Generate a sandbox](/advanced/generate-sample-data)
+first — section K ingests `engine_temperature_raw` and `engine_vibration_raw`, defects and all.
+:::
+
+:::tip New to machine learning?
+No data-science background needed. Skim the [gentle primer](/advanced/machine-learning-gently)
+for any unfamiliar term.
 :::
 
 **The idea in one paragraph.** Real data never goes straight from sensor to model. It's
@@ -90,8 +94,9 @@ how they *relate*. That's step 2.
 
 Model each transformation as a **function node** and link it up: each input series is
 `processed_by` the function, which `produces` an output series. Done across the pipeline,
-this builds a branching, ten-deep lineage DAG in one call. (`resources.create` is the
-same call in Java and Rust — see [model assets as a graph](/guides/model-assets-graph).)
+this builds a branching lineage DAG of 18 nodes (8 functions and 10 series) in one call.
+(`resources.create` is the same call in Java and Rust — see
+[model assets as a graph](/guides/model-assets-graph).)
 
 ```python
 def fn(ext_id, name):
@@ -127,7 +132,10 @@ client.resources.create(functions, edges)
 ```
 
 That graph branches (each cleaned signal feeds two features), converges (four features
-into one vector), and runs ten nodes deep from raw sensor to health score.
+into one vector), and runs nine nodes deep from raw sensor to health score:
+`engine_temperature_raw` → `clean_temp_fn` → `engine_temperature_clean` → `roll_mean_fn` →
+`engine_temp_roll_mean` → `assemble_fn` → `engine_feature_vector` → `score_fn` →
+`engine_health_score`.
 
 ## 3. The payoff — trace it backward
 
@@ -137,8 +145,9 @@ ultimately came from. No guessing, no stale wiki page.
 
 ```python
 back = client.resources.fetch_related(external_id="engine_health_score", depth=12)
-raw_sources = [n.external_id for n in back.nodes if n.external_id.endswith("_raw")]
+raw_sources = {n.external_id for n in back.nodes if n.external_id.endswith("_raw")}
 print("this score derives from:", raw_sources)   # engine_temperature_raw, engine_vibration_raw
+assert raw_sources == {"engine_temperature_raw", "engine_vibration_raw"}, raw_sources
 ```
 
 ## 4. The payoff — trace it forward (impact analysis)
@@ -155,6 +164,7 @@ affected = [n.external_id for n in fwd.nodes
 print("affected by the bad temperature sensor:", affected)
 # engine_temperature_clean, engine_temp_roll_mean, engine_temp_roc,
 # engine_feature_vector, engine_health_score   — but NOT the vibration features
+assert "engine_health_score" in affected and "engine_vib_rms" not in affected, affected
 ```
 
 This is the same [blast-radius traversal](/guides/correlate-alarms) used for asset

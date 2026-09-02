@@ -21,15 +21,14 @@ and reduces it to a few components; two statistics — **Hotelling's T²** and t
 prediction error (Q / SPE)** — then flag when live data no longer fits, and a
 contribution check points at the sensor responsible.
 
-:::tip Need data to run this?
+:::info Needs a sandbox
 These steps read correlated process sensors that already exist.
 [Generate a sandbox](/advanced/generate-sample-data) first — section C ingests them, fault and all.
 :::
 
 :::tip New to machine learning?
 No background needed. Skim the [gentle primer](/advanced/machine-learning-gently) for the
-ideas in plain language — model, feature, training, and the algorithm itself — and use
-[Generate sample data](/advanced/generate-sample-data) for a sandbox to run this against.
+ideas in plain language — model, feature, training, and the algorithm itself.
 :::
 
 ## 1. Learn normal operation
@@ -55,7 +54,7 @@ def series(tag, start, end):
                                     aggregates=["avg"], granularity="1m", limit=100_000)
     pts = client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()
     return pd.Series([float(p.average) for p in pts],
-                     index=pd.to_datetime([p.timestamp for p in pts])).sort_index()
+                     index=pd.to_datetime([p.timestamp for p in pts], utc=True)).sort_index()
 
 s = pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=14)   # a clean stretch of normal running
 e = pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=1)    # ends before the recent fault window
@@ -153,6 +152,12 @@ if t2(znew)[-1] > T2_LIMIT or spe(znew)[-1] > SPE_LIMIT:
         metadata={"unit": "crude_unit_1",
                   "t2": f"{t2(znew)[-1]:.1f}", "spe": f"{spe(znew)[-1]:.1f}",
                   "top_contributor": culprit})])
+
+# the seeded fault sits in the last ten hours, so the deviation must be on record
+found = list(client.events.filter(intellistream_datahub_sdk.EventFilter(
+    basic_filter=intellistream_datahub_sdk.BasicEventFilter(type="process_deviation"), limit=10)))
+assert found, "the seeded fault should have raised a process_deviation event"
+print(f"{len(found)} process deviation(s) on record, latest names {found[-1].metadata['top_contributor']}")
 ```
 
 You can also publish T² and SPE as their own series for a live "process health" chart —

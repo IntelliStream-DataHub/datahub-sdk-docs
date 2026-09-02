@@ -57,10 +57,9 @@ intellistream-datahub-sdk = "0.1"
 </Tabs>
 
 :::tip The name is long on purpose, and you can shorten it
-`datahub-sdk` was already taken on PyPI by an unrelated project, and the bare `datahub`
-neighbourhood belongs to a much better-known metadata platform, so the package is qualified
-with the organisation and the Rust crate takes the same name. Alias it if you would rather
-not type it:
+`datahub-sdk` was already taken on PyPI by an unrelated project, and the `datahub` name is
+taken, so the package is qualified with the organization and the Rust crate takes the same
+name. Alias it if you would rather not type it:
 
 ```python
 import intellistream_datahub_sdk as dh
@@ -173,16 +172,20 @@ for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
 <TabItem value="rust" label="Rust">
 
 ```rust
+use chrono::Utc;
 use intellistream_datahub_sdk::generic::{DataWrapper, RetrieveFilter};
 
 let filter = RetrieveFilter {
     external_id: Some("engine_temperature".into()),
-    limit: Some(100),
+    start: Some(Utc::now() - chrono::Duration::hours(1)),
+    end: Some(Utc::now()),
     ..Default::default()
 };
 let points = api.time_series.retrieve_datapoints(&DataWrapper::from(vec![filter])).await?;
 for c in points.get_items() {
-    println!("{} points", c.datapoints.len());
+    for p in &c.datapoints {
+        println!("{} = {}", p.timestamp, p.value);
+    }
 }
 ```
 

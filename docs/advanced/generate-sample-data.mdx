@@ -23,8 +23,12 @@ import intellistream_datahub_sdk, numpy as np, pandas as pd
 client = intellistream_datahub_sdk.DataHubClient.from_env()
 
 def ingest(external_id, index, values, unit=None, name=None):
-    client.timeseries.create([intellistream_datahub_sdk.TimeSeries(
-        external_id=external_id, name=name or external_id, unit=unit or "value", value_type="float")])
+    try:
+        client.timeseries.create([intellistream_datahub_sdk.TimeSeries(
+            external_id=external_id, name=name or external_id, unit=unit or "value", value_type="float")])
+    except intellistream_datahub_sdk.DataHubException as e:
+        if e.status_code != 409:          # a second run finds the series already there
+            raise
     client.timeseries.insert_from_lists(timestamps=index, values=np.asarray(values), ts=external_id)
     print(f"ingested {len(values):,} points → {external_id}")
 ```
@@ -34,11 +38,13 @@ def ingest(external_id, index, values, unit=None, name=None):
 For [predictive maintenance](/advanced/predictive-maintenance),
 [LSTM anomaly detection](/advanced/lstm-anomaly-detection) and
 [health scoring](/advanced/asset-health-score): a vibration signal that runs healthy,
-then develops a fault — rising amplitude and impulsiveness over the final stretch.
+then develops a fault — rising amplitude and impulsiveness over the final stretch. It is
+written at **one reading a second**, which is the rate the predictive-maintenance page's
+`SAMPLE_HZ` and window length assume.
 
 ```python
 def degrading_vibration(hours=24, fs_per_hour=3600):
-    n = hours * fs_per_hour
+    n = hours * fs_per_hour                    # one reading a second
     idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=n, freq="1s")
     t = np.linspace(0, 1, n)
     healthy = 0.6 * np.sin(2 * np.pi * 50 * np.arange(n) / fs_per_hour)   # base tone

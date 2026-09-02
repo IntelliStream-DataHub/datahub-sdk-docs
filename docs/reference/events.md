@@ -53,16 +53,11 @@ HTTP caller should expect the quotes.
 :::
 
 :::note One list, not two parallel ones
-`relatedResources` replaced a `relatedResourceIds` / `relatedResourceExternalIds` pair. The two
-were independent inputs and drifted: a mismatched pair was unioned into an event describing both
-resources, and a patch setting only the external ids left the stored ids stale. There are no
-aliases, and events ignore unknown properties, so a client still sending the old field names gets
-a `200` with its relations silently dropped. Java SDK users get a compile break on the removed
-setters instead.
-
 Supply an `id`, an `externalId`, or both. The server resolves whichever side you left out and
 returns both, so a read always gives you the pair. Sending both when they name *different*
-resources is a `400` rather than a guess about which one you meant.
+resources is a `400` rather than a guess about which one you meant. The field names
+`relatedResourceIds` and `relatedResourceExternalIds` are unknown to the API and are refused
+with a `400`, like any other [unknown field](./client#unknown-fields).
 :::
 
 ## Create {#create}
@@ -122,7 +117,7 @@ that quietly relates to nothing.
 Create, update and delete each take at most **10 000 events** per request, and one event
 carries at most 10 000 characters of `description`, 256 metadata entries and 100
 `relatedResources`. Past any of those is a `400`. [Limits & quotas](./limits) has the rest,
-including the daily and lifetime ceilings on how many events an organisation may hold.
+including the daily and lifetime ceilings on how many events an organization may hold.
 
 :::note Event ids are time-ordered UUID v7
 The ingestion paths stamp every event that has no `id` with a **UUID v7** before sending —
@@ -219,8 +214,8 @@ let events = api.events.filter(&filter).await?;
 </TabItem>
 </Tabs>
 
-`limit` defaults to **100** and is capped at **10 000**; a zero or negative value falls back
-to 100 rather than returning nothing. Whatever you ask for, the result is intersected with
+`limit` defaults to **1 000** and is capped at **10 000**; a zero or negative value falls back
+to the default rather than returning nothing. Whatever you ask for, the result is intersected with
 the data sets your token may read — a filter can never widen access, so an empty page can
 mean "no matches" or "none you may see", and the two are not distinguished.
 
@@ -268,8 +263,7 @@ case-insensitively, so `"SHIFT_REPORT_1*"` is the case-insensitive way to ask th
 :::
 
 **A parent data set stands in for its children.** Naming one covers everything beneath it in the
-`BELONGS_TO` hierarchy, which is the same expansion access control applies to a grant, so the two
-now agree.
+`BELONGS_TO` hierarchy, the same expansion access control applies to a grant.
 
 An `externalId` that names no data set contributes nothing. That can only ever narrow the
 result — a typo gives you too few events, never events you should not see.
@@ -278,10 +272,9 @@ result — a typo gives you too few events, never events you should not see.
 Omit the field (or send `null`) for **no data set restriction**. An explicit empty list means
 **narrow to no data sets**, which matches nothing.
 
-The distinction matters if you build the filter programmatically: code that collects data set
-references into a list and always sets the field will silently return zero events when that list
-comes back empty, rather than the unrestricted result the same code returns for every other
-filter field.
+The distinction matters if you build the filter programmatically. Code that collects data set
+references into a list and always sets the field silently returns zero events when that list
+comes back empty. For every other filter field the same code returns the unrestricted result.
 :::
 
 :::note `eventTime.max` is exclusive; the other maxima are inclusive
@@ -354,13 +347,13 @@ To walk past the first page, echo back the `nextCursor` the response carried:
 ```
 
 The cursor is **opaque** — base64 of a versioned encoding carrying the sort, the boundary value
-and the id — so do not build or parse one. A cursor that does not decode restarts the walk from
-the first page rather than failing, which is obviously wrong to a caller, where guessing at half
-a position would silently skip or repeat the rows around the boundary.
+and the id — so do not build or parse one. A cursor that does not decode is refused with a
+`400` of `type: ".../errors/malformed-cursor"` rather than guessed at: half a position would
+silently skip or repeat the rows around the boundary.
 
 Send it with the **same** `sort` that produced it: a cursor is a position in one particular
-order. Continuing it under another is refused, though today the refusal arrives as an empty
-response rather than a clean 400. Sorting by `subType` or `status` cannot be paged at all —
+order. Continuing it under another is refused with the same `400`, which names both sorts.
+Sorting by `subType` or `status` cannot be paged at all —
 both columns are nullable, and a keyset boundary on them would skip the events that have no
 value.
 
@@ -432,7 +425,7 @@ it would mean renaming a resource silently abandoned its finding and started a s
 
 ### Fetch the queue
 
-Filter on the type, ascending by `eventTime`, and page with [`after`](#paging):
+Filter on the type, ascending by `eventTime`, and page with [`cursor`](#paging):
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -582,14 +575,8 @@ narrows the phrase's hits:
 }
 ```
 
-:::note What changed
-`filter` used to be accepted and silently ignored here, as it was on the resource and data set
-searches. All four searches now apply it. `dataSetId` covers everything beneath the data sets you
-name, exactly as it does on `/events/filter`.
-
-The description above is also a correction: this endpoint never was fuzzy, word-aware or
-relevance-ranked, whatever the previous wording said.
-:::
+`dataSetId` in that block covers everything beneath the data sets you name, exactly as it does on
+`/events/filter`.
 
 `query` must be 3 to 140 characters. There is no character restriction beyond that: punctuation,
 underscores and non-Latin scripts are all accepted, so an externalId or a Cyrillic asset name can
@@ -642,7 +629,7 @@ this" be expressed distinctly from "leave it alone":
 | Verb | Applies to | Effect |
 | --- | --- | --- |
 | `set` | every field | Replace the value. |
-| `setNull: true` | nullable fields only | Clear the value. `externalId`, `type` and `eventTime` are not nullable, so asking to clear any of them is a `400`. |
+| `setNull: true` | nullable fields only | Clear the value. `externalId` and `type` are not nullable, so asking to clear either is a `400`. |
 | `add` | `metadata`, `relatedResources` | Merge entries in, keeping the rest. |
 | `remove` | the same collections | Take entries out, keeping the rest. A `relatedResources` entry matches on either side, so you can remove by `id` or by `externalId` whichever you have. |
 
@@ -661,13 +648,19 @@ this" be expressed distinctly from "leave it alone":
 ```
 
 Updatable fields are `externalId`, `description`, `type`, `subType`, `status`, `source`,
-`dataSetId`, `metadata`, `eventTime` and `relatedResources`. `eventTime` is set from an
-ISO-8601 string. Sending both `set` and `setNull` for one field is
-a `400` — the request is contradictory, so it is refused rather than resolved by precedence.
+`dataSetId`, `metadata` and `relatedResources`. Sending both `set` and `setNull` for one
+field is a `400` — the request is contradictory, so it is refused rather than resolved by
+precedence.
 
-`setNull` is refused on the three fields a create cannot omit: `externalId`, `type` and
-`eventTime`. Clearing `type` used to be accepted, and it left the event unreadable by any
-client that models `type` as required, so the read failed rather than the write. `dataSetId`
+`eventTime` is **fixed at creation** and is not an update field at all: an update naming it
+is a `400` that names the field, the same answer as for any field the form does not have. The
+store partitions events by their time, and a row cannot move between partitions. An event
+recorded against the wrong moment is deleted and written again, or corrected by a follow-up
+event, which the caution below recommends anyway.
+
+`setNull` is refused on `externalId` and `type`, the two fields a create cannot omit and an
+update can name. Clearing `type` would leave the event unreadable by any client that models
+`type` as required, so the write is refused rather than the read failing later. `dataSetId`
 is the one field here that genuinely is nullable: `setNull` detaches the event from its data
 set, and naming a `dataSetId` that no data set has is a `400` rather than a stored dangling
 reference.
@@ -770,8 +763,7 @@ api.events.delete(&vec![IdAndExtId::from_external_id("door_open")]).await?;
 
 ## What each client covers {#client-coverage}
 
-The three clients cover the write and read paths, including the facet endpoints; the
-administrative ones are HTTP-only so far.
+The three clients cover every event endpoint, the facet endpoints included.
 
 | Operation | Java | Python | Rust |
 | --- | --- | --- | --- |
@@ -791,6 +783,5 @@ All three carry the same four pairs: `list_types` / `search_types` and the same 
 statuses and sources (`listTypes` / `searchTypes` … in Java).
 
 Take the paging value from the response envelope — `getNextCursor()` in Java, `page.next_cursor`
-in Python, `page.next_cursor()` in Rust — and send it back unchanged. It is opaque; the
-`<millis>_<id>` value earlier versions had you assemble by hand no longer decodes, and an
-undecodable cursor restarts the walk from the first page.
+in Python, `page.next_cursor()` in Rust — and send it back unchanged. It is opaque; an
+undecodable cursor is refused with a `400`.

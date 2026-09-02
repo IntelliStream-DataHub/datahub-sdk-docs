@@ -11,7 +11,7 @@ against your data model directly instead of you hand-writing an integration laye
 
 | Server | Endpoint | Exposes |
 | --- | --- | --- |
-| API | `<api-url>/mcp` (port 8081 locally) | **37 tools** across datasets, resources, relationships, timeseries, events, labels and units |
+| API | `<api-url>/mcp` (port 8081 locally) | **37 tools** across data sets, resources, relationships, time series, events, labels and units |
 | Analysis | the analysis service's `/mcp` (port 8082 locally) | **one tool**, [`analysis_related_series`](#the-analysis-server) |
 
 The important part is what they *aren't*: each MCP endpoint is an ordinary Spring endpoint on
@@ -52,12 +52,11 @@ Three things are checked before any tool body runs:
    `OrganizationValidator` used for REST, so an agent cannot reach another tenant's data
    even by asking for an id it happens to know.
 
-Past those gates, per-dataset [access grants](/reference/datasets#access-control) apply
+Past those gates, per-data-set [access grants](/reference/datasets#access-control) apply
 exactly as on REST: rows in data sets the identity cannot read are omitted, writes it lacks
 a grant for are refused.
 
-The practical consequence, and the reason this design is worth the trouble: **an agent
-inherits the permissions of whoever it is acting for.** If you want an agent that can read
+The practical consequence: **an agent inherits the permissions of whoever it is acting for.** If you want an agent that can read
 but not write, issue it a token that can read but not write. There is no second permission
 model to keep in sync.
 
@@ -123,19 +122,19 @@ Calling a tool is the same request with a `tools/call` body:
 Named `<domain>_<action>` in snake_case, deliberately, so the listing reads the same to you
 and to the model.
 
-### Datasets
+### Data sets
 
 | Tool | What it does |
 | --- | --- |
-| `dataset_list` | List datasets visible to the caller. The catalogue is usually small |
+| `dataset_list` | List data sets visible to the caller |
 | `dataset_search` | Full-text search, returns ids needed by `timeseries_create` |
-| `dataset_create` | Create one dataset, returns the server-assigned id |
-| `dataset_update` | Update one dataset by id. Only provided fields change |
+| `dataset_create` | Create one data set, returns the server-assigned id |
+| `dataset_update` | Update one data set by id. Only provided fields change |
 | `dataset_delete` | Delete by id or externalId. Does **not** cascade to members |
 
 ### Resources
 
-A resource is any node in the graph that is not a dataset or a timeseries: equipment, work
+A resource is any node in the graph that is not a data set or a time series: equipment, work
 items, documents.
 
 | Tool | What it does |
@@ -171,14 +170,14 @@ neighbour ("the time series measuring this pump").
 | `edge_get` | Fetch a single edge by numeric id |
 | `edge_delete` | Delete edges by id. Nodes on either side are untouched |
 
-### Timeseries
+### Time series
 
 | Tool | What it does |
 | --- | --- |
 | `timeseries_list` | Browse when you do not yet have a search term |
 | `timeseries_search` | Full-text search over name, externalId and description, ranked by relevance |
 | `timeseries_get` | Look up by externalId or numeric id |
-| `timeseries_create` | Create one timeseries, returns the assigned id. Needs a `unit` or a `unitExternalId` (see `unit_list`) |
+| `timeseries_create` | Create one time series, returns the assigned id. Needs a `unit` or a `unitExternalId` (see `unit_list`) |
 | `timeseries_update` | Update common fields by id |
 | `timeseries_delete` | Delete the definition. Existing datapoints are not removed |
 | `timeseries_get_latest` | Most recent datapoint, for "what is it reading now?" |
@@ -207,7 +206,7 @@ for when the agent only has words to go on.
 | `label_create` | Create one label, coerced to `SCREAMING_SNAKE_CASE` |
 | `label_update` | Update description, i18n code or colour by id |
 | `unit_list` | Units of measure known to DataHub, e.g. Celsius |
-| `unit_get` | Look up one unit by externalId, e.g. `celsius` |
+| `unit_get` | Look up one unit by externalId, e.g. `temperature_deg_c` |
 
 ## The analysis server
 
@@ -314,18 +313,13 @@ and daily ingest quota as your own jobs, and hit the same field, batch and body-
 agent that lists in a loop can rate-limit the pipeline it shares a tenant with. The refusal
 comes back as a `429` carrying `Retry-After`, which is worth teaching the agent to honour.
 
-**Deletes do not cascade.** Deleting a dataset leaves its resources and timeseries in place;
-deleting a timeseries leaves its datapoints. This is deliberate, but it means an agent
+**Deletes do not cascade.** Deleting a data set leaves its resources and time series in place;
+deleting a time series leaves its datapoints. This is deliberate, but it means an agent
 tidying up will need more than one call, and a half-finished tidy leaves orphans.
 
-**Name coercion is server-side.** Relationship types and labels are normalised to
-`SCREAMING_SNAKE_CASE`, so `derived from` becomes `DERIVED_FROM`. Agents that construct a
-name and then search for the string they constructed will miss.
-
-## Adding a tool
-
-Annotate a public method on a Spring bean in the API server's `mcp.tools` package with `@Tool`, reference
-`McpResultConverter` from it, and register the bean in the `ToolCallbackProvider`. If it is
-not registered there, the server does not advertise it. Spring AI builds the schema from the
-parameter types and the `@ToolParam` descriptions, so those descriptions are what the model
-reads: write them for the model, not for a colleague.
+**Name coercion is server-side, and not uniform.** `edge_create_type` and `label_create`
+normalise a name to `SCREAMING_SNAKE_CASE`, so `derived from` becomes `DERIVED_FROM`, and the
+labels given to `resource_create` are canonicalised the same way when stored. `edge_create`
+only upper-cases its `relationshipType`, so `derived from` becomes `DERIVED FROM`, a different
+type from `DERIVED_FROM`. Agents that construct a name and then search for the string they
+constructed will miss; have the agent write relationship types as `SCREAMING_SNAKE_CASE`.

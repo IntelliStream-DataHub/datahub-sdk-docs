@@ -14,7 +14,7 @@ resources can be connected many ways, but only once each way.
 Most edges are born with their nodes: `POST /resources/create` takes `nodes` and `relations`
 together and writes them in one transaction. The `/edges` endpoints are for everything after
 that — linking resources that already exist, reading an edge back, cutting one without
-touching its endpoints, and managing the relationship-type catalog.
+touching its endpoints, and managing the relationship-type catalogue.
 [Create resources and relations →](./resources#create-resources-and-relations)
 
 ## The edge object {#body}
@@ -25,7 +25,7 @@ touching its endpoints, and managing the relationship-type catalog.
 | `start` | number | Id of the `from` node. |
 | `end` | number | Id of the `to` node. |
 | `type` | string | The relationship type name, upper-cased (`CONTAINS`, `FLOWS_TO`). |
-| `relationshipTypeId` | number | The type's id in the [catalog](#types). |
+| `relationshipTypeId` | number | The type's id in the [catalogue](#types). |
 | `description` | string | Prose. |
 | `metadata` | map&lt;string, string&gt; | Flat key/value. |
 
@@ -55,7 +55,7 @@ POST /edges/create
 Name each end by external id (`fromExternalId`/`toExternalId`) or by numeric id
 (`fromId`/`toId`), and the relation by `relationshipType` or `relationshipTypeId`. A type
 name you haven't used before is created for you, so [pre-registering types](#types) is only
-for seeding the catalog or attaching a description.
+for seeding the catalogue or attaching a description.
 
 The batch is **all-or-nothing** — one relation the server won't take and none of them are
 written. Success is a `201` with the created edges under `items`.
@@ -118,39 +118,37 @@ println!("{:?}", created.get_items()[0].id);
 
 | Status | Means |
 | --- | --- |
-| `400` | An end doesn't exist (the message names which), the relation has no type, or it breaks one of the dataset or time-series rules below. |
+| `400` | An end doesn't exist (the message names which), the relation has no type, or it breaks one of the data set or time series rules below. |
 | `403` | You can't write one of the two resources. Both ends are checked, so linking something *into* a data set needs write access on that data set too. |
 | `409` | The two are already connected that way. `(start, end, type)` is unique — one relation per pair per type. |
 
-:::note Edges into datasets and time-series are validated
+:::note Edges into data sets and time series are validated
 The same two rules the [graph create](./resources#create-resources-and-relations) enforces
 apply here:
 
-- A relation **to a dataset** must use the `BELONGS_TO` relationship type — that is the
-  relation dataset membership is built from, and anything else is a `400`.
-- A **dataset → time-series** edge is accepted only when the series has no dataset yet, or
-  already belongs to that very dataset. A series in a *different* dataset is a `400`: a
-  time-series has one dataset.
+- A relation **to a data set** must use the `BELONGS_TO` relationship type — that is the
+  relation data set membership is built from, and anything else is a `400`.
+- A **data set → time series** edge is accepted only when the series has no data set yet, or
+  already belongs to that very data set. A series in a *different* data set is a `400`: a
+  time series has one data set.
 :::
 
 ## Look up {#look-up}
 
-`GET /edges/{id}` returns a single edge; an id that doesn't exist is a `404`. Older backends
-answered `200` with an empty `items[]` here, so code that has to work against both should
-check the count rather than the status.
+`GET /edges/{id}` returns a single edge; an id that doesn't exist is a `404`.
 
 `POST /edges/byids` takes several ids and answers with a **graph**: the edges under
 `relations` and the resources at both ends under `nodes`, so you don't need a follow-up call
 to resolve endpoints. Unlike the single lookup, ids that match nothing are **silently
 omitted** — compare what comes back against what you asked for.
 
-Both lookups are gated by dataset grants: reading an edge requires **read access to the data
+Both lookups are gated by data set grants: reading an edge requires **read access to the data
 sets of both endpoints**, mirroring the write rule, because an edge reveals both ends. A denied
 edge behaves exactly like a missing one: `byids` omits it just as it omits an unknown id, and
-the single lookup answers `404`, so an edge you may not read is indistinguishable from one that
-does not exist — don't infer that two resources are unlinked from a missing edge. The MCP
-`edge_get` tool follows the same rule.
-[Dataset access control →](./datasets#access-control)
+the single lookup answers `404`. An edge you may not read is therefore indistinguishable from
+one that does not exist, so don't infer that two resources are unlinked from a missing edge.
+The MCP `edge_get` tool follows the same rule.
+[Data set access control →](./datasets#access-control)
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -242,9 +240,9 @@ api.edges.delete(&vec![IdAndExtId::from_id(341)]).await?;
 
 ## Relationship types {#types}
 
-Every edge carries a type, and the types are a per-tenant catalog: `GET /edges/types` lists
+Every edge carries a type, and the types are a per-tenant catalogue: `GET /edges/types` lists
 them, `POST /edges/types/create` registers names up front. Registering is optional — a type
-is created the first time an edge uses its name — so reach for it when you want the catalog
+is created the first time an edge uses its name — so reach for it when you want the catalogue
 seeded before anyone writes, or a `description`/`i18nCode` attached to a type.
 
 A type is `{ id, name, description, i18nCode }`.
@@ -302,7 +300,7 @@ normalised name, so `flows_to` and `FLOWS_TO` are the same type either way.
 
 The practical rule: write the type name the way you want it stored, `FLOWS_TO`, and the two
 paths agree. In Java, `RelForm.setName("Flows To")` snake-upper-cases client-side and lines the
-create path up with the catalog; `setRelationshipType` passes the string through. Python and
+create path up with the catalogue; `setRelationshipType` passes the string through. Python and
 Rust send what you give them.
 
 A name with no letter or digit in it (blank, or symbols only) is a `400`, and names registered
@@ -311,9 +309,8 @@ through `types/create` are capped at 128 characters.
 :::caution A duplicate type name takes the whole batch with it
 `POST /edges/types/create` has no find-or-create: it saves a fresh type unconditionally, so a
 name that already exists (matched case-insensitively) collides on the unique name hash and
-comes back as a **`409`** naming the conflict — not the "existing ones returned unchanged" the
-endpoint used to advertise. You cannot use it to look up the id of a type you did not just
-create; read `GET /edges/types` for that.
+comes back as a **`409`** naming the conflict. You cannot use it to look up the id of a type
+you did not just create; read `GET /edges/types` for that.
 
 Every form in a batch is saved in one transaction, so a single duplicate rolls the valid new
 types back alongside it. Treat the `409` as *"nothing in this batch was created"* rather than

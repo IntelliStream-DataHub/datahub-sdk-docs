@@ -20,15 +20,14 @@ unmistakable. An **LSTM autoencoder** learns to reconstruct that normal joint be
 when a real event arrives, it can't reconstruct it well, and the reconstruction error
 spikes. It needs **no examples of failure** — only normal operation.
 
-:::tip Need data to run this?
+:::info Needs a sandbox
 These steps read series that already exist. [Generate a sandbox](/advanced/generate-sample-data)
 first — section J ingests the correlated drilling channels (with an injected kick) this build watches.
 :::
 
 :::tip New to machine learning?
 No background needed. Skim the [gentle primer](/advanced/machine-learning-gently) for the
-ideas in plain language — model, feature, training, and the algorithm itself — and use
-[Generate sample data](/advanced/generate-sample-data) for a sandbox to run this against.
+ideas in plain language — model, feature, training, and the algorithm itself.
 :::
 
 ## 1. Load the normal multivariate window
@@ -51,7 +50,7 @@ def load(external_id, start, end):
     rf = intellistream_datahub_sdk.RetrieveFilter(ts=external_id, start=start, end=end, limit=100_000)
     pts = client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()
     return pd.Series([float(p.value) for p in pts],
-                     index=pd.to_datetime([p.timestamp for p in pts])).sort_index()
+                     index=pd.to_datetime([p.timestamp for p in pts], utc=True)).sort_index()
 
 start = pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=1)      # a stretch of normal running
 end   = pd.Timestamp.now(tz="UTC") - pd.Timedelta(minutes=12)   # ends before the recent kick
@@ -164,6 +163,13 @@ if error[-3:].mean() > THRESHOLD:
         type="kick_detected", status="critical",
         event_time=score_index[-1],
         metadata={"rig": "rig_deepwater_1", "score": f"{error[-1]:.3f}", "model": "lstm_ae_v1"})])
+
+# read the score back: one point per scored second
+stored = client.timeseries.retrieve_datapoints(intellistream_datahub_sdk.RetrieveFilter(
+    ts="rig_dw1_anomaly_score", start=score_index[0], end=pd.Timestamp.now(tz="UTC"),
+    limit=10_000))[0].get_datapoints()
+print(f"{len(stored)} scores stored, latest {stored[-1].value:.3f} against a limit of {THRESHOLD:.3f}")
+assert len(stored) == len(error), f"expected {len(error)}, got {len(stored)}"
 ```
 
 ## Where to take it further

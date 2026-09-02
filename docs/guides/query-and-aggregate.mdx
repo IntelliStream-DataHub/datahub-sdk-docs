@@ -1,11 +1,11 @@
 ---
 sidebar_position: 2
-title: Query & aggregate time-series
+title: Query & aggregate time series
 ---
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-# Query & aggregate time-series
+# Query & aggregate time series
 
 Read raw datapoints back for a window, then roll them up to fixed buckets
 (hourly averages, daily maxima) for a chart or report. Aggregates and the bucket
@@ -143,11 +143,14 @@ for series in result.get_items() {
 </TabItem>
 </Tabs>
 
-:::note Common aggregates
-`avg`, `min`, `max`, `sum`. Granularity is a number plus a unit —
-`30s`, `5m`, `1h`, `1d`. The Python and Rust datapoint types expose each requested
-aggregate as its own field — `min`/`max`/`sum` by name, and `avg` read back on
-`.average` (`dp.average`, `dp.max`, …).
+:::note The aggregates and granularities
+The aggregates are `avg`, `sum`, `min` and `max`, lower-case; a name outside that set is
+dropped, not rejected. Granularity is a number plus a unit: `s`, `m`, `h`, `d`, `w`, `mo`, `y`,
+or the words `sec`, `min`, `hour`, `day`, `week`, `month`, `year` and their plurals (`30s`,
+`5m`, `1h`, `1d`). Bare `m` is a minute; a month is `mo`. The Python and Rust datapoint types
+expose each requested aggregate as its own field: `min`/`max`/`sum` by name, and `avg` read
+back on `.average` (`dp.average`, `dp.max`, …).
+[Retrieve datapoints →](/reference/timeseries#retrieve-datapoints)
 :::
 
 :::warning Java aggregate reads
@@ -159,8 +162,9 @@ aggregates — or in Java, fetch raw datapoints and aggregate them in your appli
 
 ## Paging large windows
 
-A wide window can exceed one response. When the result carries a cursor, pass it
-back to fetch the next page.
+A wide window can exceed one response. Each returned collection carries a `nextCursor` when
+there is more (`getNextCursor()` in Java, `next_cursor` in Python and Rust); pass it back as
+`cursor` to fetch the next page.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">

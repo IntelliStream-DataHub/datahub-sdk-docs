@@ -1,13 +1,13 @@
 ---
 sidebar_position: 4
-title: Time-series
+title: Time series
 ---
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-# Time-series
+# Time series
 
-Time-series metadata, datapoint retrieval, and datapoint ingestion (single-request or
+Time series metadata, datapoint retrieval, and datapoint ingestion (single-request or
 high-throughput).
 
 A series' `externalId` identifies it: unique per tenant, compared without case, and stored
@@ -66,12 +66,17 @@ else:
 | --- | --- |
 | `float32` *(default)* | Sensor readings — 32-bit precision is plenty. |
 | `float` | Double-precision floating point. |
-| `numeric` / `decimal32` | **Exact decimals** — money, lab values — stored without floating-point rounding. Pass the values as strings. |
+| `numeric` / `decimal32` | **Exact decimals** — money, lab values — stored without floating-point rounding. Send the value's string form, see below. |
 | `bigint` | Whole numbers (counts, integer statuses). |
 | `text` | Non-numeric string values. |
 | `mixed` | Heterogeneous values in one series. |
 
 A float written to a `bigint` series is rejected, so pick the type that matches the data.
+
+Every value crosses the wire as a string, whatever the type. For an exact decimal, send the
+string form rather than a float: `Datapoint.of(ts, "12.34")` in Java, `DatapointString(ts,
+"12.34")` with `insert_datapoints` in Python (`insert_from_lists` takes floats and converts
+them), and `DatapointString` in Rust.
 
 `text` and `mixed` also carry a tighter write cap than the numeric types: **10 000 datapoints
 per collection** rather than 100 000, and a lifetime ceiling of their own. The check runs once
@@ -142,12 +147,6 @@ Results come newest first unless you ask for another order — see
 `<= 0` falls back to the default, and above the ceiling is a 400). Series in data sets you lack
 read access to are silently omitted — the result is what your token may see, not an error. For
 free-text lookups use `POST /timeseries/search` instead.
-
-:::note The `metadataKey` / `metadataValue` pair is gone
-It existed only because `metadata` could not express "has this key, whatever its value". A null
-value in the map says that now, and `{"health": "good", "tier": null}` asks for both conditions at
-once.
-:::
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -222,18 +221,8 @@ search query itself, everything else is applied to the hits afterwards.
 }
 ```
 
-:::warning `search.name` and `search.description` are gone
-The phrase block is now a single `query`, the same shape the other three searches take. The two
-alternatives it used to carry were removed rather than kept: `name` matched by **exact equality**
-under an endpoint documented as full-text, and `description` ran a differently configured query
-over one column.
-
-Both have a better replacement. `filter.name` matches names as a case-insensitive pattern list
-(`["pump_*", "PMP-1"]`), which is more than `search.name` could do, and `query` already covers the
-description column.
-
-Clients exposing these as separate calls (`search_by_name`, `search_by_description`) need updating
-to match.
+:::caution `search.name` and `search.description` are rejected
+They are unknown fields, refused with a `400`; use `filter.name` and `query`.
 :::
 
 ## Sorting and paging {#sorting-and-paging}
@@ -270,7 +259,7 @@ A page that has a successor carries a `nextCursor`. Echo it back as `cursor` to 
 The cursor is **opaque** — base64 of a versioned encoding carrying the sort, the boundary value
 and the id — so do not build or parse one. Send it with the **same** sort that produced it; a
 cursor is a position in one particular order, and continuing it under another is refused. One
-that does not decode restarts the walk from the first page rather than failing.
+that does not decode is refused with a `400` of `type: ".../errors/malformed-cursor"`.
 
 `nextCursor` is absent on a short page, so "keep going while it is present" is the whole loop. A
 full page may still be the last, so a complete walk ends with one empty request.
@@ -305,7 +294,8 @@ while True:
         break
 ```
 
-`filter()` returns a `Page` — a list, so existing code is unaffected, carrying `.next_cursor`.
+`filter()` returns a `Page`: iterable, indexable and sized like a list, carrying `.next_cursor`
+and `.items` (a real `list`). It is not a `list` subclass, so `isinstance(page, list)` is `False`.
 
 </TabItem>
 <TabItem value="rust" label="Rust">
@@ -462,7 +452,7 @@ client.timeseries.insert_from_lists(
 </TabItem>
 <TabItem value="rust" label="Rust">
 
-`insert_datapoints` auto-batches large inputs (chunks above ~100k points):
+`insert_datapoints` auto-batches large inputs (chunks at the 100 000-point collection cap):
 
 ```rust
 use intellistream_datahub_sdk::generic::{DataWrapper, DatapointsCollection, DatapointString};
@@ -481,7 +471,22 @@ api.time_series.insert_datapoints(&mut dw).await?;
 
 ## Retrieve datapoints
 
-Identify a series (external id or id) and a time window.
+`POST /timeseries/data/list` takes a list of `RetrieveFilter` items, one per series and
+window:
+
+| Field | Meaning |
+| --- | --- |
+| `id` / `externalId` | The series. |
+| `start`, `end` | ISO-8601 or epoch millis. At least one is required. |
+| `limit` | Datapoints per page, default 100, at most 100 000. |
+| `aggregates` | Any of `avg`, `sum`, `min`, `max`, lower-case. A name outside that set is dropped, not rejected. `avg` comes back as `average`. |
+| `granularity` | A number and a unit: `s`, `m`, `h`, `d`, `w`, `mo`, `y`, or the words `sec`, `min`, `hour`, `day`, `week`, `month`, `year` and their plurals (`15m`, `1h`, `30 min`). Bare `m` is a minute; a month is `mo`. Required when `aggregates` is set. |
+| `includeOutsidePoints`, `mergeDuplicates` | Booleans, default `false`. |
+| `cursor` | The previous page's `nextCursor`, carried on each returned collection. |
+
+A datapoint comes back with an ISO-8601 UTC `timestamp` and a `value`. Python reads the
+timestamp as a timezone-aware `datetime.datetime` and the value as `float | None`; Rust as
+`chrono::DateTime<Utc>` and `Option<f64>`; Java keeps both as strings on `DatapointString`.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -671,9 +676,8 @@ if (!result.isComplete()) {
 | Update | HTTP | `timeseries.update` | `time_series.update` |
 | Delete | `timeseries().delete` | `timeseries.delete` | `time_series.delete` |
 | Write datapoints | `insertDatapoints` / `ingest` | `insert_datapoints` / `insert_from_lists` | `insert_datapoint` / `insert_datapoints` |
-| Read datapoints | `retrieve` / `retrieveAggregated` | `retrieve_datapoints` / `retrieve_latest_datapoints` | `retrieve_datapoints` / `retrieve_latest_datapoint` |
+| Read datapoints (raw and [aggregated](#retrieve-datapoints)) | `retrieve` / `retrieveAggregated` | `retrieve_datapoints` / `retrieve_latest_datapoints` | `retrieve_datapoints` / `retrieve_latest_datapoint` |
 | Delete datapoints | `deleteDatapoints` | `timeseries.delete_datapoints` | `time_series.delete_datapoints` |
 
 Java is the one with `ingest`, the chunking, parallelising, retrying path described above.
-It is missing `list` and `update`, so reach for the endpoint there. It gained `search` alongside
-the resource, data set and event searches it already had.
+It is missing `list` and `update`, so reach for the endpoint there.

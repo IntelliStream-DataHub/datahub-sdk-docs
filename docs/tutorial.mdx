@@ -223,8 +223,8 @@ story.
 
 ## Step 2 — Ensure the time series exist
 
-Before you can ingest, the target series have to exist. The create endpoint rejects
-duplicates, so rather than blindly creating them the program **looks up first, then
+Before you can ingest, the target series have to exist. The create endpoint rejects a
+duplicate external id with `409`, so rather than blindly creating them the program **looks up first, then
 creates only the gap** — which makes it safe to re-run and safe to start on a machine
 where the series already exist.
 

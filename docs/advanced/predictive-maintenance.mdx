@@ -13,13 +13,6 @@ vibration and warns you when it starts to drift · **Stack:** the SDK for data i
 plus three Python libraries — `numpy`, `scipy`, `scikit-learn`.
 :::
 
-:::tip New to this?
-No machine-learning background needed. If a word here is unfamiliar, the
-[gentle primer](/advanced/machine-learning-gently) explains it in one line. And to run
-this end-to-end, [generate a sandbox](/advanced/generate-sample-data) first (section A
-creates the vibration signal used below).
-:::
-
 **The idea in one paragraph.** A failing bearing vibrates differently long before it
 breaks — but not *louder*, so a simple "is it above X?" alarm misses it. The difference
 is in the *texture* of the vibration: tiny repeated shocks, energy shifting into certain
@@ -27,12 +20,18 @@ frequencies. We'll let a model look at lots of examples of the machine running *
 learn what healthy texture looks like, and then raise a flag when new data stops looking
 like it. Nothing here needs labelled failures — only normal running.
 
-The [quick examples](/industries/transport-logistics/aerospace) raise an alarm on a raw threshold; this is
-the grown-up version that *learns* normal first.
+The [quick examples](/industries/transport-logistics/aerospace) raise an alarm on a raw threshold; this
+version learns normal first.
 
-:::tip Need data to run this?
+:::info Needs a sandbox
 These steps read a vibration series that already exists. [Generate a sandbox](/advanced/generate-sample-data)
-first — section A ingests the degrading `pump_07_vibration_mm_s` this build scores.
+first — section A ingests the degrading `pump_07_vibration_mm_s` this build scores, one reading
+a second.
+:::
+
+:::tip New to machine learning?
+No background needed. If a word here is unfamiliar, the
+[gentle primer](/advanced/machine-learning-gently) explains it in one line.
 :::
 
 ## Step 1 — Get a stretch of healthy data
@@ -52,7 +51,7 @@ client = intellistream_datahub_sdk.DataHubClient.from_env()
 def load_series(external_id, start, end):
     rf = intellistream_datahub_sdk.RetrieveFilter(ts=external_id, start=start, end=end, limit=100_000)
     points = client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()
-    idx = pd.to_datetime([p.timestamp for p in points])
+    idx = pd.to_datetime([p.timestamp for p in points], utc=True)
     return pd.Series([float(p.value) for p in points], index=idx).sort_index()
 
 healthy = load_series(
@@ -103,8 +102,8 @@ let series = api.time_series
 ## Step 2 — Turn the raw wiggle into a few meaningful numbers
 
 A model can't learn much from one raw vibration value — it has no context. So we chop the
-signal into short **windows** (say, two seconds each) and, for each window, calculate a
-few numbers that capture its *texture*. These numbers are called **features**. We use
+signal into short **windows** (two minutes each, at the seed's one reading a second) and,
+for each window, calculate a few numbers that capture its *texture*. These numbers are called **features**. We use
 four, and here's what each one means in plain terms:
 
 - **RMS** — roughly the overall "loudness" or energy of the window.
@@ -121,8 +120,8 @@ four, and here's what each one means in plain terms:
 from scipy.stats import kurtosis
 from scipy.fft import rfft, rfftfreq
 
-SAMPLE_HZ = 1000        # the sensor reports 1000 readings per second
-WINDOW = SAMPLE_HZ * 2  # work in 2-second windows
+SAMPLE_HZ = 1            # the seed writes one reading per second
+WINDOW = SAMPLE_HZ * 120 # work in 2-minute windows
 
 def features(window, fs=SAMPLE_HZ):
     x = window - window.mean()                       # remove the average so we see the wobble
@@ -130,7 +129,7 @@ def features(window, fs=SAMPLE_HZ):
     crest = np.max(np.abs(x)) / rms if rms else 0.0  # biggest peak vs. average
     spectrum = np.abs(rfft(x))                       # the FFT: how much of each frequency
     freqs = rfftfreq(len(x), 1 / fs)
-    band = spectrum[(freqs >= 120) & (freqs <= 180)] # the bearing's fault frequency range
+    band = spectrum[(freqs >= 0.1) & (freqs <= 0.4)] # the fault band; the healthy tone sits below it
     band_energy = float(np.sum(band**2))
     return [rms, kurtosis(x), crest, band_energy]    # four numbers describe this window
 
@@ -142,8 +141,10 @@ def feature_matrix(series):
 X_healthy = feature_matrix(healthy)   # one row of four features per window
 ```
 
-So each two-second window is now just four numbers. A week of healthy data becomes a big
-table of "this is what normal looks like."
+At one reading a second the highest frequency a window can resolve is 0.5 Hz, so the fault
+band sits below that; a real 1 kHz sensor would put it at the bearing's fault frequencies
+instead. Each two-minute window is now just four numbers. Eighteen hours of healthy data
+become a table of 540 rows that says "this is what normal looks like."
 
 ## Step 3 — Let the model learn "normal"
 
@@ -164,6 +165,9 @@ model.fit(scaler.transform(X_healthy))                         # learn what heal
 def anomaly_score(X):
     # the model returns "how normal"; we flip the sign so higher = more abnormal
     return -model.decision_function(scaler.transform(X))
+
+# the alarm level comes from the healthy data itself: the score 99% of normal windows stay under
+ALARM = float(np.percentile(anomaly_score(X_healthy), 99))
 ```
 
 ## Step 4 — Score new data, and write the answer back
@@ -181,18 +185,29 @@ X_recent = feature_matrix(recent)
 scores = anomaly_score(X_recent)
 score_index = recent.index[WINDOW::WINDOW][:len(scores)]   # timestamp each window's score
 
-client.timeseries.create([intellistream_datahub_sdk.TimeSeries(
-    external_id="pump_07_vibration_anomaly", name="Pump 07 vibration anomaly score", unit="score", value_type="float")])
+try:
+    client.timeseries.create([intellistream_datahub_sdk.TimeSeries(
+        external_id="pump_07_vibration_anomaly", name="Pump 07 vibration anomaly score", unit="score", value_type="float")])
+except intellistream_datahub_sdk.DataHubException as e:
+    if e.status_code != 409:          # the seed's stand-in series may already be there
+        raise
 client.timeseries.insert_from_lists(
     timestamps=score_index, values=scores, ts="pump_07_vibration_anomaly")
 
-ALARM = 0.04                          # healthy scores sit near/below 0; a sustained positive score is abnormal
-if scores[-5:].mean() > ALARM:        # sustained, not a single spike
+if scores[-5:].mean() > ALARM:        # sustained over the last ten minutes, not a single spike
     client.events.create([intellistream_datahub_sdk.Event(
         external_id=f"degradation_predicted_pump_07_{int(pd.Timestamp.now().timestamp())}",
         type="degradation_predicted", status="open",
         event_time=score_index[-1],
         metadata={"asset": "pump_07", "score": f"{scores[-1]:.3f}", "model": "iforest_v1"})])
+
+# read the scores back: the seed's fault ramps in over the last few hours, so the latest hour is abnormal
+stored = client.timeseries.retrieve_datapoints(intellistream_datahub_sdk.RetrieveFilter(
+    ts="pump_07_vibration_anomaly", start=score_index[0], end=pd.Timestamp.now(tz="UTC"),
+    limit=1000))[0].get_datapoints()
+print(f"{len(stored)} scores stored, latest {stored[-1].value:.3f} against an alarm level of {ALARM:.3f}")
+assert len(stored) >= len(scores), f"expected {len(scores)} scores, found {len(stored)}"
+assert scores[-5:].mean() > ALARM, "the seeded fault should score as abnormal"
 ```
 
 That's the whole loop. The anomaly score is now a first-class series — chart it beside the
