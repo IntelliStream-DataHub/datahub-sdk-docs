@@ -29,6 +29,7 @@ failing test except the documentation.** That is deliberate.
 ```bash
 ./doctests/setup.sh                        # once — venv + SDK built from source
 ./doctests/run.sh                          # every planned tutorial, Python
+./doctests/run.sh doctests/test_harness.py doctests/test_api_surface.py   # no stack needed
 ./doctests/run.sh -k quickstart            # one page
 ./doctests/run.sh --langs all              # Java and Rust too
 ./doctests/run.sh --keep -s -k tutorial    # leave the data behind and watch it run
@@ -36,7 +37,9 @@ failing test except the documentation.** That is deliberate.
 
 Needs a reachable stack in `doctests/.env` (see `.env.example`). **Never point it at
 production** — it creates and deletes entities under the docs' own external ids.
-No backend configured means skips, not failures.
+No backend configured means skips, not failures: 165 structural checks still run, and
+the API-surface checks run whenever the SDK is installed. That is what makes the suite
+useful in CI without a stack, and what `.github/workflows/doc-tutorials.yml` leans on.
 
 ## Reading a failure
 

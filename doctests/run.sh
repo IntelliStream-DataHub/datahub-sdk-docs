@@ -8,4 +8,14 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 [ -x "$HERE/.venv/bin/pytest" ] || { echo "run $HERE/setup.sh first" >&2; exit 1; }
-exec "$HERE/.venv/bin/pytest" "$HERE" "$@"
+
+# Run the whole suite unless the caller named specific tests. Without this, passing
+# a file would run it *in addition to* everything else, which is a surprising way to
+# spend four minutes when you asked for one file.
+targets=()
+for arg in "$@"; do
+  [ -e "$arg" ] && targets+=("$arg")
+done
+[ ${#targets[@]} -eq 0 ] && targets=("$HERE")
+
+exec "$HERE/.venv/bin/pytest" "${targets[@]}" "$@"

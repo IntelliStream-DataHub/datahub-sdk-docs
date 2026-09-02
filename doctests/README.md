@@ -40,6 +40,8 @@ configured the suite skips rather than fails.
 | `backend.py` | Config, cleanup sweeps, and the outcome checks. |
 | `test_tutorials.py` | One test per (page, language), plus the block-count drift guard. |
 | `test_coverage.py` | Refuses to let a page with runnable code go unaccounted for. |
+| `test_api_surface.py` | Checks every SDK name and service method the docs use against the built SDK. Needs the SDK, not a backend. |
+| `test_harness.py` | Tests the guards themselves. Needs neither. |
 | `entities.py` | Reads which entities a page creates, so a plan can own and assert them. |
 | `tutorial_support.py` | Helpers a test program may import: bounded listen, traffic feed, placeholder stubs. |
 | `bin/newplan.py` | Scaffolds a plan from a page. |
@@ -86,16 +88,26 @@ or `DOCTEST_LANGS=rust` — but need `DOCTEST_JAVA_REPO` (a `datahub-platform` c
 for the SDK jar) and a Rust toolchain respectively, and their per-page scenarios are
 mostly still to be written. A missing toolchain skips with the reason.
 
-## Wiring it into CI
+## What runs where
 
-Not configured here, because it needs an infrastructure decision this repo cannot make
-on its own: the suite requires a running DataHub stack. Once there is one CI can reach,
-a job is small — `setup.sh`, then `run.sh` with `BASE_URL` and credentials from secrets.
-Until then, run it locally before merging a change to any page with code on it.
+The suite is in three tiers, because they need very different things:
 
-The suite is also worth running from the **SDK** side: an SDK change that breaks a
-documented call should fail there, where the change is being made, rather than being
-discovered later here.
+| Tier | Needs | Catches |
+| --- | --- | --- |
+| Structure (165 checks, <1s) | nothing | a fence added or removed under a plan, a new page with no plan, a stale bounded-run substitution, a malformed plan, a regression in the harness itself |
+| API surface | the SDK built | a renamed or removed SDK symbol, a service method the docs call that no longer exists, a page importing a package that is not installed |
+| Tutorials | a live stack | everything else — whether the page actually works |
+
+`.github/workflows/doc-tutorials.yml` runs all three. The first two need no
+infrastructure and run on every pull request; the third runs when a `DOCTEST_BASE_URL`
+secret points at a stack, and posts a notice instead of failing when it does not.
+
+**Never point it at production.** Each run creates and deletes entities under the docs'
+own external ids.
+
+The API-surface tier is the one worth running from the **SDK** side: it needs only a
+build, so an SDK change that removes something the docs use can fail in the pull request
+that removes it, rather than being discovered here months later.
 
 ## Working on it
 
