@@ -16,17 +16,17 @@ Same field name, different jobs.
 
 | On | What `externalId` is | Unique? |
 | --- | --- | --- |
-| **Resources, data sets, time series** | The **identity** of one thing — your key for it, and what every integration matches on. | Yes, per tenant, compared without case |
-| **Events** | A **correlation key** — the source system's key for the *subject* the event is about. | **No, and deliberately never** |
+| **Resources, data sets, time series** | The **identity** of one thing, your key for it, and what every integration matches on. | Yes, per tenant, compared without case |
+| **Events** | A **correlation key**, the source system's key for the *subject* the event is about. | **No, and deliberately never** |
 
 An order that is created, amended and then shipped produces three events all carrying
 `PO-4500171`. That is the point: the order's history is "every event with this external id,
 in time order", and the log is an audit trail because of it. Per-event identity comes from
-the platform's own event `id` (a time-ordered UUID v7 — see [Events](./events)), never from
+the platform's own event `id` (a time-ordered UUID v7, see [Events](./events)), never from
 the external id.
 
 :::danger Do not synthesise per-event external ids
-Making event external ids unique — `PO-4500171-1`, `PO-4500171-2` — throws away the only
+Making event external ids unique, `PO-4500171-1`, `PO-4500171-2`, throws away the only
 cheap way to ask for a subject's history, and pushes you toward updating events in place,
 which destroys the append-only record. If you need to de-duplicate a redelivered snapshot,
 set the event `id` yourself; retries then collapse to one row.
@@ -34,7 +34,7 @@ set the event `id` yourself; retries then collapse to one row.
 
 ## The two layers
 
-### Layer 1 — the charset floor {#the-charset-floor}
+### Layer 1: the charset floor {#the-charset-floor}
 
 Platform-wide, not configurable, and it applies **everywhere an external id is accepted,
 events included**.
@@ -61,7 +61,7 @@ Byte-for-byte storage is what lets you join on identifiers you already maintain.
 historian, the maintenance system and DataHub hold the same string, so a match is a string
 comparison instead of a normalisation each integration has to reimplement identically.
 
-### Layer 2 — the naming policy {#the-naming-policy}
+### Layer 2: the naming policy {#the-naming-policy}
 
 A convention an administrator configures on top of the floor. It applies to **every node type
 whose external id is an identity**: resources and assets, data sets, time series, functions and
@@ -105,7 +105,7 @@ correct behaviour, not a gap.
 
 Uniqueness on resources, data sets and time series ignores case. Creating `com-99-pt-1034`
 when `COM-99-PT-1034` already exists is a duplicate and comes back as **`409`**, with a
-message naming the id it collides with — it is the ordinary "this external id already
+message naming the id it collides with, it is the ordinary "this external id already
 exists" path, not a naming-policy rejection.
 
 Lookups ignore case for the same reason, so uniqueness and lookup agree:
@@ -116,7 +116,7 @@ GET  /resources/VAL-01     ─┐
 GET  /resources/val-01     ─┘
 ```
 
-Storage is still verbatim, so **what you read back is byte-identical to what you sent** — a
+Storage is still verbatim, so **what you read back is byte-identical to what you sent**, a
 lookup by `val-01` returns an entity whose `externalId` is `VAL-01`. Compare external ids
 case-insensitively in your own code if you compare them at all.
 
@@ -127,7 +127,7 @@ bad item in 500 creates nothing, and the error names every offending item rather
 stopping at the first, so a rejected import is fixed in one pass.
 
 Items in the same request are also compared against each other, not just against stored data
-— sending `PUMP-01` and `pump-01` together is rejected.
+sending `PUMP-01` and `pump-01` together is rejected.
 
 ## Warnings on the response
 
@@ -177,7 +177,7 @@ document:
 }
 ```
 
-It is **`400`, not `403`** — malformed input, not an access decision. `detail` says outright
+It is **`400`, not `403`**, malformed input, not an access decision. `detail` says outright
 that nothing was created, because that is the first thing you need to know before retrying.
 
 The body reaches you through the ordinary error path in each client: `DatahubApiException`
@@ -214,7 +214,7 @@ POST /policies/naming/check
 ```
 
 Takes candidate external ids and an optional data set id, and returns the same findings the
-write path would produce — **without writing anything**. It runs the same evaluator, so
+write path would produce, **without writing anything**. It runs the same evaluator, so
 there is no second set of rules to keep in step.
 
 ```json
@@ -228,7 +228,7 @@ there is no second set of rules to keep in step.
 `names` is optional and pairs with `externalIds` **by position**. Supply it when you have it:
 suggestions are derived from the name first, so an entity called `Valve pressure sensors`
 gets offered `valve_pressure_sensors`, where deriving from a broken id could only manage
-`vps`. Either omit `names` entirely or send exactly as many as there are external ids — a
+`vps`. Either omit `names` entirely or send exactly as many as there are external ids, a
 partial list is rejected rather than paired up wrongly.
 
 Two things it is good for:
@@ -239,7 +239,7 @@ Two things it is good for:
 
 ### Suggestions {#suggestions}
 
-Every warning and every rejection carries a `suggestion` where one can be derived — a
+Every warning and every rejection carries a `suggestion` where one can be derived, a
 conforming external id you can offer as a one-click fix. It is **offered, never applied**:
 the server never rewrites an external id.
 
@@ -248,26 +248,26 @@ Two guarantees make it safe to wire straight into a form:
 - **A suggestion always satisfies the policy it is offered for.** It is checked against the
   charset floor, the length bounds and the active preset before being returned, so applying
   one cannot bounce back with a second rejection.
-- **A suggestion is never an id that is already taken** — neither one that is stored nor one
+- **A suggestion is never an id that is already taken**: neither one that is stored nor one
   claimed by an earlier item in the same batch.
 
 When nothing can be derived that satisfies both, `suggestion` is absent. That is deliberate:
 an honest omission beats a confident wrong answer. In particular a near-duplicate rejection
 usually has no suggestion, because every variant of the same name folds to the same taken
-value — the `reason` names the existing id instead, since the likeliest fix is to use it.
+value, the `reason` names the existing id instead, since the likeliest fix is to use it.
 
 ## Findings {#findings}
 
 Every warning is recorded, so warn means *allowed and in the steward's queue*, not *allowed
 and forgotten*.
 
-**A finding is an event** — and more precisely, a *stream* of events. There is no findings
+**A finding is an event**, and more precisely, a *stream* of events. There is no findings
 endpoint: findings are stored, filtered and resolved as ordinary events, so everything you
 already use for events works on them.
 
 Nothing is ever updated in place. Raising a finding appends an `OPEN` event; resolving it
 appends a `RESOLVED` event carrying the **same `externalId`**. A finding's current state is not
-stored — you derive it: take every event sharing that external id, order by `eventTime`
+stored, you derive it: take every event sharing that external id, order by `eventTime`
 ascending, and the last one wins.
 
 Read the queue by filtering events on the finding type:
@@ -288,7 +288,7 @@ POST /events/filter
 :::caution Do not filter on `status`
 A stored `OPEN` event means *this was raised*, not *this is outstanding*. Filtering the query on
 `status: "OPEN"` would return the raise of every finding that has since been resolved. Fetch the
-stream and fold it — that is what "the last event wins" means in practice.
+stream and fold it, that is what "the last event wins" means in practice.
 
 Order ascending for the same reason: replaying out of order lets a stale `OPEN` overwrite the
 `RESOLVED` that followed it.
@@ -298,14 +298,14 @@ Each finding event carries:
 
 | Field | What it holds |
 |---|---|
-| `externalId` | The finding this event belongs to — the correlation key you fold on |
+| `externalId` | The finding this event belongs to, the correlation key you fold on |
 | `subType` | The policy that fired, by external id |
 | `source` | `datahub_policy_<policy>` |
 | `description` | What is wrong, in words |
 | `relatedResources` | The entity the finding is about, by node id |
 | `dataSetId` | That entity's data set |
 | `eventTime` | When this happened |
-| `status` | `OPEN` or `RESOLVED` — what *this event* asserts |
+| `status` | `OPEN` or `RESOLVED`, what *this event* asserts |
 | `metadata.offendingValue` | The external id that tripped the policy |
 | `metadata.suggestion` | A conforming alternative, when one could be derived |
 | `metadata.raisedBy` | Subject of whoever wrote the offending value |
@@ -333,7 +333,7 @@ misses the answer to it. Resolving therefore needs write access to that data set
 
 Resolving is a judgement rather than a fix: the entity still breaks the policy, someone has
 decided that is acceptable. Because it is appended rather than edited, it does not erase the
-raise it answers — the finding's history stays readable.
+raise it answers, the finding's history stays readable.
 
 **Reopening needs no special rule.** If the external id later changes to another non-conforming
 value, the policy appends a fresh `OPEN` after the `RESOLVED`, and the replay says open again.

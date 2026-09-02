@@ -8,7 +8,7 @@ import TabItem from '@theme/TabItem';
 # Client & configuration
 
 The client is the entry point: it owns a shared HTTP connection and token handling and
-exposes one accessor per service. It is safe to share — **create one and reuse it** for
+exposes one accessor per service. It is safe to share: **create one and reuse it** for
 the lifetime of your application.
 
 <Tabs groupId="lang">
@@ -42,7 +42,7 @@ client = DataHubClient.from_envfile("/path/to/.env")
 client = DataHubClient(base_url="https://api.intellistream.ai", token="...")
 ```
 
-For `async`/`await`, use `AsyncDataHubClient` instead — same methods, awaited:
+For `async`/`await`, use `AsyncDataHubClient` instead, same methods, awaited:
 
 ```python
 from intellistream_datahub_sdk import AsyncDataHubClient
@@ -63,7 +63,7 @@ Every method is `async`, so call them from an async runtime (e.g. `#[tokio::main
 `.await` the result.
 
 Don't want async? Enable the `blocking` cargo feature and use
-`intellistream_datahub_sdk::blocking` instead — the same services and methods without
+`intellistream_datahub_sdk::blocking` instead, the same services and methods without
 `.await`, driven by the SDK's own runtime (the `reqwest` / `reqwest::blocking` split):
 
 ```rust
@@ -165,7 +165,7 @@ Setting an assertion source switches the request at `TOKEN_URI` from client-cred
 
 | Variable | Java builder | Python kwarg | Rust setter | Meaning |
 | --- | --- | --- | --- | --- |
-| `ASSERTION` | `.assertion(...)` | `assertion=` | `set_assertion(...)` | A ready-made JWT. Never refreshed — prefer the credentials below. |
+| `ASSERTION` | `.assertion(...)` | `assertion=` | `set_assertion(...)` | A ready-made JWT. Never refreshed, prefer the credentials below. |
 | `ASSERTION_CLIENT_ID` / `ASSERTION_CLIENT_SECRET` / `ASSERTION_TOKEN_URI` | `.assertionCredentials(...)` | `assertion_client_id=` / `assertion_client_secret=` / `assertion_token_url=` | `set_assertion_credentials(...)` | Fetch the assertion with client credentials from another provider (all three). |
 | `ASSERTION_SCOPE` | `.assertionScope(...)` | `assertion_scope=` | `set_assertion_scope(...)` | `scope` for the assertion request. |
 | `ASSERTION_AUDIENCE` | `.assertionAudience(...)` | `assertion_audience=` | `set_assertion_audience(...)` | `audience` for the assertion request. |
@@ -239,7 +239,7 @@ ASSERTION_SCOPE=api://<entra-application-id>/.default
 ```
 
 The exchanged token is cached and refreshed exactly like a client-credentials one. The assertion
-itself is **never** cached — providers commonly reject a replayed assertion, so every exchange
+itself is **never** cached, providers commonly reject a replayed assertion, so every exchange
 starts from a fresh request.
 
 :::caution Server-side setup is required
@@ -273,8 +273,8 @@ credential hiccup loses data or raises. The buffer is a segmented, compressed lo
 zstd in Rust/Python) bounded on two axes, either of which may be left unset; an unset axis defaults
 to **72 hours** / **5 GiB** once buffering is on:
 
-- **time** — datapoints/events older than the window are dropped.
-- **size** — when the on-disk spool exceeds the cap, the oldest segment is dropped.
+- **time**: datapoints/events older than the window are dropped.
+- **size**: when the on-disk spool exceeds the cap, the oldest segment is dropped.
 
 It is memory-safe: the spool is drained in segments, so even a multi-gigabyte buffer never loads
 into memory, and it is recovered from disk on the next start.
@@ -299,7 +299,7 @@ if (r.buffered() > 0) {
 ```
 
 `fromEnv()` instead reads `BUFFER_RETENTION` (an ISO-8601 duration, e.g. `PT72H`),
-`BUFFER_MAX_BYTES` and `BUFFER_DIRECTORY` — setting either bound turns buffering on.
+`BUFFER_MAX_BYTES` and `BUFFER_DIRECTORY`. Setting either bound turns buffering on.
 
 </TabItem>
 <TabItem value="python" label="Python">
@@ -362,7 +362,7 @@ response surfaces as an exception/error carrying the HTTP status and the raw bod
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
 
-Methods return `DataWrapper<T>` — `getItems()` holds the results. Non-2xx throws
+Methods return `DataWrapper<T>`: `getItems()` holds the results. Non-2xx throws
 `DatahubApiException`:
 
 ```java
@@ -394,7 +394,7 @@ except DataHubException as e:
 </TabItem>
 <TabItem value="rust" label="Rust">
 
-Methods return `Result<DataWrapper<T>, ResponseError>` — `get_items()` holds the results,
+Methods return `Result<DataWrapper<T>, ResponseError>`: `get_items()` holds the results,
 and `ResponseError` exposes `get_status()` and `get_message()` (its `Display` prints both):
 
 ```rust
@@ -436,10 +436,10 @@ the whole batch once you have fixed them.
 
 Two responses are worth recognising by shape:
 
-- **`400` with `type: ".../errors/naming-policy"`** — one or more external ids broke the
+- **`400` with `type: ".../errors/naming-policy"`**: one or more external ids broke the
   configured [naming policy](./external-ids#the-naming-policy). Nothing was created; the
   `violations` array names each one and suggests a replacement.
-- **A `warnings` array beside `items` on a `2xx`** — the write succeeded, and the ids in it
+- **A `warnings` array beside `items` on a `2xx`**: the write succeeded, and the ids in it
   are in a data steward's queue. The field is absent when empty.
 
 Both shapes, and the rules behind them, are in

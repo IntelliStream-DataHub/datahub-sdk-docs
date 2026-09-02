@@ -15,18 +15,18 @@ boosted forecaster · **Stack:** the SDK for data in/out, plus `pandas`, `numpy`
 
 Forecasting turns history into a plan: how much power a feeder will draw tomorrow, how
 many units a store will sell next week, how much load a network will carry at the busy
-hour. The pattern is the same regardless of domain — past values plus calendar effects
-predict the next ones — and the forecast becomes a **new series** you can chart against
+hour. The pattern is the same regardless of domain, past values plus calendar effects
+predict the next ones, and the forecast becomes a **new series** you can chart against
 actuals and alert on.
 
 :::info Needs a sandbox
 This reads a load history that already exists. [Generate a sandbox](/advanced/generate-sample-data)
-first — section G ingests the `feeder_f12_load_mw` curve this build forecasts.
+first, section G ingests the `feeder_f12_load_mw` curve this build forecasts.
 :::
 
 :::tip New to machine learning?
 No background needed. Skim the [gentle primer](/advanced/machine-learning-gently) for the
-ideas in plain language — model, feature, training, and the algorithm itself.
+ideas in plain language, model, feature, training, and the algorithm itself.
 :::
 
 ## 1. Load the history
@@ -138,7 +138,7 @@ print(f"holdout MAE: {mae:.2f} MW")
 
 ## 4. Forecast the horizon and write it back
 
-Future lags aren't known, so forecast **recursively** — predict one hour, feed it back
+Future lags aren't known, so forecast **recursively**, predict one hour, feed it back
 in as the next hour's lag, and step forward. Then publish the forecast as its own
 series alongside the actuals.
 
@@ -176,12 +176,12 @@ assert len(stored) == HORIZON, f"expected {HORIZON}, got {len(stored)}"
 ```
 
 With the forecast stored as a series, a [threshold rule](/guides/detect-events) on it
-becomes a *predictive* alert — raise a `capacity_risk` event when the forecast, not the
+becomes a *predictive* alert, raise a `capacity_risk` event when the forecast, not the
 actual, is set to exceed a limit, hours before it happens.
 
 ## Where to take it further
 
-- **Exogenous drivers.** Add weather, price, or a promotions flag as features — usually
+- **Exogenous drivers.** Add weather, price, or a promotions flag as features, usually
   the biggest accuracy win.
 - **Prediction intervals.** Train quantile models (`loss="quantile"`) for a P10/P90 band
   instead of a single line.
@@ -190,12 +190,12 @@ actual, is set to exceed a limit, hours before it happens.
 
 ## Further reading
 
-- **Gradient boosting** — [Wikipedia](https://en.wikipedia.org/wiki/Gradient_boosting) · [scikit-learn](https://scikit-learn.org/stable/modules/ensemble.html#histogram-based-gradient-boosting)
-- **Time series forecasting** — [Wikipedia](https://en.wikipedia.org/wiki/Time_series)
-- **The ideas in plain language** — [Machine learning, gently](/advanced/machine-learning-gently)
+- **Gradient boosting**: [Wikipedia](https://en.wikipedia.org/wiki/Gradient_boosting) · [scikit-learn](https://scikit-learn.org/stable/modules/ensemble.html#histogram-based-gradient-boosting)
+- **Time series forecasting**: [Wikipedia](https://en.wikipedia.org/wiki/Time_series)
+- **The ideas in plain language**: [Machine learning, gently](/advanced/machine-learning-gently)
 
 ## See also
 
-- [Query & aggregate](/guides/query-and-aggregate) — building the hourly history.
-- [Turn readings into events](/guides/detect-events) — turning the forecast into a predictive alert.
-- [Renewable energy](/industries/energy-utilities/wind) · [Retail](/industries/transport-logistics/retail) — domains this fits.
+- [Query & aggregate](/guides/query-and-aggregate): building the hourly history.
+- [Turn readings into events](/guides/detect-events): turning the forecast into a predictive alert.
+- [Renewable energy](/industries/energy-utilities/wind) · [Retail](/industries/transport-logistics/retail), domains this fits.

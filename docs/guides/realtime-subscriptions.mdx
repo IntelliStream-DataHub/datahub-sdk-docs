@@ -8,7 +8,7 @@ import TabItem from '@theme/TabItem';
 # Consume live data
 
 Push-based monitoring: a **subscription** names a set of time series, and a live
-connection delivers each new datapoint as it lands — no polling. A control-room
+connection delivers each new datapoint as it lands, no polling. A control-room
 dashboard, an alerting worker, or a downstream pipeline drives the loop and **acks**
 what it has handled. Anything unacked is redelivered, so a crash is followed by redelivery.
 
@@ -69,13 +69,13 @@ api.subscriptions.create(&sub).await?;
 ## 2. Listen and ack
 
 Hand each message to a handler (or drive a loop yourself), and ack once you've durably
-handled it. Make the handler **idempotent** — a redelivery after a crash will replay
+handled it. Make the handler **idempotent**, a redelivery after a crash will replay
 the last unacked messages.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
 
-Register a handler with `stream` — a dedicated virtual thread delivers each message **as
+Register a handler with `stream`, a dedicated virtual thread delivers each message **as
 it arrives** and acks it once your handler returns (or nacks it if the handler throws).
 The returned handle stops delivery and closes the listener, so use try-with-resources.
 
@@ -88,7 +88,7 @@ try (var stream = client.subscriptions().listen(List.of("engine_room"))
 }
 ```
 
-Prefer a loop, or want to ack on your own schedule? Drive `poll` yourself — it blocks up
+Prefer a loop, or want to ack on your own schedule? Drive `poll` yourself, it blocks up
 to the timeout and returns `null` on a quiet interval (it is a blocking queue hand-off,
 **not** network polling):
 
@@ -188,7 +188,7 @@ while let Some(Ok(msg)) = listener.next().await {
 
 ## Change the interest set at runtime
 
-A long-lived listener doesn't need to reconnect to follow more (or fewer) series —
+A long-lived listener doesn't need to reconnect to follow more (or fewer) series,
 `subscribe` / `unsubscribe` adjust it in place.
 
 <Tabs groupId="lang">
@@ -220,7 +220,7 @@ listener.unsubscribe(&["engine_rpm"]).await?;
 
 :::tip nack to retry later
 If a message can't be processed right now (a downstream system is down), `nack` it
-instead of acking — it will be redelivered rather than dropped. With `stream`, throwing
+instead of acking, it will be redelivered rather than dropped. With `stream`, throwing
 from the handler nacks for you; to control acks explicitly use
 `stream(handler, AckMode.MANUAL)` and call `ack`/`nack` yourself. With `poll`, just call
 `nack` instead of `ack`.
@@ -228,7 +228,7 @@ from the handler nacks for you; to control acks explicitly use
 
 ## See also
 
-- [Sustained-condition alarms](/advanced/sustained-alarm-window) — a full worked example that keeps a sliding window over this stream, seeds its own data and then verifies what it found.
-- [Turn readings into events](/guides/detect-events) — recording what a rule decides.
-- [Seed a sandbox](/guides/seed-a-sandbox) — the series this guide subscribes to.
-- <a href="/data-platform-documentation/concepts/stream-processing">Stream processing, in the platform documentation</a> — windows, event time against arrival time, and what has to be remembered.
+- [Sustained-condition alarms](/advanced/sustained-alarm-window): a full worked example that keeps a sliding window over this stream, seeds its own data and then verifies what it found.
+- [Turn readings into events](/guides/detect-events): recording what a rule decides.
+- [Seed a sandbox](/guides/seed-a-sandbox): the series this guide subscribes to.
+- <a href="/data-platform-documentation/concepts/stream-processing">Stream processing, in the platform documentation</a>, windows, event time against arrival time, and what has to be remembered.

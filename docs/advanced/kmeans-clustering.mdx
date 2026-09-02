@@ -1,11 +1,11 @@
 ---
 sidebar_position: 8
-title: K-Means — regimes, cohorts & communities
+title: K-Means, regimes, cohorts & communities
 ---
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-# K-Means — operating regimes, asset cohorts & network communities
+# K-Means, operating regimes, asset cohorts & network communities
 
 :::info At a glance
 **Effort:** ~1–1.5 hours · **You'll build:** behavioural and graph feature vectors and
@@ -14,7 +14,7 @@ cluster them three ways · **Stack:** the SDK for data and traversal, plus `nump
 :::
 
 K-Means finds structure with no labels: it groups points so each sits near its cluster's
-centre. That one idea answers three different operational questions, all covered here —
+centre. That one idea answers three different operational questions, all covered here,
 *what modes does this asset run in?* (operating regimes), *which assets behave alike?*
 (cohorts), and *which parts of the network belong together?* (communities). The trick is
 always the same: turn the thing you want to group into a **feature vector**.
@@ -26,12 +26,12 @@ These steps read series (and a graph for section 3) that already exist.
 
 :::tip New to machine learning?
 No background needed. Skim the [gentle primer](/advanced/machine-learning-gently) for the
-ideas in plain language — model, feature, training, and the algorithm itself.
+ideas in plain language, model, feature, training, and the algorithm itself.
 :::
 
-## 1. Asset cohorts — group assets that behave alike
+## 1. Asset cohorts, group assets that behave alike
 
-Summarise each asset by a behavioural signature — a few aggregates of its key series —
+Summarise each asset by a behavioural signature, a few aggregates of its key series,
 then cluster. Assets land in peer groups you can benchmark within.
 
 <Tabs groupId="lang">
@@ -107,7 +107,7 @@ let sig = api.time_series
 
 ### The payoff: the asset that doesn't fit its cohort
 
-An asset far from its own cluster's centre is behaving unlike its peers — a strong,
+An asset far from its own cluster's centre is behaving unlike its peers, a strong,
 label-free anomaly signal. Flag it.
 
 ```python
@@ -125,10 +125,10 @@ outliers = list(client.events.filter(intellistream_datahub_sdk.EventFilter(
 print(f"{len(outliers)} peer outlier(s) on record")
 ```
 
-## 2. Operating regimes — group an asset's *states*
+## 2. Operating regimes, group an asset's *states*
 
 Now cluster *time* instead of assets. Each row is one moment described by the asset's
-sensor vector; the clusters are its operating modes — idle, ramp, steady, overload.
+sensor vector; the clusters are its operating modes, idle, ramp, steady, overload.
 Labelling history this way makes "we only see this fault in mode 3" answerable.
 
 ```python
@@ -151,9 +151,9 @@ regimes = KMeans(n_clusters=4, n_init=10, random_state=0).fit_predict(
 states["regime"] = regimes        # now every minute is tagged with its operating mode
 ```
 
-## 3. Network communities — cluster the graph
+## 3. Network communities, cluster the graph
 
-K-Means needs vectors, and a raw graph isn't one — so featurise it. Either **enrich the
+K-Means needs vectors, and a raw graph isn't one, so featurise it. Either **enrich the
 behavioural vector with graph-structural features** (so two assets are "alike" only if
 they behave *and* sit similarly in the network), or cluster the structure directly with
 **spectral clustering**, which is literally K-Means on the graph Laplacian's
@@ -184,12 +184,12 @@ communities = SpectralClustering(n_clusters=2, affinity="precomputed",   # k ≤
                                  assign_labels="kmeans").fit_predict(A)
 ```
 
-So yes — K-Means works **with** graphs: feed it structural features, or let spectral
+So yes, K-Means works **with** graphs: feed it structural features, or let spectral
 clustering turn the network into vectors for it.
 
 ## Choosing k
 
-Don't guess the number of clusters — let the data say. The **silhouette score** peaks at
+Don't guess the number of clusters, let the data say. The **silhouette score** peaks at
 the k that separates clusters best:
 
 ```python
@@ -201,12 +201,12 @@ best_k = max(scores, key=scores.get)
 
 ## Further reading
 
-- **k-means** — [Wikipedia](https://en.wikipedia.org/wiki/K-means_clustering)
-- **Spectral clustering** (clustering a graph) — [Wikipedia](https://en.wikipedia.org/wiki/Spectral_clustering)
-- **Silhouette score** (choosing k) — [Wikipedia](https://en.wikipedia.org/wiki/Silhouette_%28clustering%29)
+- **k-means**: [Wikipedia](https://en.wikipedia.org/wiki/K-means_clustering)
+- **Spectral clustering** (clustering a graph), [Wikipedia](https://en.wikipedia.org/wiki/Spectral_clustering)
+- **Silhouette score** (choosing k), [Wikipedia](https://en.wikipedia.org/wiki/Silhouette_%28clustering%29)
 
 ## See also
 
-- [Correlate alarms with the graph](/guides/correlate-alarms) — the traversal the graph features build on.
-- [Asset health scoring](/advanced/asset-health-score) — score within a cohort once you have one.
-- [Fraud classification](/advanced/fraud-classification) — graph features feeding a supervised model.
+- [Correlate alarms with the graph](/guides/correlate-alarms): the traversal the graph features build on.
+- [Asset health scoring](/advanced/asset-health-score): score within a cohort once you have one.
+- [Fraud classification](/advanced/fraud-classification): graph features feeding a supervised model.

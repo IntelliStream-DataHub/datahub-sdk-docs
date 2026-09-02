@@ -7,7 +7,7 @@ import TabItem from '@theme/TabItem';
 
 # Model assets as a graph
 
-Most domains are a hierarchy of things that contain or feed each other — a plant
+Most domains are a hierarchy of things that contain or feed each other, a plant
 contains lines, a line contains machines, a machine emits sensor readings. Model
 that as **resources** (the nodes) and **relations** (the edges), and the SDK returns
 the persisted graph in one call.
@@ -218,8 +218,8 @@ assert_eq!(net.edges().len(), 2, "expected CONTAINS and PRODUCES");
 </Tabs>
 
 :::tip Group with data sets
-Relationships model *structure*. To slice assets by ownership, environment or tenant —
-"everything in the Oslo plant" — also put them in a **data set** (see the
+Relationships model *structure*. To slice assets by ownership, environment or tenant,
+"everything in the Oslo plant", also put them in a **data set** (see the
 [Data sets reference](/reference/datasets)). A resource can sit in a graph and a
 data set at once.
 :::

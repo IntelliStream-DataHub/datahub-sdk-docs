@@ -16,7 +16,7 @@ linked in the graph, so the whole `raw → … → result` chain is traceable bo
 
 :::info Needs a sandbox
 This reads two raw sensors that already exist. [Generate a sandbox](/advanced/generate-sample-data)
-first — section K ingests `engine_temperature_raw` and `engine_vibration_raw`, defects and all.
+first, section K ingests `engine_temperature_raw` and `engine_vibration_raw`, defects and all.
 :::
 
 :::tip New to machine learning?
@@ -25,12 +25,12 @@ for any unfamiliar term.
 :::
 
 **The idea in one paragraph.** Real data never goes straight from sensor to model. It's
-cleaned, resampled, turned into features, combined, scored — often a dozen steps, each
+cleaned, resampled, turned into features, combined, scored, often a dozen steps, each
 producing a new series. After a few of these, nobody remembers what came from what. Two
-questions then become impossible to answer: *"this number looks wrong — where did it come
-from?"* and *"this sensor was faulty — what did it poison?"* **Data lineage** fixes both:
-record every step as nodes in the graph — `raw → cleaning function → cleaned → feature
-function → feature → …` — and the answers become a single graph walk.
+questions then become impossible to answer: *"this number looks wrong, where did it come
+from?"* and *"this sensor was faulty, what did it poison?"* **Data lineage** fixes both:
+record every step as nodes in the graph, `raw → cleaning function → cleaned → feature
+function → feature → …`, and the answers become a single graph walk.
 
 ## 1. Run the transformations, writing each result back
 
@@ -57,7 +57,7 @@ def store(ext_id, series, name=None, unit="value"):
     client.timeseries.insert_from_lists(timestamps=s.index, values=s.to_numpy(), ts=ext_id)
 ```
 
-The pipeline — two raw sensors, cleaned, then several features extracted from each, then
+The pipeline, two raw sensors, cleaned, then several features extracted from each, then
 assembled and scored:
 
 ```python
@@ -87,7 +87,7 @@ store("engine_feature_vector", feature_vector)
 store("engine_health_score", (100 - feature_vector.abs()).clip(0, 100))
 ```
 
-Every box in the pipeline is now a stored series — but stored series alone don't tell you
+Every box in the pipeline is now a stored series, but stored series alone don't tell you
 how they *relate*. That's step 2.
 
 ## 2. Record the lineage graph
@@ -95,7 +95,7 @@ how they *relate*. That's step 2.
 Model each transformation as a **function node** and link it up: each input series is
 `processed_by` the function, which `produces` an output series. Done across the pipeline,
 this builds a branching lineage DAG of 18 nodes (8 functions and 10 series) in one call.
-(`resources.create` is the same call in Java and Rust — see
+(`resources.create` is the same call in Java and Rust, see
 [model assets as a graph](/guides/model-assets-graph).)
 
 ```python
@@ -137,7 +137,7 @@ into one vector), and runs nine nodes deep from raw sensor to health score:
 `engine_temp_roll_mean` → `assemble_fn` → `engine_feature_vector` → `score_fn` →
 `engine_health_score`.
 
-## 3. The payoff — trace it backward
+## 3. The payoff, trace it backward
 
 Someone questions the health score. Walk the graph back from it and the entire recipe
 appears: every function and every series between the score and the **raw sensors** it
@@ -150,11 +150,11 @@ print("this score derives from:", raw_sources)   # engine_temperature_raw, engin
 assert raw_sources == {"engine_temperature_raw", "engine_vibration_raw"}, raw_sources
 ```
 
-## 4. The payoff — trace it forward (impact analysis)
+## 4. The payoff, trace it forward (impact analysis)
 
 Now the opposite, and the bigger win. The temperature sensor is found faulty. **What did
 it poison?** Walk *forward* from the raw sensor and every downstream series it touched
-lights up — while the vibration-only features stay clean. That's the precise list to
+lights up, while the vibration-only features stay clean. That's the precise list to
 recompute or quarantine.
 
 ```python
@@ -174,21 +174,21 @@ damage spreads.
 ## Where to take it further
 
 - **Version the functions.** Bump `clean_temp_fn` to `clean_temp_fn_v2` and the old
-  outputs still point at the version that made them — reproducibility for free.
+  outputs still point at the version that made them, reproducibility for free.
 - **Quality events.** Emit a `data_quality` [event](/guides/detect-events) per run with
   what each step changed, for an audit trail beside the lineage.
 - **Feed the models.** Point the [forecasters](/advanced/lstm-forecasting) and
-  [detectors](/advanced/predictive-maintenance) at the cleaned/feature series — and their
+  [detectors](/advanced/predictive-maintenance) at the cleaned/feature series, and their
   outputs become new nodes on the same lineage graph.
 
 ## Further reading
 
-- **Data lineage** — [Wikipedia](https://en.wikipedia.org/wiki/Data_lineage)
-- **Directed acyclic graph (DAG)** — [Wikipedia](https://en.wikipedia.org/wiki/Directed_acyclic_graph)
-- **Outlier removal (Hampel / MAD)** — [Median absolute deviation](https://en.wikipedia.org/wiki/Median_absolute_deviation)
+- **Data lineage**: [Wikipedia](https://en.wikipedia.org/wiki/Data_lineage)
+- **Directed acyclic graph (DAG)**: [Wikipedia](https://en.wikipedia.org/wiki/Directed_acyclic_graph)
+- **Outlier removal (Hampel / MAD)**: [Median absolute deviation](https://en.wikipedia.org/wiki/Median_absolute_deviation)
 
 ## See also
 
-- [Model assets as a graph](/guides/model-assets-graph) — the nodes-and-relations basics.
-- [Correlate alarms with the graph](/guides/correlate-alarms) — the traversal behind both payoffs.
-- [Generate sample data](/advanced/generate-sample-data) — raw signals to run the pipeline on.
+- [Model assets as a graph](/guides/model-assets-graph): the nodes-and-relations basics.
+- [Correlate alarms with the graph](/guides/correlate-alarms): the traversal behind both payoffs.
+- [Generate sample data](/advanced/generate-sample-data): raw signals to run the pipeline on.

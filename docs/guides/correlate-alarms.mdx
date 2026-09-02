@@ -8,12 +8,12 @@ import TabItem from '@theme/TabItem';
 # Correlate alarms with the graph
 
 Two alarms fire within seconds of each other. Are they one incident or two? A flat
-lookup can't tell you — but the **relationship graph** can. If both alarmed sensors
+lookup can't tell you, but the **relationship graph** can. If both alarmed sensors
 sit under the same subsystem, the two alarms share a subsystem.
 
 `fetchRelated` walks the graph outward from a node and returns the connected
 sub-graph. Walk the neighbourhood of each alarm and intersect the two: a shared
-ancestor — say a `cooling_system` both sensors are `PART_OF` — is the common cause.
+ancestor, say a `cooling_system` both sensors are `PART_OF`, is the common cause.
 
 :::info Needs a sandbox
 This guide reads data it does not create. [Seed a sandbox](/guides/seed-a-sandbox) writes it
@@ -88,7 +88,7 @@ let nb = api.resources.fetch_related(
 ## 3. Find the shared subsystem
 
 Intersect the two node sets. Whatever remains (besides the sensors themselves) is a
-subsystem both alarms belong to — the likely common cause.
+subsystem both alarms belong to, the likely common cause.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -144,10 +144,10 @@ assert!(shared.contains("cooling_system"), "expected cooling_system, found {:?}"
 </Tabs>
 
 :::tip Deeper networks, smarter correlation
-Raise `depth` to correlate across a deeper hierarchy — a whole plant rather than one
+Raise `depth` to correlate across a deeper hierarchy, a whole plant rather than one
 skid. Drop the relationship-type filter to follow *any* connection (power feeds, data
 flows), not just containment, when a fault can propagate sideways.
 :::
 
-The same pattern answers "what else might this failure affect?" — walk out from a
+The same pattern answers "what else might this failure affect?", walk out from a
 failing component and the returned `nodes` are its blast radius.

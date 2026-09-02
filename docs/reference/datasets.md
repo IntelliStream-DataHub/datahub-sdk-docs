@@ -101,7 +101,7 @@ api.datasets.delete(&vec![IdAndExtId::from_external_id("plant_a")]).await?;
 ## Filter {#filter}
 
 `POST /datasets/filter` finds data sets by structured criteria, combined with AND. It is exactly
-the criteria every node type shares — a data set has no `dataSetId` of its own, being the thing
+the criteria every node type shares, a data set has no `dataSetId` of its own, being the thing
 other nodes are scoped *by*:
 
 | Criterion | Matching |
@@ -112,7 +112,7 @@ other nodes are scoped *by*:
 | `createdTime`, `lastUpdatedTime` | `{ "min": …, "max": … }` bounds. |
 
 Each field except `labels` and `metadata` takes **either a bare value or an array**, whose
-entries are combined with OR — which is why they are named in the singular. `limit` defaults to
+entries are combined with OR, which is why they are named in the singular. `limit` defaults to
 1000 and is capped at 10000, and the page can be ordered and walked exactly as
 [timeseries](./timeseries#sorting-and-paging) can.
 

@@ -10,11 +10,11 @@ import TabItem from '@theme/TabItem';
 :::info At a glance
 **Effort:** ~20–30 minutes · **You'll build:** a composite 0–100 health index from
 several signals, with a healthy/watch/critical classification · **Stack:** the SDK plus
-a little arithmetic — no model training.
+a little arithmetic, no model training.
 :::
 
 A machine rarely fails on one signal. Vibration is creeping up, the bearing runs a
-little hot, oil pressure sags at load — each is fine alone, but together they tell a
+little hot, oil pressure sags at load, each is fine alone, but together they tell a
 story. A **health score** rolls those signals into one comparable number so an operator
 can rank a whole fleet at a glance and a dashboard can show green/amber/red. It's the
 lightweight cousin of [predictive maintenance](/advanced/predictive-maintenance): no
@@ -22,14 +22,14 @@ model to train, just a transparent, tunable index.
 
 :::info Needs a sandbox
 This reads several pump signals. [Generate a sandbox](/advanced/generate-sample-data)
-first — section A ingests `pump_07_bearing_temp_c`, `pump_07_oil_pressure_kpa` and a
+first, section A ingests `pump_07_bearing_temp_c`, `pump_07_oil_pressure_kpa` and a
 stand-in `pump_07_vibration_anomaly` (or run [predictive maintenance](/advanced/predictive-maintenance)
 to produce the real one).
 :::
 
 :::tip New to machine learning?
 No background needed. Skim the [gentle primer](/advanced/machine-learning-gently) for the
-ideas in plain language — model, feature, training, and the algorithm itself.
+ideas in plain language, model, feature, training, and the algorithm itself.
 :::
 
 ## 1. Pull the latest value of each signal
@@ -127,8 +127,8 @@ band = "healthy" if score >= 80 else "watch" if score >= 60 else "critical"
 
 ## 4. Publish the score and flag the bad ones
 
-Write the score back as its own series — now you can chart, rank and subscribe to asset
-health like any other signal — and raise an event when an asset drops to `critical`.
+Write the score back as its own series, now you can chart, rank and subscribe to asset
+health like any other signal, and raise an event when an asset drops to `critical`.
 
 ```python
 client.timeseries.create([intellistream_datahub_sdk.TimeSeries(
@@ -150,25 +150,25 @@ print(f"health {stored[-1].value:.1f} ({band})")
 assert abs(stored[-1].value - score) < 0.01, "the score was not written"
 ```
 
-Run it across the fleet on a schedule and you have a single ranked health view —
+Run it across the fleet on a schedule and you have a single ranked health view,
 `worst_signal` in the metadata tells maintenance *why* each asset is red.
 
 ## Where to take it further
 
 - **Feed it the model.** Swap the hand-set vibration limits for the
   [anomaly score](/advanced/predictive-maintenance) as a direct input.
-- **Trend the score.** A falling health score over days is itself a predictor — forecast
+- **Trend the score.** A falling health score over days is itself a predictor, forecast
   it like any [other series](/advanced/demand-forecasting).
 - **Roll up the graph.** Average child scores up a [site graph](/guides/model-assets-graph)
   for a line- or plant-level health number.
 
 ## Further reading
 
-- **Normalising signals to a common scale** — [Feature scaling](https://en.wikipedia.org/wiki/Feature_scaling)
-- **The ideas in plain language** — [Machine learning, gently](/advanced/machine-learning-gently)
+- **Normalising signals to a common scale**: [Feature scaling](https://en.wikipedia.org/wiki/Feature_scaling)
+- **The ideas in plain language**: [Machine learning, gently](/advanced/machine-learning-gently)
 
 ## See also
 
-- [Query & aggregate](/guides/query-and-aggregate) — pulling the contributing signals.
-- [Predictive maintenance](/advanced/predictive-maintenance) — a learned input to the score.
-- [Turn readings into events](/guides/detect-events) — flagging critical assets.
+- [Query & aggregate](/guides/query-and-aggregate): pulling the contributing signals.
+- [Predictive maintenance](/advanced/predictive-maintenance): a learned input to the score.
+- [Turn readings into events](/guides/detect-events): flagging critical assets.

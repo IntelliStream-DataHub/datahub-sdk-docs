@@ -14,20 +14,20 @@ quantity from cheap online sensors · **Stack:** the SDK for data in/out, plus `
 :::
 
 Some of the most important quantities are the hardest to measure. Product purity,
-produced-water oil content, melt viscosity — they come from a lab, hours apart, while
+produced-water oil content, melt viscosity, they come from a lab, hours apart, while
 the process runs continuously. A **soft sensor** closes that gap: a model that infers
 the lab value in real time from the cheap online sensors that *are* measured every
-second. Random Forest is a great fit — robust, little tuning, and an out-of-bag score
+second. Random Forest is a great fit, robust, little tuning, and an out-of-bag score
 that estimates accuracy without a separate test set.
 
 :::info Needs a sandbox
 These steps read process sensors and sparse lab samples that already exist.
-[Generate a sandbox](/advanced/generate-sample-data) first — section D ingests both.
+[Generate a sandbox](/advanced/generate-sample-data) first, section D ingests both.
 :::
 
 :::tip New to machine learning?
 No background needed. Skim the [gentle primer](/advanced/machine-learning-gently) for the
-ideas in plain language — model, feature, training, and the algorithm itself.
+ideas in plain language, model, feature, training, and the algorithm itself.
 :::
 
 ## 1. Assemble lab targets against sensor features
@@ -105,7 +105,7 @@ let pts = api.time_series
 ## 2. Train the regressor
 
 A Random Forest needs little tuning, and `oob_score` gives an honest accuracy estimate
-from the trees' out-of-bag samples — handy when labels are scarce.
+from the trees' out-of-bag samples, handy when labels are scarce.
 
 ```python
 from sklearn.ensemble import RandomForestRegressor
@@ -124,7 +124,7 @@ for name, imp in sorted(zip(SENSORS, rf.feature_importances_),
 ## 3. Infer continuously and publish the virtual sensor
 
 Run the model on the live sensor rows and write the prediction back as its own
-series — a continuous estimate of the lab value, updated every few minutes instead of
+series, a continuous estimate of the lab value, updated every few minutes instead of
 once a shift. Now it can be charted, alerted on, and fed into control like any real tag.
 
 ```python
@@ -148,24 +148,24 @@ print(f"{len(stored)} soft-sensor values stored, latest {stored[-1].value:.2f} p
 assert len(stored) == len(virtual), f"expected {len(virtual)}, got {len(stored)}"
 ```
 
-When the next lab sample lands, append it to the training set and re-fit — the soft
+When the next lab sample lands, append it to the training set and re-fit, the soft
 sensor stays calibrated as the process and feedstock change.
 
 ## Where to take it further
 
 - **Quantify uncertainty.** The spread across the forest's trees gives a per-prediction
-  confidence — widen alerts when the model is unsure.
+  confidence, widen alerts when the model is unsure.
 - **Drift watch.** Compare each new lab sample to the soft sensor's prediction; a growing
   gap is a [retrain trigger](/guides/detect-events).
 
 ## Further reading
 
-- **Random forest** — [Wikipedia](https://en.wikipedia.org/wiki/Random_forest)
-- **Soft sensor** — [Wikipedia](https://en.wikipedia.org/wiki/Soft_sensor)
-- **Out-of-bag error** — [Wikipedia](https://en.wikipedia.org/wiki/Out-of-bag_error)
+- **Random forest**: [Wikipedia](https://en.wikipedia.org/wiki/Random_forest)
+- **Soft sensor**: [Wikipedia](https://en.wikipedia.org/wiki/Soft_sensor)
+- **Out-of-bag error**: [Wikipedia](https://en.wikipedia.org/wiki/Out-of-bag_error)
 
 ## See also
 
-- [Oil & gas — refinery operations](/industries/oil-and-gas/refining) — where soft sensors earn their keep.
-- [XGBoost failure prediction](/advanced/xgboost-failure-prediction) — the boosted-tree cousin.
-- [Query & aggregate](/guides/query-and-aggregate) — assembling the feature history.
+- [Oil & gas, refinery operations](/industries/oil-and-gas/refining): where soft sensors earn their keep.
+- [XGBoost failure prediction](/advanced/xgboost-failure-prediction): the boosted-tree cousin.
+- [Query & aggregate](/guides/query-and-aggregate): assembling the feature history.

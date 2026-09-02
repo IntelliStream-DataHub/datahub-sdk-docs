@@ -158,10 +158,10 @@ When `failFast` is off, inspect `result.errors()` for the per-batch failures. Se
 
 ## Then chart the trend
 
-Once the data is in, roll it up to hourly or daily buckets for a dashboard — see
+Once the data is in, roll it up to hourly or daily buckets for a dashboard, see
 [Query & aggregate time series](./query-and-aggregate.mdx).
 
 :::warning Ordering
-Batches are sent in parallel, so there is **no cross-batch ordering guarantee** —
+Batches are sent in parallel, so there is **no cross-batch ordering guarantee**,
 which is fine for time-stamped data, since each datapoint carries its own timestamp.
 :::

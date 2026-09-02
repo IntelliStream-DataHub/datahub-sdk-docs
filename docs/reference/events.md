@@ -11,8 +11,8 @@ Record and query operational events.
 
 :::info An event's `externalId` is a correlation key, not an identity
 This is the opposite of what it means on a resource, and it is deliberate. An event's
-external id is the **source system's key for the subject** the event is about — an order, a
-permit, a batch — so **many events share one**. "Everything that happened to `PO-4500171`"
+external id is the **source system's key for the subject** the event is about, an order, a
+permit, a batch, so **many events share one**. "Everything that happened to `PO-4500171`"
 is one indexed lookup, and that is what makes the log an audit trail.
 
 No uniqueness is enforced, and none ever will be. Per-event identity is the event `id`
@@ -26,9 +26,9 @@ event even when a `snake_case` policy is rejecting it on resources.
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| `id` | UUID string | The event's identity. Time-ordered UUID v7 — see the note under [Create](#create). |
+| `id` | UUID string | The event's identity. Time-ordered UUID v7, see the note under [Create](#create). |
 | `externalId` | string, 3–256 | **Required.** The subject's key in the source system. Shared across events on purpose. |
-| `eventTime` | epoch millis, or ISO-8601 on the way in | **Required.** When it happened at the source. Never defaulted — see [Create](#create). |
+| `eventTime` | epoch millis, or ISO-8601 on the way in | **Required.** When it happened at the source. Never defaulted, see [Create](#create). |
 | `type` | string, 3–128 | Top-level categorization (`alarm`, `work_order`). |
 | `subType` | string, 3–128 | Refinement of `type` (`overpressure`). |
 | `status` | string, 3–128 | Free-form lifecycle marker (`OPEN`, `acknowledged`). No state machine is enforced. |
@@ -62,7 +62,7 @@ with a `400`, like any other [unknown field](./client#unknown-fields).
 
 ## Create {#create}
 
-Every event must carry an **event time** — the moment it occurred at the source (sensor,
+Every event must carry an **event time**, the moment it occurred at the source (sensor,
 PLC, upstream system). The SDK deliberately does *not* default it to "now": an event
 without it is rejected rather than silently mis-timestamped.
 
@@ -111,7 +111,7 @@ api.events.create(&vec![event]).await?;
 
 Creating is **all-or-nothing**: if one event in the batch fails validation, none are
 written. Attaching the event to resources that do not exist is a `400`, as is a
-`dataSetId` naming no data set — so a typo surfaces at write time rather than as an event
+`dataSetId` naming no data set, so a typo surfaces at write time rather than as an event
 that quietly relates to nothing.
 
 Create, update and delete each take at most **10 000 events** per request, and one event
@@ -120,13 +120,13 @@ carries at most 10 000 characters of `description`, 256 metadata entries and 100
 including the daily and lifetime ceilings on how many events an organization may hold.
 
 :::note Event ids are time-ordered UUID v7
-The ingestion paths stamp every event that has no `id` with a **UUID v7** before sending —
+The ingestion paths stamp every event that has no `id` with a **UUID v7** before sending,
 `create` in the Python and Rust clients, `ingest(...)` in Java (a plain Java `create` sends
 events as-is and lets the server assign ids). The server honors a client-supplied id, which is
 what makes retries idempotent: the events table is keyed by `id` and collapses rows that share
 one, so re-sending the same event (for example after a
 [buffered](./client#durable-ingest-buffering) outage) leaves one row instead of a duplicate.
-If you set the `id` yourself, use a time-ordered UUID v7 — a random v4 scatters writes across
+If you set the `id` yourself, use a time-ordered UUID v7, a random v4 scatters writes across
 that key and hurts insert and query performance. The created event (with its id) is returned
 from `create`.
 :::
@@ -134,7 +134,7 @@ from `create`.
 ## Look up {#lookup}
 
 Fetch a single event by its UUID, or a batch by any mix of `id` and `externalId`. Ids that
-match nothing are **silently omitted** — compare what came back against what you asked for
+match nothing are **silently omitted**, compare what came back against what you asked for
 if a miss matters. A batch is capped at 10 000 ids.
 
 Because an external id is a correlation key, looking one up returns **every** event filed
@@ -149,7 +149,7 @@ DataWrapper<EventModel> events = client.events().byIds(List.of(
 ```
 
 `IdCollection` carries a numeric id, so the Java client can only look events up by external
-id — an event's id is a UUID. Call `POST /events/byids` directly to fetch by UUID.
+id, an event's id is a UUID. Call `POST /events/byids` directly to fetch by UUID.
 
 </TabItem>
 <TabItem value="python" label="Python">
@@ -173,7 +173,7 @@ let events = api.events
 </TabItem>
 </Tabs>
 
-`GET /events/{id}` fetches one event by UUID and returns `404` when there is none — the one
+`GET /events/{id}` fetches one event by UUID and returns `404` when there is none, the one
 place a missing event is an error rather than an omission.
 
 ## Query
@@ -216,12 +216,12 @@ let events = api.events.filter(&filter).await?;
 
 `limit` defaults to **1 000** and is capped at **10 000**; a zero or negative value falls back
 to the default rather than returning nothing. Whatever you ask for, the result is intersected with
-the data sets your token may read — a filter can never widen access, so an empty page can
+the data sets your token may read, a filter can never widen access, so an empty page can
 mean "no matches" or "none you may see", and the two are not distinguished.
 
 ### Filtering {#filtering}
 
-Every field you supply is combined with **AND** — an event must match all of them.
+Every field you supply is combined with **AND**, an event must match all of them.
 
 | Field | Matching |
 | --- | --- |
@@ -230,7 +230,7 @@ Every field you supply is combined with **AND** — an event must match all of t
 | `metadata` | Every key/value pair given must be present on the event. |
 | `dataSetId` | Events belonging to these data sets. |
 | `relatedResources` | Events attached to these resources. |
-| `eventTime`, `createdTime`, `lastUpdatedTime` | `{ "min": …, "max": … }` bounds — see the note below. |
+| `eventTime`, `createdTime`, `lastUpdatedTime` | `{ "min": …, "max": … }` bounds, see the note below. |
 
 Each field above takes **either a bare value or an array**, and the entries of an array are
 combined with **OR**. That is why they are named in the singular: asking for one thing is the
@@ -266,7 +266,7 @@ case-insensitively, so `"SHIFT_REPORT_1*"` is the case-insensitive way to ask th
 `BELONGS_TO` hierarchy, the same expansion access control applies to a grant.
 
 An `externalId` that names no data set contributes nothing. That can only ever narrow the
-result — a typo gives you too few events, never events you should not see.
+result, a typo gives you too few events, never events you should not see.
 
 :::caution Omitting `dataSetId` and sending `[]` are opposites
 Omit the field (or send `null`) for **no data set restriction**. An explicit empty list means
@@ -279,15 +279,15 @@ comes back empty. For every other filter field the same code returns the unrestr
 
 :::note `eventTime.max` is exclusive; the other maxima are inclusive
 `eventTime` is matched as `min <= t < max`, while `createdTime` and `lastUpdatedTime` are
-matched as `min <= t <= max`. That makes back-to-back `eventTime` windows tile cleanly —
-`[Monday, Tuesday)` then `[Tuesday, Wednesday)` covers every event exactly once — where the
+matched as `min <= t <= max`. That makes back-to-back `eventTime` windows tile cleanly,
+`[Monday, Tuesday)` then `[Tuesday, Wednesday)` covers every event exactly once, where the
 same pattern on `createdTime` double-counts the boundary millisecond.
 :::
 
 ### Advanced filters {#advanced-filters}
 
 `advancedFilter` sits alongside `filter` and builds a boolean expression when flat AND is not
-enough — "type is alarm **or** the source is SAP", or "everything except the `test_` prefix".
+enough, "type is alarm **or** the source is SAP", or "everything except the `test_` prefix".
 Combine with `and`, `or` and `not`; the leaves take one of three operators:
 
 | Operator | Meaning |
@@ -313,13 +313,13 @@ being ignored.
 }
 ```
 
-Two things to know. `property` is a list, but only its **first** entry is read — there is no
+Two things to know. `property` is a list, but only its **first** entry is read, there is no
 nested path into `metadata`. And every value is compared as a string, so `dataSetId` matches
 `"43"`, not `43`.
 
 ### Ordering and paging {#paging}
 
-Events come back **`eventTime` ascending** unless you say otherwise — that is the order the
+Events come back **`eventTime` ascending** unless you say otherwise, that is the order the
 cursor pages in, so paging does not change the order underneath you. Ask for another with
 `sort`, over `eventTime`, `createdTime`, `lastUpdatedTime`, `externalId`, `type`, `subType`,
 `status`, `source` or `dataSetId`:
@@ -330,10 +330,10 @@ cursor pages in, so paging does not change the order underneath you. Ask for ano
   "limit": 200 }
 ```
 
-Only the **first** `property` is used, and `id` is appended behind it — a sort column alone is
+Only the **first** `property` is used, and `id` is appended behind it, a sort column alone is
 not a position unless it is unique, and a page boundary inside a run of equal values repeats or
 drops exactly those rows. A property that is not sortable is ignored rather than rejected, and
-any `order` that is not exactly `desc` sorts ascending — a malformed sort degrades to the
+any `order` that is not exactly `desc` sorts ascending, a malformed sort degrades to the
 default instead of silently reversing your results. Null values sort last ascending, first
 descending.
 
@@ -346,14 +346,14 @@ To walk past the first page, echo back the `nextCursor` the response carried:
   "limit": 200 }
 ```
 
-The cursor is **opaque** — base64 of a versioned encoding carrying the sort, the boundary value
-and the id — so do not build or parse one. A cursor that does not decode is refused with a
+The cursor is **opaque**, base64 of a versioned encoding carrying the sort, the boundary value
+and the id, so do not build or parse one. A cursor that does not decode is refused with a
 `400` of `type: ".../errors/malformed-cursor"` rather than guessed at: half a position would
 silently skip or repeat the rows around the boundary.
 
 Send it with the **same** `sort` that produced it: a cursor is a position in one particular
 order. Continuing it under another is refused with the same `400`, which names both sorts.
-Sorting by `subType` or `status` cannot be paged at all —
+Sorting by `subType` or `status` cannot be paged at all,
 both columns are nullable, and a keyset boundary on them would skip the events that have no
 value.
 
@@ -361,7 +361,7 @@ Prefer this to counting pages. Events are stored partitioned by event time, so r
 a position lets whole partitions be skipped, where an offset re-reads everything ahead of it
 and gets slower the further you page. Page 400 costs what page 1 costs. The trade is that
 there is no random access: you walk forward from where you were and cannot jump to page 7.
-`nextCursor` is absent on a short page, so "keep going while it is present" is the whole loop —
+`nextCursor` is absent on a short page, so "keep going while it is present" is the whole loop,
 and since a full page may still be the last, a complete walk ends with one empty request.
 
 All three clients read the cursor off the response envelope rather than off the last event:
@@ -400,8 +400,8 @@ if let Some(cursor) = page.next_cursor() {
 
 ## Policy findings {#policy-findings}
 
-A **policy finding** — a naming-policy violation that was allowed through and recorded for a
-steward — is an ordinary event. There is no findings endpoint and no findings client: they are
+A **policy finding**, a naming-policy violation that was allowed through and recorded for a
+steward, is an ordinary event. There is no findings endpoint and no findings client: they are
 written to the event store like anything else, so everything on this page already works on
 them.
 
@@ -409,18 +409,18 @@ The encoding is a wire contract, so you can read findings without a policy-aware
 
 | Field | Holds |
 | --- | --- |
-| `type` | Always `policy_finding`. Matched exactly, never by prefix — this is the one filter separating findings from the tenant's real events. |
+| `type` | Always `policy_finding`. Matched exactly, never by prefix, this is the one filter separating findings from the tenant's real events. |
 | `subType` | Which policy fired, by its external id. |
 | `source` | `datahub_policy_<policy external id>`, truncated to 128 characters. |
-| `externalId` | `policy_finding_<policy external id>_<node id>` — the correlation key every event in one finding's lifecycle shares. |
-| `status` | `OPEN` or `RESOLVED` — what *this event* asserts, not the finding's current state. |
+| `externalId` | `policy_finding_<policy external id>_<node id>`, the correlation key every event in one finding's lifecycle shares. |
+| `status` | `OPEN` or `RESOLVED`, what *this event* asserts, not the finding's current state. |
 | `description` | What is wrong, in words. |
 | `relatedResources` | The entity the finding is about, by node id. |
 | `dataSetId` | That entity's data set. |
 | `metadata` | `offendingValue`, `suggestion` (when one could be derived), `raisedBy`. |
 
 Note the external id is keyed on the entity's **node id**, not its external id. The external
-id is the offending value here — the thing a steward is most likely to change — and keying on
+id is the offending value here, the thing a steward is most likely to change, and keying on
 it would mean renaming a resource silently abandoned its finding and started a second stream.
 
 ### Fetch the queue
@@ -477,7 +477,7 @@ let findings = api.events.filter(&filter).await?;
 
 ### Fold the stream
 
-A finding's current state is **not stored** — you derive it. Nothing is ever updated in place:
+A finding's current state is **not stored**, you derive it. Nothing is ever updated in place:
 raising appends an `OPEN`, resolving appends a `RESOLVED` carrying the same `externalId`. Group
 by external id, order by `eventTime` ascending, and the last event wins:
 
@@ -528,22 +528,22 @@ let open: Vec<_> = current.values().filter(|e| e.status.as_deref() == Some("OPEN
 
 :::caution Do not filter on `status`
 A stored `OPEN` event means *this was raised*, not *this is outstanding*. Filtering the query
-on `status: "OPEN"` returns the raise of every finding that has since been resolved — the
+on `status: "OPEN"` returns the raise of every finding that has since been resolved, the
 resolve is a separate, later event, and narrowing the query hides it. Open-ness is a
 conclusion drawn from the stream, not a fact the store holds, so fetch and fold.
 
 Order ascending for the same reason: replay out of order and a stale `OPEN` overwrites the
-`RESOLVED` that followed it. Keep folding across pages too — a `RESOLVED` on page 3 closes a
+`RESOLVED` that followed it. Keep folding across pages too, a `RESOLVED` on page 3 closes a
 finding whose `OPEN` arrived on page 1.
 :::
 
 :::caution A fold needs the *whole* stream, so a truncated page lies
 Folding is only correct if every event sharing an external id is in front of you. Get one
 page of a queue larger than your `limit` and an `OPEN` can arrive without the `RESOLVED` that
-closed it — the fold then reports a resolved finding as outstanding. It is a wrong answer,
+closed it, the fold then reports a resolved finding as outstanding. It is a wrong answer,
 not an error, and nothing in the response marks it as partial.
 
-Page until short — a full page is a signal that there is more, never that you have it all.
+Page until short, a full page is a signal that there is more, never that you have it all.
 Narrowing by `subType` and `dataSetId` keeps the walk cheap, but it is paging, not narrowing,
 that makes the fold correct.
 :::
@@ -551,10 +551,10 @@ that makes the fold correct.
 Raising is idempotent: a raise event's id is derived from what it asserts, so re-evaluating an
 entity whose external id has not changed collapses onto the raise already stored. An entity
 written a thousand times contributes one `OPEN`, not a thousand. A raise for a *different*
-non-conforming value is a new fact and is appended — which is also all "reopening" is.
+non-conforming value is a new fact and is appended, which is also all "reopening" is.
 
-For the steward's side of this — how to resolve a finding, what resolving means, and why
-findings are raised for resources but never for events — see
+For the steward's side of this, how to resolve a finding, what resolving means, and why
+findings are raised for resources but never for events, see
 [Findings](./external-ids#findings).
 
 ## Full-text search {#search}
@@ -587,7 +587,7 @@ related resource). It is faster and its results are predictable.
 
 ## Distinct values {#distinct-values}
 
-Two families of endpoint answer "what values actually occur?" — the material for a filter
+Two families of endpoint answer "what values actually occur?", the material for a filter
 drop-down or a type-ahead, without scanning events yourself. Both are restricted to the data
 sets your token may read, so a UI built on them cannot offer a facet the user could not then
 query.
@@ -614,13 +614,13 @@ GET /events/search/type?q=alarm&limit=20
 ## Count {#count}
 
 `GET /events/count` returns `{ "count": 148392 }` for the tenant. It is a single cheap query,
-and it takes **no filters** — for a filtered count, run `POST /events/filter` with the `limit`
+and it takes **no filters**, for a filtered count, run `POST /events/filter` with the `limit`
 you care about and measure the page.
 
 ## Update {#update}
 
 `POST /events/update` changes fields on events that already exist. Identify each one by UUID
-`id` or by `externalId`, and name only the fields you want changed — anything you leave out
+`id` or by `externalId`, and name only the fields you want changed, anything you leave out
 keeps its current value.
 
 Each field is an object carrying a verb rather than a bare value, which is what lets "clear
@@ -649,7 +649,7 @@ this" be expressed distinctly from "leave it alone":
 
 Updatable fields are `externalId`, `description`, `type`, `subType`, `status`, `source`,
 `dataSetId`, `metadata` and `relatedResources`. Sending both `set` and `setNull` for one
-field is a `400` — the request is contradictory, so it is refused rather than resolved by
+field is a `400`, the request is contradictory, so it is refused rather than resolved by
 precedence.
 
 `eventTime` is **fixed at creation** and is not an update field at all: an update naming it
@@ -671,7 +671,7 @@ concurrent read of the same event can briefly return the pre-update version *or*
 twice. Where the record matters for audit, write a new event that corrects the old one
 instead: that is what an append-only log is for, and it keeps the correction itself visible.
 
-`status` is the honourable exception — acknowledging an alarm in place is what the field is
+`status` is the honourable exception, acknowledging an alarm in place is what the field is
 there for.
 :::
 
@@ -719,17 +719,17 @@ Deletes are **idempotent**: removing an event that is already gone returns `200`
 nothing, so a retried delete needs no bookkeeping.
 
 Remember that an external id names a *subject*, not an event. Deleting by external id removes
-**every event filed under it**, which is rarely what you want for a single mistaken record —
+**every event filed under it**, which is rarely what you want for a single mistaken record,
 delete that one by its UUID.
 
 :::caution A `200` means "accepted", not "gone"
 The delete is published to the ingestion pipeline and marked in the backend without waiting
-for the removal to land — a background job does the actual work. Until it has run, the event
+for the removal to land, a background job does the actual work. Until it has run, the event
 **can still come back from `filter` and `byids`**.
 
 So a test that deletes an event and immediately asserts it is gone will flake, and so will a
 UI that re-queries straight on the back of a delete. Poll until the event disappears rather
-than reading once, and treat its absence — not the `200` — as the signal. The same eventual
+than reading once, and treat its absence, not the `200`, as the signal. The same eventual
 consistency applies in the other direction: an event is not necessarily queryable the instant
 `create` returns.
 
@@ -771,8 +771,8 @@ The three clients cover every event endpoint, the facet endpoints included.
 | Get by id | `events().getById` | `events.get` | `events.get` |
 | Look up by id / external id | `events().byIds` | `events.by_ids` | `events.by_ids` |
 | Filter | `events().filter` | `events.filter` | `events.filter` |
-| — with `sort` | `EventRetreiver.sort` | `sort_by` / `sort_order` | `set_sort` |
-| — with paging | `EventRetreiver.cursor` | `cursor` | `set_cursor` |
+| Filter with `sort` | `EventRetreiver.sort` | `sort_by` / `sort_order` | `set_sort` |
+| Filter with paging | `EventRetreiver.cursor` | `cursor` | `set_cursor` |
 | Update | `events().update` | `events.update` | `events.update` |
 | Full-text search | `events().search` | `events.search` | `events.search` |
 | Count | `events().count` | `events.count` | `events.count` |
@@ -782,6 +782,6 @@ The three clients cover every event endpoint, the facet endpoints included.
 All three carry the same four pairs: `list_types` / `search_types` and the same for sub-types,
 statuses and sources (`listTypes` / `searchTypes` … in Java).
 
-Take the paging value from the response envelope — `getNextCursor()` in Java, `page.next_cursor`
-in Python, `page.next_cursor()` in Rust — and send it back unchanged. It is opaque; an
+Take the paging value from the response envelope, `getNextCursor()` in Java, `page.next_cursor`
+in Python, `page.next_cursor()` in Rust, and send it back unchanged. It is opaque; an
 undecodable cursor is refused with a `400`.

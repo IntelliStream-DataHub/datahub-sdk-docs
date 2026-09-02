@@ -5,7 +5,7 @@ title: Fraud classification (graph + ML)
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-# Fraud classification — graph features + machine learning
+# Fraud classification, graph features + machine learning
 
 :::info At a glance
 **Effort:** ~1–2 hours · **You'll build:** graph-derived features from network traversal,
@@ -14,29 +14,29 @@ for data and traversal, plus `networkx`, `pandas`, `scikit-learn`.
 :::
 
 Money laundering doesn't look suspicious one
-payment at a time; it looks suspicious in the *shape* of the network — funds fanning out
-through mules and looping back — combined with behaviour like rapid pass-through. A rules
+payment at a time; it looks suspicious in the *shape* of the network, funds fanning out
+through mules and looping back, combined with behaviour like rapid pass-through. A rules
 engine flags thousands of alerts a day; a classifier that scores each one by its network
 shape *and* its behaviour lets investigators work the riskiest first.
 
 The technique generalises to any "score an entity by its connections plus its behaviour"
-problem — [wafer-lot risk](/industries/manufacturing-process/semiconductor), [insurance rings](/industries/financial-services/insurance-fraud),
+problem, [wafer-lot risk](/industries/manufacturing-process/semiconductor), [insurance rings](/industries/financial-services/insurance-fraud),
 [telecom abuse](/industries/technology-operations/network).
 
 :::info Needs a sandbox
 This walks a transfer graph that already exists. [Generate a sandbox](/advanced/generate-sample-data)
-first — section F creates the flagged ring around `account_77310`.
+first, section F creates the flagged ring around `account_77310`.
 :::
 
 :::tip New to machine learning?
 No background needed. Skim the [gentle primer](/advanced/machine-learning-gently) for the
-ideas in plain language — model, feature, training, and the algorithm itself.
+ideas in plain language, model, feature, training, and the algorithm itself.
 :::
 
 ## 1. Pull the account's network
 
 For a given account, [walk the money-flow graph](/guides/correlate-alarms) to get its
-cluster — the sub-graph of accounts and the transfers between them.
+cluster, the sub-graph of accounts and the transfers between them.
 
 <Tabs groupId="lang">
 <TabItem value="python" label="Python">
@@ -84,7 +84,7 @@ let net = api.resources.fetch_related(
 
 This is the heart of it. Load the returned nodes and edges into a directed graph and
 compute the structural signals that distinguish a laundering cluster from a normal
-account's neighbourhood — ring size, pass-through "mules", and whether the money loops
+account's neighbourhood, ring size, pass-through "mules", and whether the money loops
 back to where it started.
 
 ```python
@@ -117,7 +117,7 @@ def graph_features(account_external_id):
 
 ## 3. Add behavioural features from the transaction series
 
-Network shape alone produces false positives — a busy merchant looks connected too.
+Network shape alone produces false positives, a busy merchant looks connected too.
 Combine it with how the account *behaves*: how much flows through, and whether what comes
 in goes straight back out (the pass-through ratio that defines a mule).
 
@@ -183,7 +183,7 @@ print(classification_report(yte, (proba > 0.5).astype(int)))
 
 Score a new alert, **write the risk back as a series** so it's trendable, and raise a
 `sar_candidate` event for the high-risk ones. Crucially, include the features that drove
-the score — an investigator needs to know *why* it's flagged, not just that it is.
+the score, an investigator needs to know *why* it's flagged, not just that it is.
 
 ```python
 alert = "account_77310"
@@ -219,7 +219,7 @@ assert len(pts) >= 1, "the risk score was not written"
 ```
 
 The risk score is now a live series the investigations dashboard ranks on, and each
-`sar_candidate` event arrives with its network-shape evidence attached — the alert and
+`sar_candidate` event arrives with its network-shape evidence attached, the alert and
 the reason for it, together.
 
 ## Where to take it further
@@ -227,18 +227,18 @@ the reason for it, together.
 - **Real explainability.** Swap the hand-picked metadata for SHAP values so every score
   comes with its true top contributors.
 - **Richer graph features.** Add betweenness, community detection, or counterparty
-  diversity — the structural signal is deep.
+  diversity, the structural signal is deep.
 - **Stream it.** Drive scoring from the [flagged-payments subscription](/industries/financial-services/aml)
   so alerts are scored the moment they're raised.
 
 ## Further reading
 
-- **Gradient boosting** — [Wikipedia](https://en.wikipedia.org/wiki/Gradient_boosting)
-- **Graph centrality** (the network features) — [Wikipedia](https://en.wikipedia.org/wiki/Centrality)
-- **Shapley values / SHAP** (explainability) — [Wikipedia](https://en.wikipedia.org/wiki/Shapley_value)
+- **Gradient boosting**: [Wikipedia](https://en.wikipedia.org/wiki/Gradient_boosting)
+- **Graph centrality** (the network features), [Wikipedia](https://en.wikipedia.org/wiki/Centrality)
+- **Shapley values / SHAP** (explainability), [Wikipedia](https://en.wikipedia.org/wiki/Shapley_value)
 
 ## See also
 
-- [Correlate alarms with the graph](/guides/correlate-alarms) — the traversal these features are built on.
-- [Banking — AML](/industries/financial-services/aml) · [Insurance — fraud rings](/industries/financial-services/insurance-fraud) — the quick versions.
-- [Predictive maintenance](/advanced/predictive-maintenance) — the other end-to-end model build.
+- [Correlate alarms with the graph](/guides/correlate-alarms): the traversal these features are built on.
+- [Banking, AML](/industries/financial-services/aml) · [Insurance, fraud rings](/industries/financial-services/insurance-fraud), the quick versions.
+- [Predictive maintenance](/advanced/predictive-maintenance): the other end-to-end model build.

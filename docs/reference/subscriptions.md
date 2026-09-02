@@ -80,7 +80,7 @@ data set (and everything beneath it), or the wildcard `/datasets/*/read` for all
 `listen` opens a WebSocket to `/timeseries/datapoints/subscription/listen/<externalId>/...`,
 one path segment per subscription, and authenticates the upgrade request with the same
 `Authorization: Bearer <jwt>` header as any REST call. Stream messages to a handler or drive
-a loop, and **ack** the messages you've processed — anything left unacked is redelivered on
+a loop, and **ack** the messages you've processed, anything left unacked is redelivered on
 reconnect.
 
 <Tabs groupId="lang">
@@ -98,7 +98,7 @@ try (var stream = client.subscriptions().listen(List.of("engine_temps"))
 }
 ```
 
-Or drive `poll` yourself — a blocking queue hand-off (not network polling) that returns
+Or drive `poll` yourself, a blocking queue hand-off (not network polling) that returns
 `null` on timeout. Reach for `poll`, or `stream(handler, AckMode.MANUAL)`, when you need
 to ack on your own schedule:
 
@@ -171,7 +171,7 @@ clients unpack each entry of `messages` into one message, whose `payload` is the
 :::note Refused subscriptions surface as errors
 Live delivery enforces the same data set ACL: to attach a subscription you must be able to read
 **all** of its bound series. A subscription you can't read (`reason: "forbidden"`) or one that
-doesn't exist (`reason: "not-found"`) is refused per-subscription — the connection stays open for
+doesn't exist (`reason: "not-found"`) is refused per-subscription, the connection stays open for
 the subscriptions that did attach. The refusal is surfaced, not swallowed: a `SubscriptionError`
 via `pollError` in Java, an `Err(ListenError::Subscription { .. })` from `next().await` in Rust, and
 an exception raised from the iterator in Python. A refused subscription is therefore visible
@@ -194,7 +194,7 @@ are in [Limits & quotas](./limits#websockets).
 
 :::tip Acking is at-least-once
 Ack a message only after you've durably handled it. If your process dies before the ack,
-the server redelivers it — so make your handler idempotent.
+the server redelivers it, so make your handler idempotent.
 :::
 
 ## What each client covers {#client-coverage}

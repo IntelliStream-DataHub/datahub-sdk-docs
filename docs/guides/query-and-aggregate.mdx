@@ -9,7 +9,7 @@ import TabItem from '@theme/TabItem';
 
 Read raw datapoints back for a window, then roll them up to fixed buckets
 (hourly averages, daily maxima) for a chart or report. Aggregates and the bucket
-size are part of the retrieve filter — no separate endpoint.
+size are part of the retrieve filter, no separate endpoint.
 
 :::info Needs a sandbox
 This guide reads data it does not create. [Seed a sandbox](/guides/seed-a-sandbox) writes it
@@ -157,7 +157,7 @@ back on `.average` (`dp.average`, `dp.max`, …).
 The Java client does **not** expose aggregate values yet: `getValue()` returns `null`
 for aggregated datapoints (the server sends `avg`/`max`/… as named fields, but the Java
 datapoint type carries only `timestamp`/`value`). For now use **Python or Rust** for
-aggregates — or in Java, fetch raw datapoints and aggregate them in your application.
+aggregates, or in Java, fetch raw datapoints and aggregate them in your application.
 :::
 
 ## Paging large windows

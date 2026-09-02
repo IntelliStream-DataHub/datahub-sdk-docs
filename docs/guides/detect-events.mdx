@@ -9,7 +9,7 @@ import TabItem from '@theme/TabItem';
 
 Raw datapoints answer "what is the value?"; **events** answer "what happened?". A
 common pipeline reads recent readings, checks them against a rule, and records a
-discrete, queryable event when the rule fires — a threshold breach, a state change,
+discrete, queryable event when the rule fires, a threshold breach, a state change,
 an alarm. Events carry a type, a time, and metadata, and can reference the resources
 they concern.
 
@@ -109,7 +109,7 @@ if too_hot {
 
 ## Query the events later
 
-Events are first-class records — filter them by type, time or metadata for an audit
+Events are first-class records, filter them by type, time or metadata for an audit
 trail or an incident timeline.
 
 <Tabs groupId="lang">

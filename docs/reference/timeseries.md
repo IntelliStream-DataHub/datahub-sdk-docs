@@ -58,15 +58,15 @@ api.time_series.create_one(&ts).await?;
 ## Value types
 
 Every series has a **value type** that decides how its datapoints are stored. Leave it
-unset and the series is floating-point (`float32`) — right for most sensor readings, so
+unset and the series is floating-point (`float32`), right for most sensor readings, so
 the create above accepts decimal values as-is. Set it explicitly when you need something
 else:
 
 | Value type | Use it for |
 | --- | --- |
-| `float32` *(default)* | Sensor readings — 32-bit precision is plenty. |
+| `float32` *(default)* | Sensor readings, 32-bit precision is plenty. |
 | `float` | Double-precision floating point. |
-| `numeric` / `decimal32` | **Exact decimals** — money, lab values — stored without floating-point rounding. Send the value's string form, see below. |
+| `numeric` / `decimal32` | **Exact decimals**, money, lab values, stored without floating-point rounding. Send the value's string form, see below. |
 | `bigint` | Whole numbers (counts, integer statuses). |
 | `text` | Non-numeric string values. |
 | `mixed` | Heterogeneous values in one series. |
@@ -123,7 +123,7 @@ api.time_series.create_one(&price).await?;
 ## Filter series
 
 `POST /timeseries/filter` finds series by structured criteria. Everything you supply is
-combined with AND — a series must match every criterion to be included.
+combined with AND, a series must match every criterion to be included.
 
 | Criterion | Matching |
 | --- | --- |
@@ -142,10 +142,10 @@ entries of an array are combined with **OR**. That is why they are named in the 
 `labels` and `metadata` require **all** entries to match and keep their plural names for that
 reason.
 
-Results come newest first unless you ask for another order — see
-[sorting and paging](#sorting-and-paging) — capped by `limit` (default 1000, max 10000; a value
+Results come newest first unless you ask for another order, see
+[sorting and paging](#sorting-and-paging): capped by `limit` (default 1000, max 10000; a value
 `<= 0` falls back to the default, and above the ceiling is a 400). Series in data sets you lack
-read access to are silently omitted — the result is what your token may see, not an error. For
+read access to are silently omitted, the result is what your token may see, not an error. For
 free-text lookups use `POST /timeseries/search` instead.
 
 <Tabs groupId="lang">
@@ -227,12 +227,12 @@ They are unknown fields, refused with a `400`; use `filter.name` and `query`.
 
 ## Sorting and paging {#sorting-and-paging}
 
-The three node filters — `/timeseries/filter`, `/resources/filter` and `/datasets/filter` —
+The three node filters, `/timeseries/filter`, `/resources/filter` and `/datasets/filter`,
 share this contract. (`/events/filter` works the same way over its own columns; see
 [events](./events#paging).)
 
 Order a page with `sort`, over `id`, `externalId`, `name`, `source`, `description`,
-`createdTime`, `lastUpdatedTime` or `dataSetId`. The default is `createdTime` descending —
+`createdTime`, `lastUpdatedTime` or `dataSetId`. The default is `createdTime` descending,
 newest created first.
 
 ```json
@@ -245,7 +245,7 @@ Only the **first** `property` is used, and `id` is appended behind it: a sort co
 a position unless it is unique, and a page boundary inside a run of equal values repeats or drops
 exactly those rows. An unrecognised property falls back to the default rather than being
 rejected, and any `order` that is not exactly `desc` sorts ascending. Nulls sort last ascending,
-first descending — most of these columns are nullable, since every node type shares one table.
+first descending, most of these columns are nullable, since every node type shares one table.
 
 A page that has a successor carries a `nextCursor`. Echo it back as `cursor` to continue:
 
@@ -256,8 +256,8 @@ A page that has a successor carries a `nextCursor`. Echo it back as `cursor` to 
   "limit": 100 }
 ```
 
-The cursor is **opaque** — base64 of a versioned encoding carrying the sort, the boundary value
-and the id — so do not build or parse one. Send it with the **same** sort that produced it; a
+The cursor is **opaque**, base64 of a versioned encoding carrying the sort, the boundary value
+and the id, so do not build or parse one. Send it with the **same** sort that produced it; a
 cursor is a position in one particular order, and continuing it under another is refused. One
 that does not decode is refused with a `400` of `type: ".../errors/malformed-cursor"`.
 

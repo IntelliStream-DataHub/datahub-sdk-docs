@@ -8,12 +8,12 @@ import TabItem from '@theme/TabItem';
 # Edges
 
 The relationships between resources, as objects in their own right. An edge is **directional**
-(`from` → `to`), **typed** by a relationship type, and **unique** per pair and type — two
+(`from` → `to`), **typed** by a relationship type, and **unique** per pair and type, two
 resources can be connected many ways, but only once each way.
 
 Most edges are born with their nodes: `POST /resources/create` takes `nodes` and `relations`
 together and writes them in one transaction. The `/edges` endpoints are for everything after
-that — linking resources that already exist, reading an edge back, cutting one without
+that, linking resources that already exist, reading an edge back, cutting one without
 touching its endpoints, and managing the relationship-type catalogue.
 [Create resources and relations →](./resources#create-resources-and-relations)
 
@@ -57,7 +57,7 @@ Name each end by external id (`fromExternalId`/`toExternalId`) or by numeric id
 name you haven't used before is created for you, so [pre-registering types](#types) is only
 for seeding the catalogue or attaching a description.
 
-The batch is **all-or-nothing** — one relation the server won't take and none of them are
+The batch is **all-or-nothing**, one relation the server won't take and none of them are
 written. Success is a `201` with the created edges under `items`.
 
 <Tabs groupId="lang">
@@ -95,7 +95,7 @@ print(created[0].id)
 
 `RelForm.by_external_ids(from_external_id, to_external_id, relationship_type)` is the short
 form when you only need the three; `RelForm.by_ids` is its numeric-id counterpart. The service
-unwraps for you — `create` hands back a plain `list[EdgeProxy]`, not a wrapper.
+unwraps for you, `create` hands back a plain `list[EdgeProxy]`, not a wrapper.
 
 </TabItem>
 <TabItem value="rust" label="Rust">
@@ -120,13 +120,13 @@ println!("{:?}", created.get_items()[0].id);
 | --- | --- |
 | `400` | An end doesn't exist (the message names which), the relation has no type, or it breaks one of the data set or time series rules below. |
 | `403` | You can't write one of the two resources. Both ends are checked, so linking something *into* a data set needs write access on that data set too. |
-| `409` | The two are already connected that way. `(start, end, type)` is unique — one relation per pair per type. |
+| `409` | The two are already connected that way. `(start, end, type)` is unique, one relation per pair per type. |
 
 :::note Edges into data sets and time series are validated
 The same two rules the [graph create](./resources#create-resources-and-relations) enforces
 apply here:
 
-- A relation **to a data set** must use the `BELONGS_TO` relationship type — that is the
+- A relation **to a data set** must use the `BELONGS_TO` relationship type, that is the
   relation data set membership is built from, and anything else is a `400`.
 - A **data set → time series** edge is accepted only when the series has no data set yet, or
   already belongs to that very data set. A series in a *different* data set is a `400`: a
@@ -140,7 +140,7 @@ apply here:
 `POST /edges/byids` takes several ids and answers with a **graph**: the edges under
 `relations` and the resources at both ends under `nodes`, so you don't need a follow-up call
 to resolve endpoints. Unlike the single lookup, ids that match nothing are **silently
-omitted** — compare what comes back against what you asked for.
+omitted**, compare what comes back against what you asked for.
 
 Both lookups are gated by data set grants: reading an edge requires **read access to the data
 sets of both endpoints**, mirroring the write rule, because an edge reveals both ends. A denied
@@ -175,7 +175,7 @@ for endpoint in many.nodes:
     print(endpoint.external_id)
 ```
 
-Edges have no external id, so `by_ids` and `delete` take numeric ids — or an `EdgeProxy` you
+Edges have no external id, so `by_ids` and `delete` take numeric ids, or an `EdgeProxy` you
 already hold, which is accepted anywhere an id is.
 
 </TabItem>
@@ -198,7 +198,7 @@ for endpoint in many.nodes().unwrap_or_default() {
 ## Delete {#delete}
 
 `POST /edges/delete` (or `DELETE`, the endpoint takes both) removes relationships by id and
-answers `204` with no body. The resources at each end are untouched — this is how you
+answers `204` with no body. The resources at each end are untouched, this is how you
 disconnect two things without losing either. [Deleting a resource](./resources#delete) is the
 heavier move: it takes every relation the resource had with it.
 
@@ -206,7 +206,7 @@ Deletion is **idempotent**: unknown ids are silently skipped, so a successful ca
 evidence the edge existed.
 
 It can still be refused. Cutting an edge is rejected with a `400` if it would leave a
-surviving resource unreachable from a root — the same connectivity rule
+surviving resource unreachable from a root, the same connectivity rule
 [deleting a resource](./resources#delete) is checked against, and the response names the
 resources that would be stranded. An edge that is the only path from a subtree to the root is
 exactly the one you cannot cut: re-attach the subtree another way first, or delete it in the
@@ -241,8 +241,8 @@ api.edges.delete(&vec![IdAndExtId::from_id(341)]).await?;
 ## Relationship types {#types}
 
 Every edge carries a type, and the types are a per-tenant catalogue: `GET /edges/types` lists
-them, `POST /edges/types/create` registers names up front. Registering is optional — a type
-is created the first time an edge uses its name — so reach for it when you want the catalogue
+them, `POST /edges/types/create` registers names up front. Registering is optional, a type
+is created the first time an edge uses its name, so reach for it when you want the catalogue
 seeded before anyone writes, or a `description`/`i18nCode` attached to a type.
 
 A type is `{ id, name, description, i18nCode }`.
@@ -295,7 +295,7 @@ create a type by accident.
 
 `POST /edges/create` only **upper-cases** the `relationshipType` you give it. No underscores
 are inserted, so an edge created with `"relationshipType": "Flows To"` gets the type
-`FLOWS TO` — a *different* type from `FLOWS_TO`, silently created on the spot. Lookup is on the
+`FLOWS TO`, a *different* type from `FLOWS_TO`, silently created on the spot. Lookup is on the
 normalised name, so `flows_to` and `FLOWS_TO` are the same type either way.
 
 The practical rule: write the type name the way you want it stored, `FLOWS_TO`, and the two
@@ -315,7 +315,7 @@ you did not just create; read `GET /edges/types` for that.
 Every form in a batch is saved in one transaction, so a single duplicate rolls the valid new
 types back alongside it. Treat the `409` as *"nothing in this batch was created"* rather than
 *"one of these already existed"*. Creating an edge with an unknown type name does not have
-this problem — that path is a proper find-or-create.
+this problem, that path is a proper find-or-create.
 :::
 
 ## What each client covers {#client-coverage}

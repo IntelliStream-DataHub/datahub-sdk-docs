@@ -221,4 +221,4 @@ api.files.delete(&DataWrapper::from(vec![IdAndExtId::from_external_id("report_20
 | Delete | `files().delete` | `files.delete` | `files.delete` |
 
 Python and Rust add `download_to_path`, which streams to disk instead of holding the whole
-file in memory — see [Download](#download).
+file in memory, see [Download](#download).
