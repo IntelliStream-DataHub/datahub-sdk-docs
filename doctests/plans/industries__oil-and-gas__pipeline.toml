@@ -1,0 +1,54 @@
+page = "docs/industries/oil-and-gas/pipeline.mdx"
+
+# Blocks on this page:
+#   python #1   L25    Set up demo data
+#   java   #1   L57    1. Detect the imbalance
+#   python #2   L76    1. Detect the imbalance
+#   rust   #1   L91    1. Detect the imbalance
+#   java   #2   L122   2. Locate it and find the isolation valves
+#   python #3   L137   2. Locate it and find the isolation valves
+#   rust   #2   L149   2. Locate it and find the isolation valves
+
+[blocks]
+python = 3
+java = 2
+rust = 2
+
+[python]
+timeout = 600
+
+prologue = """
+from tutorial_support import Recorder
+
+# Placeholders the page leaves to the reader — 'your dashboard', 'your
+# alerting'. Recorders keep what they are handed so the run can prove the
+# tutorial's logic actually reached them.
+latest = Recorder("latest")
+tolerance = Recorder("tolerance")
+"""
+
+[java]
+disabled = "Java scenario not written yet."
+
+[rust]
+disabled = "Rust scenario not written yet."
+
+# The page models the network and traverses it in the next breath. The graph read
+# path trails writes by a second or two, and an empty neighbourhood is a valid
+# answer rather than an error — so without this the page prints the wrong
+# conclusion and the test cannot tell that from a real one.
+[[python.inject]]
+before = 3
+code = """
+from tutorial_support import wait_for_related
+wait_for_related(client, "segment_pn_07")
+"""
+
+[owns]
+events = ["leak_suspected_pn07_*"]
+resources = ["segment_pn_07", "station_kollsnes", "station_mongstad", "valve_v18", "valve_v19"]
+timeseries = ["segment_pn_07_flow_in_m3h", "segment_pn_07_flow_out_m3h"]
+
+[expect]
+resources = ["segment_pn_07", "station_kollsnes", "station_mongstad", "valve_v18", "valve_v19"]
+timeseries = ["segment_pn_07_flow_in_m3h", "segment_pn_07_flow_out_m3h"]

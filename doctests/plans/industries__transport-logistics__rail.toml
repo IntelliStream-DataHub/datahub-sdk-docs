@@ -1,0 +1,64 @@
+page = "docs/industries/transport-logistics/rail.mdx"
+
+# Blocks on this page:
+#   python #1   L24    Set up demo data
+#   java   #1   L44    1. Model the network
+#   python #2   L56    1. Model the network
+#   rust   #1   L70    1. Model the network
+#   java   #2   L93    2. Is the line still connected?
+#   python #3   L110   2. Is the line still connected?
+#   rust   #2   L121   2. Is the line still connected?
+
+[blocks]
+python = 3
+java = 2
+rust = 2
+
+[python]
+timeout = 600
+# The demo-data block and step 1 are the same action written twice: the block
+# creates the graph inline, the step creates it from a `stations`/`nodes` variable.
+# A reader does one or the other, and running both is a duplicate create. The
+# numbered step is the tutorial, so that is what runs; the client it needs comes
+# from the quickstart, as it would for a reader arriving here.
+exclude = [1]
+requires = ["quickstart"]
+
+prologue = """
+
+"""
+
+[java]
+disabled = "Java scenario not written yet."
+
+[rust]
+disabled = "Rust scenario not written yet."
+
+# The page names `stations` in this step but only ever builds the list inside the
+# demo-data block above. This is that same list, so the step models the world the
+# page describes rather than an invented one.
+[[python.inject]]
+before = 2
+code = """
+stations = [intellistream_datahub_sdk.Resource(external_id=x, name=x, labels=[x]) for x in
+     ["station_oslo_s", "junction_lierstranda", "station_drammen", "station_bergen_n"]]
+"""
+
+# The page models the network and traverses it in the next breath. The graph read
+# path trails writes by a second or two, and an empty neighbourhood is a valid
+# answer rather than an error — so without this the page prints the wrong
+# conclusion and the test cannot tell that from a real one.
+[[python.inject]]
+before = 3
+code = """
+from tutorial_support import wait_for_related
+wait_for_related(client, "station_oslo_s")
+"""
+
+[owns]
+resources = ["junction_lierstranda", "station_bergen_n", "station_drammen", "station_oslo_s"]
+
+# Step 1 builds the network through `stations`; these are the nodes it must leave behind.
+[expect]
+resources = ["station_oslo_s", "junction_lierstranda", "station_drammen", "station_bergen_n"]
+stdout = ["route open"]

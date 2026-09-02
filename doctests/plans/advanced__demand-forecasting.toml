@@ -1,0 +1,33 @@
+page = "docs/advanced/demand-forecasting.mdx"
+
+# Blocks on this page:
+#   python #1   L40    1. Load the history
+#   java   #1   L60    1. Load the history
+#   rust   #1   L78    1. Load the history
+#   python #2   L106   2. Build lag + calendar features
+#   python #3   L126   3. Train the forecaster
+#   python #4   L146   4. Forecast the horizon and write it back
+
+[blocks]
+python = 4
+java = 1
+rust = 1
+
+[python]
+timeout = 600
+# Every series this recipe reads is seeded by the sample-data page, which the
+# docs tell the reader to run first. It runs once per session rather than being
+# composed into all thirteen recipes.
+requires_once = ["advanced__generate-sample-data"]
+
+[java]
+disabled = "Java scenario not written yet."
+
+[rust]
+disabled = "Rust scenario not written yet."
+
+[owns]
+timeseries = ["feeder_f12_load_mw_forecast"]
+
+[expect]
+timeseries = ["feeder_f12_load_mw_forecast"]

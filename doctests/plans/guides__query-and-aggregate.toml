@@ -1,0 +1,36 @@
+page = "docs/guides/query-and-aggregate.mdx"
+
+# python #1 L39  — Raw datapoints for a window
+# python #2 L104 — Hourly averages
+# python #3 L184 — Paging large windows
+[blocks]
+python = 3
+java = 3
+rust = 3
+
+[python]
+requires = ["quickstart"]
+timeout = 180
+
+# Block 3 pages over `start`/`end` and hands each point to `handle`, all three of
+# which the prose describes rather than shows. This is what a reader supplies.
+prologue = """
+import pandas as _pd
+start = _pd.Timestamp.now(tz="UTC") - _pd.Timedelta(days=1)
+end = _pd.Timestamp.now(tz="UTC")
+_seen = []
+def handle(dp):
+    _seen.append(dp)
+"""
+
+[java]
+disabled = "Java scenario not written yet."
+
+[rust]
+disabled = "Rust scenario not written yet."
+
+[owns]
+timeseries = ["engine_temperature"]
+
+[expect]
+timeseries = ["engine_temperature"]

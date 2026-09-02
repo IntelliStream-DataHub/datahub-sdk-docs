@@ -1,0 +1,41 @@
+page = "docs/industries/mining-metals/processing-plant.mdx"
+
+# Blocks on this page:
+#   python #1   L25    Set up demo data
+#   java   #1   L45    1. Track recovery and throughput
+#   python #2   L63    1. Track recovery and throughput
+#   rust   #1   L79    1. Track recovery and throughput
+#   java   #2   L109   2. Flag a recovery dip
+#   python #3   L122   2. Flag a recovery dip
+#   rust   #2   L133   2. Flag a recovery dip
+#   python #4   L160   See the result
+
+[blocks]
+python = 4
+java = 2
+rust = 2
+
+[python]
+timeout = 600
+
+prologue = """
+from tutorial_support import Recorder
+
+# Placeholders the page leaves to the reader — 'your dashboard', 'your
+# alerting'. Recorders keep what they are handed so the run can prove the
+# tutorial's logic actually reached them.
+compare_to_target = Recorder("compare_to_target")
+"""
+
+[java]
+disabled = "Java scenario not written yet."
+
+[rust]
+disabled = "Rust scenario not written yet."
+
+[owns]
+events = ["recovery_loss_mill1_*"]
+timeseries = ["mill_1_recovery_pct"]
+
+[expect]
+timeseries = ["mill_1_recovery_pct"]

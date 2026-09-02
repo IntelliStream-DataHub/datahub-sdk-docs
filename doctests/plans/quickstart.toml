@@ -1,0 +1,33 @@
+page = "docs/quickstart.mdx"
+
+# Blocks on this page:
+#   java   #1 L58  · python #1 L74  · rust #1 L90   — 3. Create a client and write a datapoint
+#   java   #2 L114 · python #2 L130 · rust #2 L143  — 4. Read it back
+[blocks]
+python = 2
+java = 2
+rust = 2
+
+# Both blocks run as one program, which is the point: block 2 reads back what
+# block 1 wrote, and uses the `client` block 1 built. Running them separately
+# would test two snippets and miss the thing the page actually promises —
+# "from zero to a stored datapoint".
+[python]
+timeout = 120
+
+[java]
+timeout = 240
+
+[rust]
+timeout = 600  # first run compiles the SDK
+
+[owns]
+timeseries = ["engine_temperature"]
+
+# The page's headline claim is a *stored* datapoint, so proving it means reading
+# one back from the backend, not just watching the program exit 0.
+[expect]
+timeseries = ["engine_temperature"]
+
+[expect.datapoints]
+engine_temperature = 1

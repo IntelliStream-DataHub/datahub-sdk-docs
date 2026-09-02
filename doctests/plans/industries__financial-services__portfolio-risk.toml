@@ -1,0 +1,37 @@
+page = "docs/industries/financial-services/portfolio-risk.mdx"
+
+# Blocks on this page:
+#   python #1   L23    Set up demo data
+#   java   #1   L44    1. Partition by desk with a dataset
+#   python #2   L55    1. Partition by desk with a dataset
+#   rust   #1   L66    1. Partition by desk with a dataset
+#   java   #2   L87    2. Record per-portfolio metrics
+#   python #3   L103   2. Record per-portfolio metrics
+#   rust   #2   L117   2. Record per-portfolio metrics
+#   java   #3   L145   3. Flag a risk-limit breach
+#   python #4   L160   3. Flag a risk-limit breach
+#   rust   #3   L172   3. Flag a risk-limit breach
+#   python #5   L200   See the result
+
+[blocks]
+python = 5
+java = 3
+rust = 3
+
+[python]
+timeout = 600
+
+[java]
+disabled = "Java scenario not written yet."
+
+[rust]
+disabled = "Rust scenario not written yet."
+
+[owns]
+datasets = ["desk_equities"]
+events = ["var_limit_breach_growth_*"]
+timeseries = ["portfolio_growth_mtm_usd"]
+
+[expect]
+datasets = ["desk_equities"]
+timeseries = ["portfolio_growth_mtm_usd"]

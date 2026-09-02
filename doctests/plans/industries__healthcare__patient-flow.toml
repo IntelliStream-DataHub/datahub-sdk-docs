@@ -1,0 +1,41 @@
+page = "docs/industries/healthcare/patient-flow.mdx"
+
+# Blocks on this page:
+#   python #1   L24    Set up demo data
+#   java   #1   L44    1. Roll up the wait at each stage
+#   python #2   L62    1. Roll up the wait at each stage
+#   rust   #1   L78    1. Roll up the wait at each stage
+#   java   #2   L108   2. Alert when the ED breaches its target
+#   python #3   L121   2. Alert when the ED breaches its target
+#   rust   #2   L132   2. Alert when the ED breaches its target
+#   python #4   L157   See the result
+
+[blocks]
+python = 4
+java = 2
+rust = 2
+
+[python]
+timeout = 600
+
+prologue = """
+from tutorial_support import Recorder
+
+# Placeholders the page leaves to the reader — 'your dashboard', 'your
+# alerting'. Recorders keep what they are handed so the run can prove the
+# tutorial's logic actually reached them.
+track_stage = Recorder("track_stage")
+"""
+
+[java]
+disabled = "Java scenario not written yet."
+
+[rust]
+disabled = "Rust scenario not written yet."
+
+[owns]
+events = ["flow_breach_ed_*"]
+timeseries = ["ed_time_to_bed_minutes"]
+
+[expect]
+timeseries = ["ed_time_to_bed_minutes"]

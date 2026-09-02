@@ -1,0 +1,34 @@
+page = "docs/advanced/xgboost-failure-prediction.mdx"
+
+# Blocks on this page:
+#   python #1   L41    1. Engineer one feature row per asset per day
+#   java   #1   L69    1. Engineer one feature row per asset per day
+#   rust   #1   L86    1. Engineer one feature row per asset per day
+#   python #2   L112   2. Label from the failure history
+#   python #3   L139   3. Train — with class imbalance and early stopping
+#   python #4   L163   4. Score live, with the reasons attached
+
+[blocks]
+python = 4
+java = 1
+rust = 1
+
+[python]
+timeout = 600
+# Every series this recipe reads is seeded by the sample-data page, which the
+# docs tell the reader to run first. It runs once per session rather than being
+# composed into all thirteen recipes.
+requires_once = ["advanced__generate-sample-data"]
+
+[java]
+disabled = "Java scenario not written yet."
+
+[rust]
+disabled = "Rust scenario not written yet."
+
+[owns]
+events = ["failure_predicted_a12_*"]
+timeseries = ["pump_esp_a12_failure_risk"]
+
+[expect]
+timeseries = ["pump_esp_a12_failure_risk"]

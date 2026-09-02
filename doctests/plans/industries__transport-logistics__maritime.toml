@@ -1,0 +1,56 @@
+page = "docs/industries/transport-logistics/maritime.mdx"
+
+# Blocks on this page:
+#   python #1   L25    Set up demo data
+#   java   #1   L46    1. Subscribe to the reefer fleet
+#   python #2   L59    1. Subscribe to the reefer fleet
+#   rust   #1   L70    1. Subscribe to the reefer fleet
+#   java   #2   L93    2. Watch for a temperature excursion live
+#   python #3   L115   2. Watch for a temperature excursion live
+#   rust   #2   L130   2. Watch for a temperature excursion live
+
+[blocks]
+python = 3
+java = 2
+rust = 2
+
+[python]
+timeout = 600
+
+prologue = """
+from tutorial_support import Recorder, feed, take
+
+# Placeholders the page leaves to the reader — 'your dashboard', 'your
+# alerting'. Recorders keep what they are handed so the run can prove the
+# tutorial's logic actually reached them.
+out_of_band = Recorder("out_of_band")
+"""
+
+# The page's payoff is the listen loop, so it runs — bounded, not skipped. Two
+# declared substitutions make that possible: one starts a background writer so
+# messages actually arrive (a silent stream would prove nothing), the other caps
+# the loop at three messages and 45 seconds. Both must keep matching the page, so
+# a rewritten loop fails here rather than hanging CI.
+[[python.replace]]
+find = """with client.subscriptions.listen(["reefer_fleet"]) as listener:"""
+repl = """with client.subscriptions.listen(["reefer_fleet"]) as listener:
+    feed(client, ["reefer_msc_1182_supply_c", "reefer_msc_1182_setpoint_c"], points=40, every=0.3)"""
+
+[[python.replace]]
+find = """    for msg in listener:"""
+repl = """    for msg in take(listener, 3, 45):"""
+
+[java]
+disabled = "Java scenario not written yet."
+
+[rust]
+disabled = "Rust scenario not written yet."
+
+[owns]
+events = ["reefer_excursion_1182_*"]
+subscriptions = ["reefer_fleet"]
+timeseries = ["reefer_msc_1182_setpoint_c", "reefer_msc_1182_supply_c"]
+
+[expect]
+subscriptions = ["reefer_fleet"]
+timeseries = ["reefer_msc_1182_setpoint_c", "reefer_msc_1182_supply_c"]

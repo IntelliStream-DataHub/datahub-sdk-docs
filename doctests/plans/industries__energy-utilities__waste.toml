@@ -1,0 +1,70 @@
+page = "docs/industries/energy-utilities/waste.mdx"
+
+# Blocks on this page:
+#   python #1   L24    Set up demo data
+#   java   #1   L42    1. Act on fill level, not the calendar
+#   python #2   L61    1. Act on fill level, not the calendar
+#   rust   #1   L75    1. Act on fill level, not the calendar
+
+[blocks]
+python = 2
+java = 1
+rust = 1
+
+[python]
+timeout = 600
+
+prologue = """
+import pandas as _pd
+import intellistream_datahub_sdk as _fx
+
+# The reader's own "give me this series over the last N hours" helper. The page
+# passes its result straight to retrieve_datapoints, so the name promises a
+# RetrieveFilter. A placeholder returning something else fails at the SDK boundary —
+# and one that happened to satisfy it would mean the retrieve was never exercised.
+def _window(external_id, hours):
+    now = _pd.Timestamp.now(tz="UTC")
+    return _fx.RetrieveFilter(ts=external_id, start=now - _pd.Timedelta(hours=hours), end=now)
+
+# 'Last reading' means the most recent one, so the window is wide enough to find
+# it wherever the demo data landed rather than assuming it is within the hour.
+def last_reading(external_id):
+    return _window(external_id, 24 * 90)
+
+    now = _pd.Timestamp.now(tz="UTC")
+    return _fx.RetrieveFilter(ts=external_id, start=now - _pd.Timedelta(hours=hours), end=now)
+
+# 'Last reading' means the most recent one, so the window is wide enough to find
+# it wherever the demo data landed rather than assuming it is within the hour.
+def last_reading(external_id):
+    return _window(external_id, 24 * 90)
+
+from tutorial_support import Recorder
+
+# Placeholders the page leaves to the reader — 'your dashboard', 'your
+# alerting'. Recorders keep what they are handed so the run can prove the
+# tutorial's logic actually reached them.
+"""
+
+[java]
+disabled = "Java scenario not written yet."
+
+[rust]
+disabled = "Rust scenario not written yet."
+
+# The demo block writes one datapoint and step 1 reads it back immediately. Reads are
+# eventually consistent, so that read can return nothing through no fault of the page.
+# Waiting for the write to land puts the reader's world in place before the step runs.
+[[python.inject]]
+before = 2
+code = """
+from tutorial_support import wait_for_datapoints
+wait_for_datapoints(client, "bin_grunerlokka_114_fill_pct")
+"""
+
+[owns]
+events = ["collection_due_114_*"]
+timeseries = ["bin_grunerlokka_114_fill_pct"]
+
+[expect]
+timeseries = ["bin_grunerlokka_114_fill_pct"]

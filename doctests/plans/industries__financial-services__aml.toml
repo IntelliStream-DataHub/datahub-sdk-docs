@@ -1,0 +1,68 @@
+page = "docs/industries/financial-services/aml.mdx"
+
+# Blocks on this page:
+#   python #1   L26    Set up demo data
+#   java   #1   L52    1. React to a flagged payment live
+#   python #2   L66    1. React to a flagged payment live
+#   rust   #1   L76    1. React to a flagged payment live
+#   java   #2   L96    2. Expand the account into its network
+#   python #3   L108   2. Expand the account into its network
+#   rust   #2   L118   2. Expand the account into its network
+
+[blocks]
+python = 3
+java = 2
+rust = 2
+
+[python]
+timeout = 600
+
+prologue = """
+from tutorial_support import Recorder, feed, take
+
+# Placeholders the page leaves to the reader — 'your dashboard', 'your
+# alerting'. Recorders keep what they are handed so the run can prove the
+# tutorial's logic actually reached them.
+account_from = Recorder("account_from")
+investigate = Recorder("investigate")
+"""
+
+# The page's payoff is the listen loop, so it runs — bounded, not skipped. Two
+# declared substitutions make that possible: one starts a background writer so
+# messages actually arrive (a silent stream would prove nothing), the other caps
+# the loop at three messages and 45 seconds. Both must keep matching the page, so
+# a rewritten loop fails here rather than hanging CI.
+[[python.replace]]
+find = """with client.subscriptions.listen(["flagged_payments"]) as listener:"""
+repl = """with client.subscriptions.listen(["flagged_payments"]) as listener:
+    feed(client, ["flagged_payments_feed"], points=40, every=0.3)"""
+
+[[python.replace]]
+find = """    for msg in listener:"""
+repl = """    for msg in take(listener, 3, 45):"""
+
+[java]
+disabled = "Java scenario not written yet."
+
+[rust]
+disabled = "Rust scenario not written yet."
+
+# The page models the network and traverses it in the next breath. The graph read
+# path trails writes by a second or two, and an empty neighbourhood is a valid
+# answer rather than an error — so without this the page prints the wrong
+# conclusion and the test cannot tell that from a real one.
+[[python.inject]]
+before = 3
+code = """
+from tutorial_support import wait_for_related
+wait_for_related(client, "account_77310")
+"""
+
+[owns]
+resources = ["account_77310", "account_8841", "account_8842", "account_8843"]
+subscriptions = ["flagged_payments"]
+timeseries = ["flagged_payments_feed"]
+
+[expect]
+subscriptions = ["flagged_payments"]
+timeseries = ["flagged_payments_feed"]
