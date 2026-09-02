@@ -775,6 +775,116 @@ let nearest = api.resources.fetch_nearest(
 </TabItem>
 </Tabs>
 
+## Export and import a graph {#graph-transfer}
+
+Two endpoints move a whole connected component between tenants or environments as one file.
+Export starts from one resource, walks outward with no depth limit, and writes every reachable
+node and every relationship between them; import recreates them somewhere else. The file
+references everything by `externalId` and never by numeric id, which is what makes it
+portable: numeric ids are database identities and do not survive the transfer.
+
+| Endpoint | Body | Returns |
+| --- | --- | --- |
+| `GET /resources/export/{id}` | none; `id` is the numeric id of the resource to start from | The file, `application/octet-stream`, as an attachment named `<externalId>.dhgraph` |
+| `POST /resources/import` | the file, verbatim, as `application/octet-stream` | A JSON summary of what was created and what was skipped |
+
+The file is a gzip-compressed binary, streamed on the way out and decoded incrementally on the
+way in, so neither side holds it whole in memory. Treat it as opaque: the format is versioned
+by the server and is not part of the API contract.
+
+**What the file carries.** Per node: `externalId`, `name`, `description`, `source`, `isRoot`,
+`labels`, `metadata`, the data set it belongs to (by that data set's `externalId`) and, for an
+`ASSET`, a point `geoLocation`; other geometries are not carried. Per relationship: both
+endpoints by `externalId`, the type, `description`, `metadata` and the data set. A data set
+node inside the component is exported as a node like any other, ahead of everything that
+references it.
+
+**What it does not carry.** A time-series's `unit` and `valueType`, so a time-series node in
+the file cannot be created on import and is reported instead; datapoints; events; files.
+
+### Export {#graph-export}
+
+Export needs read access to the data set of the starting resource, and nothing more: the walk
+is [gated on the starting node only](./datasets#access-control), so the file holds every node
+the component reaches. A component of more than **2 000 000 nodes** or **2 000 000
+relationships** is refused with a `400` naming the limit, and nothing is exported partially.
+
+| Status | Meaning |
+| --- | --- |
+| `200` | The file. |
+| `404` | No such resource, or the caller may not read it. |
+| `400` | The component is over the export limit. |
+
+### Import {#graph-import}
+
+Import replays the file through the same pipeline as [create](#create-resources-and-relations),
+so everything a create does, an import does: the [naming policy](./external-ids#the-naming-policy)
+is applied, the data set ACLs are checked, and each committed segment is published to the
+message bus and mirrored into the graph. The caller needs write access to every data set a
+node or a relationship lands in, and the all-data-sets grant for a node that arrives with no
+data set and for any `DATASET` node in the file. A denial is a `403`.
+
+**Skipped, not refused.** A node whose `externalId` already exists in the tenant is left as it
+is, and so is a relationship already present between the same two endpoints with the same
+type. Importing a file back into the tenant it came from is therefore a no-op, and
+re-uploading after a failure is safe. Time-series nodes are skipped and listed by
+`externalId`, and the relationships touching them are skipped with them; to keep those, create
+the series through [`/timeseries`](./timeseries#create-a-series) first and import the same file
+again. A data set reference is resolved by `externalId` against the data sets in the file and
+those already in the tenant; one that resolves nowhere is dropped, and the node is created
+without a data set.
+
+**Segments.** The upload is committed as it streams in, one transaction per 50 000 objects,
+nodes first and relationships after, so memory stays flat however large the file. Each segment
+is atomic on its own: a failure keeps the segments already committed and rejects the rest.
+Because import skips what already exists, re-upload the same file once the cause is fixed and
+it fast-forwards through the committed segments and resumes where it stopped. The response
+counts the segments committed.
+
+```json
+{
+  "nodesCreated": 4210,
+  "relationsCreated": 4209,
+  "nodesSkippedExisting": 3,
+  "nodesSkippedTimeseries": ["pump_1_vibration", "pump_1_temperature"],
+  "relationsSkipped": 2,
+  "dataSetReferencesDropped": 0,
+  "segments": 1,
+  "warnings": []
+}
+```
+
+`warnings` carries [naming-policy warnings](./external-ids#the-naming-policy) exactly as a
+create does, and a naming-policy refusal is the same `400` problem body a create returns.
+
+| Status | Meaning |
+| --- | --- |
+| `200` | The summary above, also when everything was skipped. |
+| `400` | Not a readable graph file, a naming-policy refusal, or a value that failed validation. |
+| `403` | A data set the caller may not write to. |
+| `413` | Over a transfer limit: more than 2 000 000 nodes or relationships in the file, or a file larger than 512 MB. Nothing is imported. |
+
+:::caution The general request-body cap applies first
+`POST /resources/import` is not exempt from the [request body size](./limits#request-body-size)
+cap, which is 4 MiB unless the deployment raises `datahub.limits.max-body-bytes`. A larger
+file is refused with that cap's own `413` (`.../errors/request-too-large`) before the import
+reads it, so the 512 MB figure above is the format's ceiling, not what a default deployment
+accepts. The upload's size also counts against the tenant's daily ingest byte quota.
+:::
+
+No client wraps the pair. Call them over HTTP with the bearer token the client already holds:
+
+```bash
+curl -fsS -H "Authorization: Bearer $TOKEN" \
+  -o plant_oslo.dhgraph "$API/resources/export/5677892"
+
+curl -fsS -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/octet-stream" \
+  --data-binary @plant_oslo.dhgraph "$API/resources/import"
+```
+
+Against the [rate-limit](./limits#rate-limits) budget, export is a read and import a write.
+
 ## The `/assets` endpoints {#assets}
 
 An **asset** is the node type that can be a navigation root and the only one that carries a
@@ -850,6 +960,7 @@ gives you the same asset back.
 | Filter | `resources().filter` | `resources.filter` | `resources.filter` |
 | Traverse (`fetch-related`) | `resources().fetchRelated` | `resources.fetch_related` | `resources.fetch_related` |
 | Nearest N (`fetch-nearest`) | `resources().fetchNearest` | `resources.fetch_nearest` | `resources.fetch_nearest` |
+| [Export / import a graph](#graph-transfer) | HTTP only | HTTP only | HTTP only |
 
 Relations have their own client surface in all three clients — `edges()` in Java, `edges` in
 Python and Rust. [Edges → client coverage](./edges#client-coverage)
