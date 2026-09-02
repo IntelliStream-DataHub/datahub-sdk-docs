@@ -25,21 +25,13 @@ import pandas as _pd
 shift_start = _pd.Timestamp.now(tz="UTC") - _pd.Timedelta(hours=12)
 from tutorial_support import Recorder
 
-# Placeholders the page leaves to the reader — 'your dashboard', 'your
-# alerting'. Recorders keep what they are handed so the run can prove the
-# tutorial's logic actually reached them.
+# Placeholders the page leaves to the reader; a Recorder keeps what it is handed.
 first_value = Recorder("first_value", returns=50000.0)
 latest = Recorder("latest", returns=47000.0)
 sum_over = Recorder("sum_over", returns=2500.0)
 tolerance = Recorder("tolerance", returns=100.0)
 
 """
-
-[java]
-disabled = "Java scenario not written yet."
-
-[rust]
-disabled = "Rust scenario not written yet."
 
 [owns]
 events = ["inventory_discrepancy_t12_*"]

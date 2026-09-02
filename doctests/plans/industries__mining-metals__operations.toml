@@ -40,17 +40,9 @@ def last_hour(external_id):
 
 from tutorial_support import Recorder
 
-# Placeholders the page leaves to the reader — 'your dashboard', 'your
-# alerting'. Recorders keep what they are handed so the run can prove the
-# tutorial's logic actually reached them.
+# Placeholders the page leaves to the reader; a Recorder keeps what it is handed.
 compare_to_plan = Recorder("compare_to_plan")
 """
-
-[java]
-disabled = "Java scenario not written yet."
-
-[rust]
-disabled = "Rust scenario not written yet."
 
 [owns]
 events = ["equipment_warning_785_*"]

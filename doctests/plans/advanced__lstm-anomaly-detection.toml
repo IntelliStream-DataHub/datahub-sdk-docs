@@ -24,12 +24,6 @@ requires_python = ["tensorflow"]
 # composed into all thirteen recipes.
 requires_once = ["advanced__generate-sample-data"]
 
-[java]
-disabled = "Java scenario not written yet."
-
-[rust]
-disabled = "Rust scenario not written yet."
-
 [owns]
 events = ["kick_detected_dw1_*"]
 timeseries = ["rig_dw1_anomaly_score"]

@@ -38,12 +38,6 @@ import pathlib as _pathlib
 _pathlib.Path("report.csv").write_text("timestamp,value" + chr(10) + "2026-01-01T00:00:00Z,1" + chr(10))
 """
 
-[java]
-disabled = "Java scenario not written yet."
-
-[rust]
-disabled = "Rust scenario not written yet."
-
 # KNOWN PLATFORM LIMITATION — this page cannot be made repeatable yet.
 # Deleting a file moves it to trash but keeps its *path* reserved, and the SDK
 # exposes no way to purge trash (`list_trash` and `restore` exist; nothing removes).

@@ -29,9 +29,3 @@ either dial production or need identity-provider secrets that prove nothing abou
 constructors it documents are exercised where they are actually used — the buffering client in
 tutorial.toml, from_env() across every other plan."""
 
-
-[java]
-disabled = "Java scenario not written yet."
-
-[rust]
-disabled = "Rust scenario not written yet."

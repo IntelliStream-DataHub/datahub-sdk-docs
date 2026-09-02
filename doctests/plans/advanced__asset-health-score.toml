@@ -20,12 +20,6 @@ timeout = 600
 # composed into all thirteen recipes.
 requires_once = ["advanced__generate-sample-data"]
 
-[java]
-disabled = "Java scenario not written yet."
-
-[rust]
-disabled = "Rust scenario not written yet."
-
 [owns]
 events = ["health_critical_pump_07_*"]
 timeseries = ["pump_07_health_score"]

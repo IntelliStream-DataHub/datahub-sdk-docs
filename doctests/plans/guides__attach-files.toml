@@ -19,12 +19,6 @@ import pathlib as _pathlib
 _pathlib.Path("calibration_a12.pdf").write_bytes(b"%PDF-1.4\\n% doc-test fixture\\n%%EOF\\n")
 """
 
-[java]
-disabled = "Java scenario not written yet."
-
-[rust]
-disabled = "Rust scenario not written yet."
-
 # Block 3 deletes the file itself, which is the page's own teardown; the sweep is
 # the backstop for a run that fails before reaching it.
 # KNOWN PLATFORM LIMITATION — this page cannot be made repeatable yet.

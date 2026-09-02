@@ -17,9 +17,7 @@ timeout = 600
 prologue = """
 from tutorial_support import Recorder, feed, take
 
-# Placeholders the page leaves to the reader — 'your dashboard', 'your
-# alerting'. Recorders keep what they are handed so the run can prove the
-# tutorial's logic actually reached them.
+# Placeholders the page leaves to the reader; a Recorder keeps what it is handed.
 # The page documents this one inline: None | "amber" | "red". "red" is what makes
 # the escalation branch — the point of the page — actually run.
 trigger_level = Recorder("trigger_level", returns="red")
@@ -38,12 +36,6 @@ repl = """with client.subscriptions.listen(["tsf_instruments"]) as listener:
 [[python.replace]]
 find = """    for msg in listener:"""
 repl = """    for msg in take(listener, 3, 45):"""
-
-[java]
-disabled = "Java scenario not written yet."
-
-[rust]
-disabled = "Rust scenario not written yet."
 
 [owns]
 events = ["tailings_alarm_p14_*"]

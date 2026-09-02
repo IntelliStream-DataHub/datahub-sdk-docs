@@ -244,6 +244,17 @@ def _poll(check, timeout: float, interval: float = 0.5):
     return problems
 
 
+def unmet_expectations(cli, plan) -> list[str]:
+    """Everything a plan promised that the backend cannot show — entities and data.
+
+    Both the tutorial tests and the seeding fixture ask this same question, and a
+    seeding page that ran but whose data never became readable fails its dependants
+    for a reason that is not theirs. One function so the two cannot drift.
+    """
+    return (missing_entities(cli, plan.expect_exists, plan.settle_secs)
+            + datapoint_shortfall(cli, plan.expect_datapoints, plan.settle_secs))
+
+
 def missing_entities(cli, expect: dict[str, list[str]], timeout: float = 30.0) -> list[str]:
     """Which declared entities the tutorial failed to leave behind."""
     lookups = {

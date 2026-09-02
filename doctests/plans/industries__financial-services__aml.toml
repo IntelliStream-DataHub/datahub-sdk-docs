@@ -20,9 +20,7 @@ timeout = 600
 prologue = """
 from tutorial_support import Recorder, feed, take
 
-# Placeholders the page leaves to the reader — 'your dashboard', 'your
-# alerting'. Recorders keep what they are handed so the run can prove the
-# tutorial's logic actually reached them.
+# Placeholders the page leaves to the reader; a Recorder keeps what it is handed.
 account_from = Recorder("account_from")
 investigate = Recorder("investigate")
 """
@@ -40,12 +38,6 @@ repl = """with client.subscriptions.listen(["flagged_payments"]) as listener:
 [[python.replace]]
 find = """    for msg in listener:"""
 repl = """    for msg in take(listener, 3, 45):"""
-
-[java]
-disabled = "Java scenario not written yet."
-
-[rust]
-disabled = "Rust scenario not written yet."
 
 # The page models the network and traverses it in the next breath. The graph read
 # path trails writes by a second or two, and an empty neighbourhood is a valid

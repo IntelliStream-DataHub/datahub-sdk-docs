@@ -35,9 +35,7 @@ client.timeseries.create([intellistream_datahub_sdk.TimeSeries(
 
 from tutorial_support import Recorder, feed, take
 
-# Placeholders the page leaves to the reader — 'your dashboard', 'your
-# alerting'. Recorders keep what they are handed so the run can prove the
-# tutorial's logic actually reached them.
+# Placeholders the page leaves to the reader; a Recorder keeps what it is handed.
 process = Recorder("process")
 """
 
@@ -54,12 +52,6 @@ repl = """with client.subscriptions.listen(["engine_temps"]) as listener:
 [[python.replace]]
 find = """    for msg in listener:"""
 repl = """    for msg in take(listener, 3, 45):"""
-
-[java]
-disabled = "Java scenario not written yet."
-
-[rust]
-disabled = "Rust scenario not written yet."
 
 # The listen example assumes the subscription from the create example above still
 # exists — but that example ends by deleting it, and each block starts clean anyway.

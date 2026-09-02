@@ -21,18 +21,10 @@ timeout = 600
 prologue = """
 from tutorial_support import Recorder
 
-# Placeholders the page leaves to the reader — 'your dashboard', 'your
-# alerting'. Recorders keep what they are handed so the run can prove the
-# tutorial's logic actually reached them.
+# Placeholders the page leaves to the reader; a Recorder keeps what it is handed.
 record_capacity_factor = Recorder("record_capacity_factor")
 
 """
-
-[java]
-disabled = "Java scenario not written yet."
-
-[rust]
-disabled = "Rust scenario not written yet."
 
 # Step 1 ingests 'your' arrays — the ones the demo block above sampled.
 [[python.inject]]

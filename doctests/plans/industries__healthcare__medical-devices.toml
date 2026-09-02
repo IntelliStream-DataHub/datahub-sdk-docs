@@ -17,12 +17,6 @@ rust = 2
 [python]
 timeout = 600
 
-[java]
-disabled = "Java scenario not written yet."
-
-[rust]
-disabled = "Rust scenario not written yet."
-
 # The page models the network and traverses it in the next breath. The graph read
 # path trails writes by a second or two, and an empty neighbourhood is a valid
 # answer rather than an error — so without this the page prints the wrong

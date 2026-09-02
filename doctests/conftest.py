@@ -13,9 +13,9 @@ from pathlib import Path
 import pytest
 
 import backend
-import docblocks
 import plans as plans_mod
 import runners
+import scenario
 from docblocks import EXECUTABLE
 
 REPO = Path(__file__).parent.parent
@@ -88,44 +88,39 @@ def seed(env, cli, tmp_path_factory):
             return
 
         all_plans = plans_mod.load_all()
-        links = plans_mod.chain(slug, lang, all_plans)
-        sections = []
-        for link in links:
-            page = docblocks.load(REPO / link.page, REPO)
-            sections.append((link.lang(lang), page.of_lang(lang), link.page))
-        source, line_map = runners.compose(lang, sections)
+        run = scenario.build(slug, lang, all_plans, REPO)
+        source, line_map = run.programs()[0]
+        owns = run.owns()
 
-        owns = plans_mod.merged_owns(links)
         backend.sweep(cli, owns)
         workdir = tmp_path_factory.mktemp(f"seed-{slug}")
-        result = runners.RUNNERS[lang](source, line_map, workdir, env, links[-1].lang(lang))
+        result = runners.RUNNERS[lang](source, line_map, workdir, env, run.lang_plan)
 
-        if result.ok:
-            # Exiting 0 only means the writes were accepted. The recipes that depend
-            # on this read the data immediately, and reads are eventually consistent —
-            # so hand over only once the fixture is actually visible. Skipping this
-            # makes the suite pass on a warm backend and fail on a cold one, which is
-            # the worst kind of flake: it looks like the recipes are broken.
-            fixture = all_plans[slug]
-            missing = backend.missing_entities(cli, fixture.expect_exists, fixture.settle_secs)
-            short = backend.datapoint_shortfall(cli, fixture.expect_datapoints, fixture.settle_secs)
-            if missing or short:
-                done[key] = (
-                    f"The data-seeding page {fixture.page} [{lang}] ran, but its data never "
-                    f"became readable: {', '.join(missing + short)}.\n"
-                    "Every tutorial that depends on it would fail for a reason that is not its own."
-                )
-                pytest.fail(done[key])
-            done[key] = None
-            planted.append(owns)
-        else:
+        if not result.ok:
             done[key] = (
-                f"The data-seeding page {all_plans[slug].page} [{lang}] failed, so every "
+                f"The data-seeding page {run.plan.page} [{lang}] failed, so every "
                 f"tutorial that depends on it cannot be tested.\n"
                 f"Fix that page first — run: ./doctests/run.sh -k '{slug}'\n\n"
                 f"{runners.tidy(result.stderr, 2000)}"
             )
             pytest.fail(done[key])
+
+        # Exiting 0 only means the writes were accepted. The recipes that depend on
+        # this read the data immediately, and reads are eventually consistent — so
+        # hand over only once the fixture is actually visible. Skipping this makes the
+        # suite pass on a warm backend and fail on a cold one, which is the worst kind
+        # of flake: it looks like the recipes are broken.
+        unmet = backend.unmet_expectations(cli, run.plan)
+        if unmet:
+            done[key] = (
+                f"The data-seeding page {run.plan.page} [{lang}] ran, but its data never "
+                f"became readable: {', '.join(unmet)}.\n"
+                "Every tutorial that depends on it would fail for a reason that is not its own."
+            )
+            pytest.fail(done[key])
+
+        done[key] = None
+        planted.append(owns)
 
     yield ensure
 

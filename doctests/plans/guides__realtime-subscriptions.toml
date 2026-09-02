@@ -19,11 +19,6 @@ timeout = 120
 # needs a second process writing datapoints while the listener runs — worth
 # building, but a different harness, and pretending otherwise would mean a green
 # test over code nobody ran. The [blocks] pin above still catches edits to them.
-[java]
-disabled = "Java scenario not written yet."
-
-[rust]
-disabled = "Rust scenario not written yet."
 
 [owns]
 timeseries = ["engine_temperature"]

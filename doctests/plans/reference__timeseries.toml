@@ -47,12 +47,6 @@ import intellistream_datahub_sdk
 client = intellistream_datahub_sdk.DataHubClient.from_env()
 """
 
-[java]
-disabled = "Java scenario not written yet."
-
-[rust]
-disabled = "Rust scenario not written yet."
-
 [owns]
 timeseries = ["book_value_usd", "engine_temperature"]
 
