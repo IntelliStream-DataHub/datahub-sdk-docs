@@ -23,12 +23,6 @@ def handle(dp):
     _seen.append(dp)
 """
 
-[java]
-disabled = "Java scenario not written yet."
-
-[rust]
-disabled = "Rust scenario not written yet."
-
 [owns]
 timeseries = ["engine_temperature"]
 

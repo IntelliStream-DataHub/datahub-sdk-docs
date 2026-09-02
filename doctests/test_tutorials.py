@@ -19,9 +19,9 @@ import pytest
 
 import backend
 import docblocks
-import entities
 import plans as plans_mod
 import runners
+import scenario
 from runners import ToolchainMissing
 
 REPO = Path(__file__).parent.parent
@@ -114,20 +114,14 @@ def test_tutorial_runs_end_to_end(slug, lang, langs, cli, env, seed, pytestconfi
     # A guide that opens "you already have a client" is only meaningful when the page
     # it continues from actually ran, so the whole chain is composed into one program:
     # quickstart first, this page last.
-    links = plans_mod.chain(slug, lang, ALL_PLANS)
-    sections = []
-    for link in links:
-        link_page = _page(link)
-        link_blocks = link_page.of_lang(lang)
-        if not link_blocks:
-            pytest.fail(f"{link.page} has no {lang} blocks, but its plan declares a {lang} scenario.")
-        link.lang(lang).validate_injects(link_blocks, link.page)
-        link.lang(lang).validate_replacements(link_blocks, link.page)
-        sections.append((link.lang(lang), link_blocks, link.page))
+    try:
+        run = scenario.build(slug, lang, ALL_PLANS, REPO)
+    except scenario.MissingBlocks as exc:
+        pytest.fail(str(exc))
 
     # A tutorial whose prerequisites this environment cannot supply is skipped with
     # the reason, not failed: the page may be perfectly correct.
-    for link in links:
+    for link in run.links:
         llp = link.lang(lang)
         absent = [v for v in llp.requires_env if not env.get(v)]
         if absent:
@@ -136,16 +130,7 @@ def test_tutorial_runs_end_to_end(slug, lang, langs, cli, env, seed, pytestconfi
             if lang == "python" and importlib.util.find_spec(module) is None:
                 pytest.skip(f"{link.page} needs the `{module}` package: pip install {module} into doctests/.venv")
 
-    # An API-reference page's blocks are independent examples; a tutorial's are a
-    # sequence. `independent` picks which, and the runs below differ only in whether
-    # the page's blocks arrive as one program or several.
-    if lp.independent:
-        programs = [
-            runners.compose(lang, sections[:-1] + [(lp, [block], plan.page)])
-            for block in lp.select(sections[-1][1])
-        ]
-    else:
-        programs = [runners.compose(lang, sections)]
+    programs = run.programs()
 
     # A page's sweep must never reclaim what a session fixture planted: these recipes
     # read series that `generate-sample-data` seeded, and they legitimately name those
@@ -160,12 +145,7 @@ def test_tutorial_runs_end_to_end(slug, lang, langs, cli, env, seed, pytestconfi
     # id — `generate-sample-data` seeds a placeholder for the anomaly score that
     # predictive-maintenance computes for real — and in that case the page must still
     # be allowed to clear it, or its own create fails as a duplicate.
-    own_creations: set[str] = set()
-    for link_lp, link_blocks, _ in sections:
-        selected = link_lp.select(link_blocks)
-        for ids in entities.owned("\n".join(b.body for b in selected),
-                                  include_edge_refs=False).values():
-            own_creations.update(ids)
+    own_creations = run.creates()
 
     def _is_seeded(external_id: str) -> bool:
         # A fixture declares whole families by pattern (`pump_07_*`), while a recipe
@@ -178,7 +158,7 @@ def test_tutorial_runs_end_to_end(slug, lang, langs, cli, env, seed, pytestconfi
 
     owns = {
         kind: [i for i in ids if not _is_seeded(i)]
-        for kind, ids in plans_mod.merged_owns(links).items()
+        for kind, ids in run.owns().items()
     }
 
     # Start from a known-empty backend so the page's fixed external ids create

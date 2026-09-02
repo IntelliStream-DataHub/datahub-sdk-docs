@@ -41,16 +41,8 @@ def last_reading(external_id):
 
 from tutorial_support import Recorder
 
-# Placeholders the page leaves to the reader — 'your dashboard', 'your
-# alerting'. Recorders keep what they are handed so the run can prove the
-# tutorial's logic actually reached them.
+# Placeholders the page leaves to the reader; a Recorder keeps what it is handed.
 """
-
-[java]
-disabled = "Java scenario not written yet."
-
-[rust]
-disabled = "Rust scenario not written yet."
 
 # The demo block writes one datapoint and step 1 reads it back immediately. Reads are
 # eventually consistent, so that read can return nothing through no fault of the page.

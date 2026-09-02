@@ -18,12 +18,6 @@ rust = 2
 [python]
 timeout = 600
 
-[java]
-disabled = "Java scenario not written yet."
-
-[rust]
-disabled = "Rust scenario not written yet."
-
 [owns]
 datasets = ["region_nordics"]
 timeseries = ["store_oslo_01_sku_4471_sales"]

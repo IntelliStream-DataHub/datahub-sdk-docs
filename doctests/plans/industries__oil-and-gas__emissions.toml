@@ -18,12 +18,6 @@ rust = 2
 [python]
 timeout = 600
 
-[java]
-disabled = "Java scenario not written yet."
-
-[rust]
-disabled = "Rust scenario not written yet."
-
 [owns]
 events = ["flaring_exceedance_north_*"]
 timeseries = ["platform_north_flare_volume_m3"]

@@ -21,12 +21,6 @@ client.timeseries.insert_from_lists(
     timestamps=[_pd.Timestamp.now(tz="UTC")], values=[115.0], ts="engine_temperature")
 """
 
-[java]
-disabled = "Java scenario not written yet."
-
-[rust]
-disabled = "Rust scenario not written yet."
-
 # The event id carries a timestamp, so it cannot be named ahead of the run; the
 # sweep resolves the pattern against the backend instead.
 [owns]

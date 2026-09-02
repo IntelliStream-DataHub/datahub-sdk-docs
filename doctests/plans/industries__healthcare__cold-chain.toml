@@ -17,9 +17,7 @@ timeout = 600
 prologue = """
 from tutorial_support import Recorder, feed, take
 
-# Placeholders the page leaves to the reader — 'your dashboard', 'your
-# alerting'. Recorders keep what they are handed so the run can prove the
-# tutorial's logic actually reached them.
+# Placeholders the page leaves to the reader; a Recorder keeps what it is handed.
 out_of_band = Recorder("out_of_band")
 """
 
@@ -36,12 +34,6 @@ repl = """with client.subscriptions.listen(["pharmacy_fridges"]) as listener:
 [[python.replace]]
 find = """    for msg in listener:"""
 repl = """    for msg in take(listener, 3, 45):"""
-
-[java]
-disabled = "Java scenario not written yet."
-
-[rust]
-disabled = "Rust scenario not written yet."
 
 [owns]
 events = ["cold_chain_excursion_f12_*"]

@@ -21,12 +21,6 @@ rust = 3
 [python]
 timeout = 600
 
-[java]
-disabled = "Java scenario not written yet."
-
-[rust]
-disabled = "Rust scenario not written yet."
-
 [owns]
 datasets = ["desk_equities"]
 events = ["var_limit_breach_growth_*"]

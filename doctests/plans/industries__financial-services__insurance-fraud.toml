@@ -28,12 +28,6 @@ prologue = """
 
 """
 
-[java]
-disabled = "Java scenario not written yet."
-
-[rust]
-disabled = "Rust scenario not written yet."
-
 # The page names `nodes` in this step but only ever builds the list inside the
 # demo-data block above. This is that same list, so the step models the world the
 # page describes rather than an invented one.

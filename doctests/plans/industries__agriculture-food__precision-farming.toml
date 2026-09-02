@@ -25,12 +25,6 @@ prologue = """
 
 """
 
-[java]
-disabled = "Java scenario not written yet."
-
-[rust]
-disabled = "Rust scenario not written yet."
-
 # Step 1 writes 'your timestamps'; the demo block above just built exactly that as `idx`.
 [[python.inject]]
 before = 2

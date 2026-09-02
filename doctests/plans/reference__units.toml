@@ -30,12 +30,6 @@ import intellistream_datahub_sdk
 client = intellistream_datahub_sdk.DataHubClient.from_env()
 """
 
-[java]
-disabled = "Java scenario not written yet."
-
-[rust]
-disabled = "Rust scenario not written yet."
-
 # The catalogue listing must actually name a unit the platform ships.
 [expect]
 stdout = ["temperature_deg_c"]

@@ -98,6 +98,10 @@ judgement half is yours. Read the page as a reader would, and fill in:
   (sync *and* async) or a complete listing that repeats the steps above it.
 - **`[[replace]]`** — bound anything that would never terminate. Every one must still
   match the page, so a rewritten loop fails loudly instead of hanging CI.
+- **Leaving a language uncovered** — just omit its section. A plan with no `[java]`
+  table already means "no Java scenario"; writing `disabled = "not written yet"` says
+  the same thing in three more lines and buries the `disabled` reasons that are
+  actually specific. `[blocks]` still pins the language's fence count either way.
 - **`requires_env` / `requires_python`** — prerequisites the environment may not have.
   Missing ones skip with a reason; an unconfigurable environment is not a broken doc.
 - **`[owns]`** — every external id the page creates, so the run is swept clean before

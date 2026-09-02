@@ -19,12 +19,6 @@ timeout = 600
 # composed into all thirteen recipes.
 requires_once = ["advanced__generate-sample-data"]
 
-[java]
-disabled = "Java scenario not written yet."
-
-[rust]
-disabled = "Rust scenario not written yet."
-
 [owns]
 events = ["process_deviation_cdu1_*"]
 

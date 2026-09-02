@@ -12,12 +12,6 @@ rust = 3
 requires = ["quickstart"]
 timeout = 120
 
-[java]
-disabled = "Java scenario not written yet."
-
-[rust]
-disabled = "Rust scenario not written yet."
-
 [owns]
 timeseries = ["engine_temperature", "wellhead_pressure_bar"]
 

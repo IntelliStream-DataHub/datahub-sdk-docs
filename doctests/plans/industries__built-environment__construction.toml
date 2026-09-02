@@ -17,12 +17,6 @@ rust = 2
 [python]
 timeout = 600
 
-[java]
-disabled = "Java scenario not written yet."
-
-[rust]
-disabled = "Rust scenario not written yet."
-
 [owns]
 events = ["safety_incident_l12_*"]
 files = ["drawing_level_12_structural_rev_c"]

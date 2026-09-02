@@ -120,6 +120,25 @@ def feed(client, series: str | list[str], *, points: int = 20, every: float = 0.
     return done.set
 
 
+def _wait_until(count, minimum: int, timeout: float) -> int:
+    """Poll `count()` until it reaches `minimum`, or the window closes.
+
+    Both waits below are the same shape — reads trail writes, so ask again — and an
+    exception mid-poll means "not yet", not "broken": the caller's own assertions are
+    what report a genuine failure. Returns the last count, so a caller can tell
+    "arrived" from "gave up".
+    """
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            seen = count()
+        except Exception:
+            seen = 0
+        if seen >= minimum or time.monotonic() > deadline:
+            return seen
+        time.sleep(0.5)
+
+
 def wait_for_datapoints(client, external_id: str, minimum: int = 1, timeout: float = 30.0) -> int:
     """Block until a series has at least `minimum` readable datapoints.
 
@@ -135,24 +154,19 @@ def wait_for_datapoints(client, external_id: str, minimum: int = 1, timeout: flo
 
     import intellistream_datahub_sdk as sdk
 
-    deadline = time.monotonic() + timeout
-    while True:
+    def visible() -> int:
         now = dt.datetime.now(dt.timezone.utc)
-        try:
-            got = client.timeseries.retrieve_datapoints(
-                sdk.RetrieveFilter(
-                    ts=external_id,
-                    start=now - dt.timedelta(days=730),
-                    end=now + dt.timedelta(days=1),
-                    limit=minimum,
-                )
+        got = client.timeseries.retrieve_datapoints(
+            sdk.RetrieveFilter(
+                ts=external_id,
+                start=now - dt.timedelta(days=730),
+                end=now + dt.timedelta(days=1),
+                limit=minimum,
             )
-            count = sum(len(c.get_datapoints()) for c in got)
-        except Exception:
-            count = 0
-        if count >= minimum or time.monotonic() > deadline:
-            return count
-        time.sleep(0.5)
+        )
+        return sum(len(c.get_datapoints()) for c in got)
+
+    return _wait_until(visible, minimum, timeout)
 
 
 def wait_for_related(client, external_id: str, *, minimum: int = 1, timeout: float = 30.0,
@@ -169,15 +183,10 @@ def wait_for_related(client, external_id: str, *, minimum: int = 1, timeout: flo
     Returns how many nodes were visible, so a caller can distinguish "arrived" from
     "gave up".
     """
-    deadline = time.monotonic() + timeout
-    while True:
-        try:
-            kwargs = {"external_id": external_id, "depth": 10}
-            if relationship_types:
-                kwargs["relationship_types"] = relationship_types
-            found = len(client.resources.fetch_related(**kwargs).nodes)
-        except Exception:
-            found = 0
-        if found >= minimum or time.monotonic() > deadline:
-            return found
-        time.sleep(0.5)
+    def visible() -> int:
+        kwargs = {"external_id": external_id, "depth": 10}
+        if relationship_types:
+            kwargs["relationship_types"] = relationship_types
+        return len(client.resources.fetch_related(**kwargs).nodes)
+
+    return _wait_until(visible, minimum, timeout)

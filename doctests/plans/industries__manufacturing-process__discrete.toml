@@ -30,18 +30,10 @@ requires = ["quickstart"]
 prologue = """
 from tutorial_support import Recorder
 
-# Placeholders the page leaves to the reader — 'your dashboard', 'your
-# alerting'. Recorders keep what they are handed so the run can prove the
-# tutorial's logic actually reached them.
+# Placeholders the page leaves to the reader; a Recorder keeps what it is handed.
 record_hourly_performance = Recorder("record_hourly_performance")
 
 """
-
-[java]
-disabled = "Java scenario not written yet."
-
-[rust]
-disabled = "Rust scenario not written yet."
 
 # Step 1 ingests the reader's own cycle times over the demo block's index.
 [[python.inject]]
