@@ -7,7 +7,7 @@ import TabItem from '@theme/TabItem';
 
 # Model assets as a graph
 
-Most domains are a hierarchy of things that contain or feed each other — a plant
+Most domains are a hierarchy of things that contain or feed each other, a plant
 contains lines, a line contains machines, a machine emits sensor readings. Model
 that as **resources** (the nodes) and **relations** (the edges), and the SDK returns
 the persisted graph in one call.
@@ -112,57 +112,114 @@ let graph = api.resources.create(
 </TabItem>
 </Tabs>
 
-## Attach time-series to a node
+## Attach a time series to a node
 
-A machine's sensors are time-series. Tie a series to the machine that produces it
-with a relation, exactly as above (`press_07` → `produces` → `press_07_oil_temp`),
-then [ingest its datapoints](./ingest-timeseries.mdx).
-
-## Read the graph back
-
-Fetch nodes by external id; each resource carries its outgoing edges.
+A machine's sensors are time series. Create the series, tie it to the machine that produces
+it with a relationship (`press_07` → `PRODUCES` → `press_07_oil_temp`), then
+[ingest its datapoints](./ingest-timeseries.mdx).
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
 
 ```java
-var some = client.resources().byIds(List.of(
-    IdCollection.createFromExternalId("press_07")));
+Timeseries oilTemp = new Timeseries()
+        .setExternalId("press_07_oil_temp")
+        .setName("Press 07 oil temperature");
+oilTemp.setUnit("celsius");
+oilTemp.setUnitExternalId("temperature_deg_c");
+client.timeseries().create(List.of(oilTemp));
 
-Resource press = some.getItems().iterator().next();
-press.getRelations().forEach(edge ->
-    System.out.println(edge.getType() + " -> " + edge.getEnd()));
+RelForm produces = new RelForm();
+produces.setRelationshipType("PRODUCES");
+produces.setFromExternalId("press_07");
+produces.setToExternalId("press_07_oil_temp");
+client.edges().create(List.of(produces));
 ```
 
 </TabItem>
 <TabItem value="python" label="Python">
 
 ```python
-press = client.resources.by_ids(["press_07"])[0]
-for edge in press.relations:
-    print(edge.relationship_type, "->", edge.end)
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(
+    external_id="press_07_oil_temp", name="Press 07 oil temperature",
+    unit="celsius", unit_external_id="temperature_deg_c")])
+
+client.edges.create([
+    intellistream_datahub_sdk.RelForm.by_external_ids("press_07", "press_07_oil_temp", "PRODUCES")])
 ```
 
 </TabItem>
 <TabItem value="rust" label="Rust">
 
 ```rust
-use intellistream_datahub_sdk::generic::IdAndExtId;
+use intellistream_datahub_sdk::relations::RelForm;
+use intellistream_datahub_sdk::timeseries::TimeSeries;
 
-let some = api.resources.by_ids(&vec![IdAndExtId::from_external_id("press_07")]).await?;
-if let Some(press) = some.nodes().first() {
-    for edge in press.relations.iter().flatten() {
-        println!("{} -> {}", edge.relationship_type, edge.end);
-    }
-}
+let mut oil_temp = TimeSeries::new("press_07_oil_temp", "Press 07 oil temperature");
+oil_temp.unit = Some("celsius".into());
+oil_temp.unit_external_id = Some("temperature_deg_c".into());
+api.time_series.create_one(&oil_temp).await?;
+
+api.edges.create(&vec![
+    RelForm::by_external_ids("press_07", "press_07_oil_temp", "PRODUCES"),
+]).await?;
 ```
 
 </TabItem>
 </Tabs>
 
-:::tip Group with datasets
-Relations model *structure*. To slice assets by ownership, environment or tenant —
-"everything in the Oslo plant" — also put them in a **dataset** (see the
-[Datasets reference](/reference/datasets)). A resource can sit in a graph and a
-dataset at once.
+## Read the graph back
+
+Fetch a node's neighbourhood with `fetchRelated`; the returned network carries the nodes it
+found and the edges between them. (`byIds` returns the node alone: `relatedResources` is
+empty on that read.) One hop out from the press finds the two edges created above.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+ResourceNetwork net = client.resources().fetchRelated("press_07", 1);
+net.edges().forEach(edge ->
+    System.out.println(edge.getStart() + " -" + edge.getType() + "-> " + edge.getEnd()));
+
+if (net.edges().size() != 2) {
+    throw new AssertionError("expected CONTAINS and PRODUCES, found " + net.edges().size());
+}
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+net = client.resources.fetch_related(external_id="press_07", depth=1)
+for edge in net.edges:
+    print(edge.start, edge.relationship_type, edge.end)
+
+types = {edge.relationship_type for edge in net.edges}
+assert types == {"CONTAINS", "PRODUCES"}, types
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use intellistream_datahub_sdk::resources::RelatedResourcesForm;
+
+let net = api.resources.fetch_related(
+    &RelatedResourcesForm::from_external_id("press_07").with_depth(1)).await?;
+for edge in net.edges() {
+    println!("{:?} -{:?}-> {:?}", edge.start, edge.relationship_type, edge.end);
+}
+
+assert_eq!(net.edges().len(), 2, "expected CONTAINS and PRODUCES");
+```
+
+</TabItem>
+</Tabs>
+
+:::tip Group with data sets
+Relationships model *structure*. To slice assets by ownership, environment or tenant,
+"everything in the Oslo plant", also put them in a **data set** (see the
+[Data sets reference](/reference/datasets)). A resource can sit in a graph and a
+data set at once.
 :::

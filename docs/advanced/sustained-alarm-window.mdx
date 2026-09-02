@@ -16,7 +16,7 @@ that is a question about a stretch of time. This page builds that rule end to en
 signal, replay it to prove the rule behaves, then run the same code against a live
 subscription.
 
-:::info Seed the data first
+:::info Needs a sandbox
 Run generator **L** on [Generate sample data](/advanced/generate-sample-data#l-a-noisy-alarm-four-transients-and-one-real-excursion).
 It writes `pump_p101_discharge_bar`: six hours at one reading a minute, four brief spikes
 well above the limit, and one eighty-minute excursion just above it. Seeding is Python, as
@@ -519,14 +519,14 @@ readings never leave their limits and it is the shape that changed, that is wher
 
 ## Further reading
 
-- **Stream processing** — [Wikipedia](https://en.wikipedia.org/wiki/Stream_processing)
-- **Hysteresis** — [Wikipedia](https://en.wikipedia.org/wiki/Hysteresis)
-- **Idempotence** — [Wikipedia](https://en.wikipedia.org/wiki/Idempotence)
-- <a href="/data-platform-documentation/concepts/stream-processing">Stream processing, in the platform documentation</a> — windows, event time against arrival time, and what a computation has to remember
+- **Stream processing**: [Wikipedia](https://en.wikipedia.org/wiki/Stream_processing)
+- **Hysteresis**: [Wikipedia](https://en.wikipedia.org/wiki/Hysteresis)
+- **Idempotence**: [Wikipedia](https://en.wikipedia.org/wiki/Idempotence)
+- <a href="/data-platform-documentation/concepts/stream-processing">Stream processing, in the platform documentation</a>, windows, event time against arrival time, and what a computation has to remember
 
 ## See also
 
-- [Consume live data](/guides/realtime-subscriptions) — the delivery mechanics this builds on.
-- [Turn readings into events](/guides/detect-events) — the single-reading version of the same job.
-- [Generate sample data](/advanced/generate-sample-data#l-a-noisy-alarm-four-transients-and-one-real-excursion) — the signal this page runs against.
-- [LSTM anomaly detection](/advanced/lstm-anomaly-detection) — for the excursions no limit can describe.
+- [Consume live data](/guides/realtime-subscriptions): the delivery mechanics this builds on.
+- [Turn readings into events](/guides/detect-events): the single-reading version of the same job.
+- [Generate sample data](/advanced/generate-sample-data#l-a-noisy-alarm-four-transients-and-one-real-excursion): the signal this page runs against.
+- [LSTM anomaly detection](/advanced/lstm-anomaly-detection): for the excursions no limit can describe.

@@ -7,9 +7,9 @@ import TabItem from '@theme/TabItem';
 
 # Work with units of measure
 
-Units are shared reference data — `celsius`, `bar`, `m/s`, `usd`. Tagging a
-time-series with a unit makes its values self-describing: a chart can label its axis,
-and a consumer knows that `248.6` is bar, not psi. Browse the catalogue, then
+Units are shared reference data: `temperature_deg_c`, `pressure_bar`, `mass_flow_rate_kghr`.
+Tagging a time series with a unit makes its values self-describing: a chart can label its
+axis, and a consumer knows that `248.6` is bar, not psi. Browse the catalogue, then
 reference a unit by its external id when you create a series.
 
 ## Browse the catalogue
@@ -44,8 +44,11 @@ for u in api.units.list().await?.get_items() {
 
 ## Tag a series with a unit
 
-The everyday use: pass a unit's external id when you create a time-series. The value
-type stays numeric; the unit just describes what the numbers mean.
+A series carries two unit fields. `unit` is required free text of at most 64 characters, the
+label a chart shows (`bar`, `°C`); it is never checked against the catalogue. `unitExternalId`
+is optional and is the catalogue key (`pressure_bar`); set it when a consumer should be able to
+resolve the unit's symbol, quantity and conversion. The value type stays numeric; the unit
+describes what the numbers mean.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -53,6 +56,7 @@ type stays numeric; the unit just describes what the numbers mean.
 ```java
 var series = Timeseries.of("wellhead_pressure_bar").name("Wellhead pressure");
 series.setUnit("bar");
+series.setUnitExternalId("pressure_bar");
 client.timeseries().create(series);
 ```
 
@@ -65,7 +69,8 @@ import intellistream_datahub_sdk
 client.timeseries.create([intellistream_datahub_sdk.TimeSeries(
     external_id="wellhead_pressure_bar",
     name="Wellhead pressure",
-    unit="bar")])
+    unit="bar",
+    unit_external_id="pressure_bar")])
 ```
 
 </TabItem>
@@ -76,6 +81,7 @@ use intellistream_datahub_sdk::timeseries::TimeSeries;
 
 let mut ts = TimeSeries::new("wellhead_pressure_bar", "Wellhead pressure");
 ts.unit = Some("bar".into());
+ts.unit_external_id = Some("pressure_bar".into());
 api.time_series.create_one(&ts).await?;
 ```
 
@@ -84,7 +90,7 @@ api.time_series.create_one(&ts).await?;
 
 ## Look up a specific unit
 
-Resolve a unit you already know — by external id, or by numeric id.
+Resolve a unit you already know, by external id, or by numeric id.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -120,11 +126,12 @@ let by_id = api.units.by_ids(&DataWrapper::from(vec![IdAndExtId::from_id(7)])).a
 </TabItem>
 </Tabs>
 
-:::note Unit external ids are snake_case
-The seeded unit catalogue uses snake_case throughout — `m_s` for metres per second, `deg_c`
-for degrees Celsius — so reference them that way and browse the catalogue to find the exact
-id. That is a property of the catalogue, not a rule about external ids in general: the ones
-*you* create are [stored exactly as you send them](/reference/external-ids).
+:::note Unit external ids are `<quantity>_<unit>` in snake_case
+The seeded unit catalogue names each unit by its quantity and symbol: `temperature_deg_c` for
+degrees Celsius, `pressure_bar` for bar, `mass_flow_rate_kghr` for kilograms per hour. Browse
+the catalogue to find the exact id. That is a property of the catalogue, not a rule about
+external ids in general: the ones *you* create are
+[stored exactly as you send them](/reference/external-ids).
 :::
 
 See the [Units reference](/reference/units) for the full method list.

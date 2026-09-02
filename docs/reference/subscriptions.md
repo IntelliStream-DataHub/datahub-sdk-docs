@@ -7,7 +7,7 @@ import TabItem from '@theme/TabItem';
 
 # Subscriptions
 
-Durable, fan-out subscriptions over time-series, plus **live delivery over a WebSocket**.
+Durable, fan-out subscriptions over time series, plus **live delivery over a WebSocket**.
 
 ## Manage subscriptions
 
@@ -25,6 +25,10 @@ DataWrapper<Subscription> all = client.subscriptions().list(new SubscriptionRetr
 
 client.subscriptions().delete(List.of(IdCollection.createFromExternalId("engine_temps")));
 ```
+
+`SubscriptionRetriever` takes a `filter` whose one criterion is `timeseries` (only
+subscriptions bound to these series, by id or external id), a `limit` (default 100, at most
+10 000), a `sort`, and `includeSystemManaged` (default `false`).
 
 </TabItem>
 <TabItem value="python" label="Python">
@@ -63,19 +67,21 @@ api.subscriptions.delete(&vec![IdAndExtId::from_external_id("engine_temps")]).aw
 </TabItem>
 </Tabs>
 
-:::note Dataset access control
-Creating a subscription requires **read access to every timeseries' dataset** it binds. If you
+:::note Data set access control
+Creating a subscription requires **read access to every bound series' data set**. If you
 lack read access to any of them, `create` fails with **HTTP 403** and nothing is persisted.
 Access is granted through Keycloak **organization groups**: `/datasets/<externalId>/read` for one
 data set (and everything beneath it), or the wildcard `/datasets/*/read` for all of them.
-[Dataset access control →](./datasets#access-control)
+[Data set access control →](./datasets#access-control)
 :::
 
 ## Live delivery
 
-`listen` opens an authenticated WebSocket over one or more subscriptions. Stream messages
-to a handler or drive a loop, and **ack** the messages you've processed — anything left
-unacked is redelivered on reconnect.
+`listen` opens a WebSocket to `/timeseries/datapoints/subscription/listen/<externalId>/...`,
+one path segment per subscription, and authenticates the upgrade request with the same
+`Authorization: Bearer <jwt>` header as any REST call. Stream messages to a handler or drive
+a loop, and **ack** the messages you've processed, anything left unacked is redelivered on
+reconnect.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -92,7 +98,7 @@ try (var stream = client.subscriptions().listen(List.of("engine_temps"))
 }
 ```
 
-Or drive `poll` yourself — a blocking queue hand-off (not network polling) that returns
+Or drive `poll` yourself, a blocking queue hand-off (not network polling) that returns
 `null` on timeout. Reach for `poll`, or `stream(handler, AckMode.MANUAL)`, when you need
 to ack on your own schedule:
 
@@ -148,22 +154,32 @@ Every listener also exposes `stream` for push delivery, `ack`/`nack`,
 `subscribe`/`unsubscribe`/`set_subscriptions` to change the live interest set at runtime,
 and `close`.
 
-A delivered message carries the originating subscription's external id, an opaque
-`messageId` you echo back to `ack`/`nack`, and a `payload` describing the fan-out event
-(an action — create/update/delete — plus the affected datapoints).
+A frame on the wire carries one subscription's messages:
+
+| Field | Type | |
+| --- | --- | --- |
+| `subscriptionExternalId` | string | The subscription the batch came from. |
+| `messages[].messageId` | string | Opaque. Echo it back in an ack or nack. |
+| `messages[].payload.eventAction` | `CREATE`, `UPDATE`, `DELETE` or `RENAME` | What happened. |
+| `messages[].payload.eventObject` | `DATAPOINTS` | What it happened to. |
+| `messages[].payload.items[]` | object[] | One entry per series: `id` (a JSON string), `externalId`, `valueType`, `datapoints[]`, and optionally `inclusiveBegin` and `exclusiveEnd`. |
+| `messages[].payload.items[].datapoints[]` | `{ timestamp, value }` | `timestamp` is an ISO-8601 UTC string (`2026-08-30T22:00:00Z`); `value` is a string. |
+
+Ack and nack are `{"action": "ack", "messageIds": [...]}` and the same with `"nack"`. The
+clients unpack each entry of `messages` into one message, whose `payload` is the object above.
 
 :::note Refused subscriptions surface as errors
-Live delivery enforces the same dataset ACL: to attach a subscription you must be able to read
-**all** of its bound timeseries. A subscription you can't read (`reason: "forbidden"`) or one that
-doesn't exist (`reason: "not-found"`) is refused per-subscription — the connection stays open for
+Live delivery enforces the same data set ACL: to attach a subscription you must be able to read
+**all** of its bound series. A subscription you can't read (`reason: "forbidden"`) or one that
+doesn't exist (`reason: "not-found"`) is refused per-subscription, the connection stays open for
 the subscriptions that did attach. The refusal is surfaced, not swallowed: a `SubscriptionError`
 via `pollError` in Java, an `Err(ListenError::Subscription { .. })` from `next().await` in Rust, and
-an exception raised from the iterator in Python — so a refused subscription is visible instead of
-looking like an indefinitely silent stream.
+an exception raised from the iterator in Python. A refused subscription is therefore visible
+instead of looking like an indefinitely silent stream.
 :::
 
 :::note Sockets and subscriptions are capped
-Ten concurrent connections per organisation, ten per user, and ten subscriptions multiplexed
+Ten concurrent connections per organization, ten per user, and ten subscriptions multiplexed
 over one socket, by default. The two refusals behave differently, on purpose:
 
 | Over the cap on | The server | The socket |
@@ -178,7 +194,7 @@ are in [Limits & quotas](./limits#websockets).
 
 :::tip Acking is at-least-once
 Ack a message only after you've durably handled it. If your process dies before the ack,
-the server redelivers it — so make your handler idempotent.
+the server redelivers it, so make your handler idempotent.
 :::
 
 ## What each client covers {#client-coverage}
@@ -189,5 +205,3 @@ the server redelivers it — so make your handler idempotent.
 | List | `subscriptions().list` | `subscriptions.list` | `subscriptions.list` |
 | Delete | `subscriptions().delete` | `subscriptions.delete` | `subscriptions.delete` |
 | Live delivery | `subscriptions().listen` | `subscriptions.listen` | `subscriptions.listen` |
-
-Full parity — subscriptions are the one area where all three clients cover the same ground.

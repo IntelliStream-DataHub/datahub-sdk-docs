@@ -5,37 +5,36 @@ title: Predictive maintenance (anomaly detection)
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-# Predictive maintenance — vibration anomaly detection
+# Predictive maintenance, vibration anomaly detection
 
 :::info At a glance
 **Effort:** ~1–2 hours · **What you'll build:** a model that learns a machine's *healthy*
 vibration and warns you when it starts to drift · **Stack:** the SDK for data in and out,
-plus three Python libraries — `numpy`, `scipy`, `scikit-learn`.
-:::
-
-:::tip New to this?
-No machine-learning background needed. If a word here is unfamiliar, the
-[gentle primer](/advanced/machine-learning-gently) explains it in one line. And to run
-this end-to-end, [generate a sandbox](/advanced/generate-sample-data) first (section A
-creates the vibration signal used below).
+plus three Python libraries, `numpy`, `scipy`, `scikit-learn`.
 :::
 
 **The idea in one paragraph.** A failing bearing vibrates differently long before it
-breaks — but not *louder*, so a simple "is it above X?" alarm misses it. The difference
+breaks, but not *louder*, so a simple "is it above X?" alarm misses it. The difference
 is in the *texture* of the vibration: tiny repeated shocks, energy shifting into certain
 frequencies. We'll let a model look at lots of examples of the machine running *healthy*,
 learn what healthy texture looks like, and then raise a flag when new data stops looking
-like it. Nothing here needs labelled failures — only normal running.
+like it. Nothing here needs labelled failures, only normal running.
 
-The [quick examples](/industries/transport-logistics/aerospace) raise an alarm on a raw threshold; this is
-the grown-up version that *learns* normal first.
+The [quick examples](/industries/transport-logistics/aerospace) raise an alarm on a raw threshold; this
+version learns normal first.
 
-:::tip Need data to run this?
+:::info Needs a sandbox
 These steps read a vibration series that already exists. [Generate a sandbox](/advanced/generate-sample-data)
-first — section A ingests the degrading `pump_07_vibration_mm_s` this build scores.
+first, section A ingests the degrading `pump_07_vibration_mm_s` this build scores, one reading
+a second.
 :::
 
-## Step 1 — Get a stretch of healthy data
+:::tip New to machine learning?
+No background needed. If a word here is unfamiliar, the
+[gentle primer](/advanced/machine-learning-gently) explains it in one line.
+:::
+
+## Step 1: Get a stretch of healthy data
 
 First we need examples of the machine running well. We pull a stretch of vibration readings
 from a period the machine was known to be healthy, and load them into a plain array of
@@ -52,7 +51,7 @@ client = intellistream_datahub_sdk.DataHubClient.from_env()
 def load_series(external_id, start, end):
     rf = intellistream_datahub_sdk.RetrieveFilter(ts=external_id, start=start, end=end, limit=100_000)
     points = client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()
-    idx = pd.to_datetime([p.timestamp for p in points])
+    idx = pd.to_datetime([p.timestamp for p in points], utc=True)
     return pd.Series([float(p.value) for p in points], index=idx).sort_index()
 
 healthy = load_series(
@@ -100,19 +99,19 @@ let series = api.time_series
 </TabItem>
 </Tabs>
 
-## Step 2 — Turn the raw wiggle into a few meaningful numbers
+## Step 2: Turn the raw wiggle into a few meaningful numbers
 
-A model can't learn much from one raw vibration value — it has no context. So we chop the
-signal into short **windows** (say, two seconds each) and, for each window, calculate a
-few numbers that capture its *texture*. These numbers are called **features**. We use
+A model can't learn much from one raw vibration value, it has no context. So we chop the
+signal into short **windows** (two minutes each, at the seed's one reading a second) and,
+for each window, calculate a few numbers that capture its *texture*. These numbers are called **features**. We use
 four, and here's what each one means in plain terms:
 
-- **RMS** — roughly the overall "loudness" or energy of the window.
-- **Kurtosis** — how *spiky* it is. A healthy machine hums smoothly; a failing bearing
+- **RMS**: roughly the overall "loudness" or energy of the window.
+- **Kurtosis**: how *spiky* it is. A healthy machine hums smoothly; a failing bearing
   adds sharp little shocks that push this number up.
-- **Crest factor** — the biggest peak compared to the average level; another way to catch
+- **Crest factor**: the biggest peak compared to the average level; another way to catch
   those shocks.
-- **Band energy** — how much of the vibration sits in a particular frequency range, found
+- **Band energy**: how much of the vibration sits in a particular frequency range, found
   with an [FFT](https://en.wikipedia.org/wiki/Fast_Fourier_transform) (a standard tool
   that splits a wiggle into the pure tones it's made of). Bearing faults ring at
   characteristic frequencies, so energy showing up there is a red flag.
@@ -121,8 +120,8 @@ four, and here's what each one means in plain terms:
 from scipy.stats import kurtosis
 from scipy.fft import rfft, rfftfreq
 
-SAMPLE_HZ = 1000        # the sensor reports 1000 readings per second
-WINDOW = SAMPLE_HZ * 2  # work in 2-second windows
+SAMPLE_HZ = 1            # the seed writes one reading per second
+WINDOW = SAMPLE_HZ * 120 # work in 2-minute windows
 
 def features(window, fs=SAMPLE_HZ):
     x = window - window.mean()                       # remove the average so we see the wobble
@@ -130,7 +129,7 @@ def features(window, fs=SAMPLE_HZ):
     crest = np.max(np.abs(x)) / rms if rms else 0.0  # biggest peak vs. average
     spectrum = np.abs(rfft(x))                       # the FFT: how much of each frequency
     freqs = rfftfreq(len(x), 1 / fs)
-    band = spectrum[(freqs >= 120) & (freqs <= 180)] # the bearing's fault frequency range
+    band = spectrum[(freqs >= 0.1) & (freqs <= 0.4)] # the fault band; the healthy tone sits below it
     band_energy = float(np.sum(band**2))
     return [rms, kurtosis(x), crest, band_energy]    # four numbers describe this window
 
@@ -142,16 +141,18 @@ def feature_matrix(series):
 X_healthy = feature_matrix(healthy)   # one row of four features per window
 ```
 
-So each two-second window is now just four numbers. A week of healthy data becomes a big
-table of "this is what normal looks like."
+At one reading a second the highest frequency a window can resolve is 0.5 Hz, so the fault
+band sits below that; a real 1 kHz sensor would put it at the bearing's fault frequencies
+instead. Each two-minute window is now just four numbers. Eighteen hours of healthy data
+become a table of 540 rows that says "this is what normal looks like."
 
-## Step 3 — Let the model learn "normal"
+## Step 3: Let the model learn "normal"
 
 Now we hand that table to an **[Isolation Forest](https://en.wikipedia.org/wiki/Isolation_forest)**.
 The one-line idea: it learns the shape of the normal cloud of points and can then tell, for
-any new point, how *far outside* that cloud it sits. It needs no examples of failure — a
+any new point, how *far outside* that cloud it sits. It needs no examples of failure, a
 big deal, because you rarely have many. (We also scale the features first, so that one
-feature with big numbers doesn't drown out the others — a routine tidy-up step.)
+feature with big numbers doesn't drown out the others, a routine tidy-up step.)
 
 ```python
 from sklearn.ensemble import IsolationForest
@@ -164,13 +165,16 @@ model.fit(scaler.transform(X_healthy))                         # learn what heal
 def anomaly_score(X):
     # the model returns "how normal"; we flip the sign so higher = more abnormal
     return -model.decision_function(scaler.transform(X))
+
+# the alarm level comes from the healthy data itself: the score 99% of normal windows stay under
+ALARM = float(np.percentile(anomaly_score(X_healthy), 99))
 ```
 
-## Step 4 — Score new data, and write the answer back
+## Step 4: Score new data, and write the answer back
 
 Finally we pull the *latest* hour, turn it into the same four features, and ask the model
 how abnormal each window is. We **write that score back to the platform as a new series**,
-so it's a normal, chartable signal — and if the score stays high (not just a one-off
+so it's a normal, chartable signal, and if the score stays high (not just a one-off
 blip), we raise an event.
 
 ```python
@@ -181,21 +185,32 @@ X_recent = feature_matrix(recent)
 scores = anomaly_score(X_recent)
 score_index = recent.index[WINDOW::WINDOW][:len(scores)]   # timestamp each window's score
 
-client.timeseries.create([intellistream_datahub_sdk.TimeSeries(
-    external_id="pump_07_vibration_anomaly", name="Pump 07 vibration anomaly score", unit="score", value_type="float")])
+try:
+    client.timeseries.create([intellistream_datahub_sdk.TimeSeries(
+        external_id="pump_07_vibration_anomaly", name="Pump 07 vibration anomaly score", unit="score", value_type="float")])
+except intellistream_datahub_sdk.DataHubException as e:
+    if e.status_code != 409:          # the seed's stand-in series may already be there
+        raise
 client.timeseries.insert_from_lists(
     timestamps=score_index, values=scores, ts="pump_07_vibration_anomaly")
 
-ALARM = 0.04                          # healthy scores sit near/below 0; a sustained positive score is abnormal
-if scores[-5:].mean() > ALARM:        # sustained, not a single spike
+if scores[-5:].mean() > ALARM:        # sustained over the last ten minutes, not a single spike
     client.events.create([intellistream_datahub_sdk.Event(
         external_id=f"degradation_predicted_pump_07_{int(pd.Timestamp.now().timestamp())}",
         type="degradation_predicted", status="open",
         event_time=score_index[-1],
         metadata={"asset": "pump_07", "score": f"{scores[-1]:.3f}", "model": "iforest_v1"})])
+
+# read the scores back: the seed's fault ramps in over the last few hours, so the latest hour is abnormal
+stored = client.timeseries.retrieve_datapoints(intellistream_datahub_sdk.RetrieveFilter(
+    ts="pump_07_vibration_anomaly", start=score_index[0], end=pd.Timestamp.now(tz="UTC"),
+    limit=1000))[0].get_datapoints()
+print(f"{len(stored)} scores stored, latest {stored[-1].value:.3f} against an alarm level of {ALARM:.3f}")
+assert len(stored) >= len(scores), f"expected {len(scores)} scores, found {len(stored)}"
+assert scores[-5:].mean() > ALARM, "the seeded fault should score as abnormal"
 ```
 
-That's the whole loop. The anomaly score is now a first-class series — chart it beside the
+That's the whole loop. The anomaly score is now a first-class series, chart it beside the
 raw vibration, [fold it into a health score](/advanced/asset-health-score), or alert on
 it like any other signal.
 
@@ -211,15 +226,15 @@ it like any other signal.
 
 ## Further reading
 
-- **Isolation Forest** — the anomaly detector used here:
+- **Isolation Forest**: the anomaly detector used here:
   [Wikipedia](https://en.wikipedia.org/wiki/Isolation_forest) ·
   [scikit-learn guide](https://scikit-learn.org/stable/modules/outlier_detection.html#isolation-forest)
-- **FFT (frequency analysis)** — [Wikipedia](https://en.wikipedia.org/wiki/Fast_Fourier_transform)
-- **Kurtosis (spikiness)** — [Wikipedia](https://en.wikipedia.org/wiki/Kurtosis)
-- **New to the ideas?** — [Machine learning, gently](/advanced/machine-learning-gently)
+- **FFT (frequency analysis)**: [Wikipedia](https://en.wikipedia.org/wiki/Fast_Fourier_transform)
+- **Kurtosis (spikiness)**: [Wikipedia](https://en.wikipedia.org/wiki/Kurtosis)
+- **New to the ideas?**: [Machine learning, gently](/advanced/machine-learning-gently)
 
 ## See also
 
-- [Query & aggregate](/guides/query-and-aggregate) — extracting the training windows.
-- [Asset health scoring](/advanced/asset-health-score) — fold this score into a composite.
-- [Failure prediction with XGBoost](/advanced/xgboost-failure-prediction) — the labelled, predict-the-type cousin.
+- [Query & aggregate](/guides/query-and-aggregate): extracting the training windows.
+- [Asset health scoring](/advanced/asset-health-score): fold this score into a composite.
+- [Failure prediction with XGBoost](/advanced/xgboost-failure-prediction): the labelled, predict-the-type cousin.
