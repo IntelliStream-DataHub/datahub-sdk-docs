@@ -26,6 +26,14 @@ datapoint, or jump to [high-throughput ingestion](/guides/ingest-timeseries) to 
 - **Files** — attach documents and images to your assets.
 - **Subscriptions** — tail live data over a streaming connection.
 
+## Licence
+
+The three SDKs, and the Java wire-contract model the Java SDK depends on, are
+[Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0). They were placed under that licence
+so that linking one into your application carries no copyleft obligation into your code. The
+platform they talk to is [AGPL-3.0](https://www.gnu.org/licenses/agpl-3.0.html); that licence
+covers the server, and using the server over its API is not what it restricts.
+
 ## Where to go next
 
 - **[Tutorial](/tutorial)** — build a small metrics agent end to end: create series, ingest on a schedule, and survive API outages.
