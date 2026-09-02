@@ -125,6 +125,29 @@ up on it.
 | `SCOPE` | `.scope(...)` | `scope=` | `set_scope(...)` | `organization:*` if your realm issues the organization claim through Keycloak Organizations (see above). Entra ID requires `api://<app-id-uri>/.default`. Space-separate several. |
 | `AUDIENCE` | `.audience(...)` | `audience=` | `set_audience(...)` | Auth0 requires it. Keycloak ignores it. |
 
+### When a call returns 401
+
+`401 invalid_token` has two causes, and they need different fixes.
+
+| Cause | What you see | Fix |
+| --- | --- | --- |
+| The token carries no `organization` claim | Every call fails, from the first one | Set `SCOPE` (see above) |
+| The identity provider refused the token | Calls succeed, then start failing part-way through a run | Get a new token |
+
+The second one catches long-running processes. The API checks your token locally (signature,
+expiry, issuer) and separately reads your dataset grants from the identity provider's UserInfo
+endpoint, so a token can pass the first check and still be refused by the second: it is unexpired,
+but the session behind it has ended, because an idle or maximum session lifetime elapsed or
+somebody signed out. The response carries `WWW-Authenticate: Bearer error="invalid_token"` and a
+problem+json body with `type: ".../errors/token-rejected"`.
+
+Retrying does not clear that. Only a new token does.
+
+:::note Not the same as 503
+`503` with `type: ".../errors/permissions-unavailable"` means the API could not reach the identity
+provider to check your grants. That one is temporary, and worth retrying.
+:::
+
 ### Exchanging an external token (jwt-bearer)
 
 A token minted by one issuer is not accepted by an API that trusts another. To bridge them, the
