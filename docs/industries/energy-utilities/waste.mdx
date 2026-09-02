@@ -22,11 +22,11 @@ New workspace? Run this once (Python) to create a bin's fill-level series with a
 reading — so the `collection_due` rule below fires. Safe to re-run.
 
 ```python
-import datahub_sdk, pandas as pd
+import intellistream_datahub_sdk, pandas as pd
 
-client = datahub_sdk.DataHubClient.from_env()
+client = intellistream_datahub_sdk.DataHubClient.from_env()
 
-client.timeseries.create([datahub_sdk.TimeSeries(external_id="bin_grunerlokka_114_fill_pct", name="Bin 114 fill", unit="pct", value_type="float")])
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id="bin_grunerlokka_114_fill_pct", name="Bin 114 fill", unit="pct", value_type="float")])
 client.timeseries.insert_from_lists(timestamps=[pd.Timestamp.now(tz="UTC")], values=[87.0], ts="bin_grunerlokka_114_fill_pct")
 ```
 
@@ -62,7 +62,7 @@ if (fill >= 80.0) {
 points = client.timeseries.retrieve_datapoints(last_reading("bin_grunerlokka_114_fill_pct"))[0]
 fill = float(points.get_datapoints()[0].value)
 if fill >= 80.0:
-    client.events.create([datahub_sdk.Event(
+    client.events.create([intellistream_datahub_sdk.Event(
         external_id=f"collection_due_114_{int(pd.Timestamp.now().timestamp())}",
         type="collection_due", status="open",
         event_time=points.get_datapoints()[0].timestamp,

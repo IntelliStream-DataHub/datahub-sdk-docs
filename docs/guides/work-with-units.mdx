@@ -60,9 +60,9 @@ client.timeseries().create(series);
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk
+import intellistream_datahub_sdk
 
-client.timeseries.create([datahub_sdk.TimeSeries(
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(
     external_id="wellhead_pressure_bar",
     name="Wellhead pressure",
     unit="bar")])
@@ -101,10 +101,10 @@ UnitModel unit = client.units().byIds(List.of(lookup)).getItems().iterator().nex
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk
+import intellistream_datahub_sdk
 
 celsius = client.units.by_external_ids("temperature_deg_c")
-by_id = client.units.by_ids([datahub_sdk.IdCollection(id=7)])
+by_id = client.units.by_ids([intellistream_datahub_sdk.IdCollection(id=7)])
 ```
 
 </TabItem>

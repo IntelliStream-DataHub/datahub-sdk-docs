@@ -80,7 +80,7 @@ The code below lives in `src/main/java/example/MemoryIngestTutorial.java`.
 `psutil` reads memory and swap portably across Linux, macOS and Windows:
 
 ```bash
-pip install datahub-sdk psutil
+pip install intellistream-datahub-sdk psutil
 ```
 
 The code below lives in a single file, `memory_ingest.py`.
@@ -150,7 +150,7 @@ DatahubClient client = DatahubClient.create(DatahubConfig.builder()
 <TabItem value="python" label="Python">
 
 ```python
-from datahub_sdk import DataHubClient
+from intellistream_datahub_sdk import DataHubClient
 
 client = DataHubClient(
     base_url=os.environ["BASE_URL"],
@@ -274,7 +274,7 @@ wanted = {f"{base}_{host}": name for base, name in METRICS.items()}
 existing = {ts.external_id for ts in client.timeseries.by_ids(list(wanted))}
 
 missing = [
-    datahub_sdk.TimeSeries(
+    intellistream_datahub_sdk.TimeSeries(
         external_id=ext_id, name=f"{name} ({host})",
         unit="bytes", value_type="BIGINT")
     for ext_id, name in wanted.items()
@@ -772,8 +772,8 @@ from datetime import datetime, timezone
 
 import psutil
 
-import datahub_sdk
-from datahub_sdk import DataHubClient
+import intellistream_datahub_sdk
+from intellistream_datahub_sdk import DataHubClient
 
 INTERVAL_SECS = 3
 
@@ -802,7 +802,7 @@ def ensure_series(client, host):
     existing = {ts.external_id for ts in client.timeseries.by_ids(list(wanted))}
 
     missing = [
-        datahub_sdk.TimeSeries(
+        intellistream_datahub_sdk.TimeSeries(
             external_id=ext_id, name=f"{name} ({host})",
             unit="bytes", value_type="BIGINT")
         for ext_id, name in wanted.items()

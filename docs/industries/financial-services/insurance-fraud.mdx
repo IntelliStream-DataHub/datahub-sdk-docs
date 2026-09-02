@@ -23,18 +23,18 @@ New workspace? Run this once (Python) to create two claims that share a repair s
 hidden link a per-claim view misses. Safe to re-run.
 
 ```python
-import datahub_sdk
+import intellistream_datahub_sdk
 
-client = datahub_sdk.DataHubClient.from_env()
+client = intellistream_datahub_sdk.DataHubClient.from_env()
 
 client.resources.create(
-    [datahub_sdk.Resource(external_id=x, name=x, labels=[lbl]) for x, lbl in
+    [intellistream_datahub_sdk.Resource(external_id=x, name=x, labels=[lbl]) for x, lbl in
      [("claim_88421", "Claim"), ("claim_88455", "Claim"), ("party_jdoe", "Party"),
       ("phone_47120099", "Phone"), ("shop_quickfix", "Shop")]],
-    [datahub_sdk.RelForm.by_external_ids("claim_88421", "party_jdoe", "filed_by"),
-     datahub_sdk.RelForm.by_external_ids("claim_88421", "shop_quickfix", "repaired_at"),
-     datahub_sdk.RelForm.by_external_ids("party_jdoe", "phone_47120099", "contact_phone"),
-     datahub_sdk.RelForm.by_external_ids("claim_88455", "shop_quickfix", "repaired_at")])
+    [intellistream_datahub_sdk.RelForm.by_external_ids("claim_88421", "party_jdoe", "filed_by"),
+     intellistream_datahub_sdk.RelForm.by_external_ids("claim_88421", "shop_quickfix", "repaired_at"),
+     intellistream_datahub_sdk.RelForm.by_external_ids("party_jdoe", "phone_47120099", "contact_phone"),
+     intellistream_datahub_sdk.RelForm.by_external_ids("claim_88455", "shop_quickfix", "repaired_at")])
 ```
 
 ## 1. Model claims and the parties they share
@@ -60,13 +60,13 @@ client.resources().create(nodes, links);
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk
+import intellistream_datahub_sdk
 
 links = [
-    datahub_sdk.RelForm.by_external_ids("claim_88421", "policy_55righ", "on_policy"),
-    datahub_sdk.RelForm.by_external_ids("claim_88421", "party_jdoe", "filed_by"),
-    datahub_sdk.RelForm.by_external_ids("claim_88421", "shop_quickfix", "repaired_at"),
-    datahub_sdk.RelForm.by_external_ids("party_jdoe", "phone_47120099", "contact_phone"),
+    intellistream_datahub_sdk.RelForm.by_external_ids("claim_88421", "policy_55righ", "on_policy"),
+    intellistream_datahub_sdk.RelForm.by_external_ids("claim_88421", "party_jdoe", "filed_by"),
+    intellistream_datahub_sdk.RelForm.by_external_ids("claim_88421", "shop_quickfix", "repaired_at"),
+    intellistream_datahub_sdk.RelForm.by_external_ids("party_jdoe", "phone_47120099", "contact_phone"),
 ]
 client.resources.create(nodes, links)
 ```

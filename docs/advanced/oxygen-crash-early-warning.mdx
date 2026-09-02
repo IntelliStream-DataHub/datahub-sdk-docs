@@ -41,12 +41,12 @@ Pull the pen's history at a few-minute cadence — the oxygen itself plus the dr
 move it (temperature, and tide if you have it).
 
 ```python
-import datahub_sdk, numpy as np, pandas as pd
+import intellistream_datahub_sdk, numpy as np, pandas as pd
 
-client = datahub_sdk.DataHubClient.from_env()
+client = intellistream_datahub_sdk.DataHubClient.from_env()
 
 def load(external_id, days=90):
-    rf = datahub_sdk.RetrieveFilter(
+    rf = intellistream_datahub_sdk.RetrieveFilter(
         ts=external_id,
         start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=days),
         end=pd.Timestamp.now(tz="UTC"),
@@ -115,13 +115,13 @@ latest = frame.iloc[[-1]]
 prob = clf.predict_proba(latest[FEATURES])[0, 1]
 
 # publish the live risk as its own series
-client.timeseries.create([datahub_sdk.TimeSeries(
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(
     external_id="pen_h_07_crash_risk", name="Pen H-07 oxygen-crash risk", unit="score", value_type="float")])
 client.timeseries.insert_from_lists(
     timestamps=[latest.index[-1]], values=[prob], ts="pen_h_07_crash_risk")
 
 if prob > 0.6:
-    client.events.create([datahub_sdk.Event(
+    client.events.create([intellistream_datahub_sdk.Event(
         external_id=f"oxygen_crash_predicted_h07_{int(pd.Timestamp.now().timestamp())}",
         type="oxygen_crash_predicted", status="warning",
         event_time=latest.index[-1],

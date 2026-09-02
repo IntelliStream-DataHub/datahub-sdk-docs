@@ -31,10 +31,10 @@ client.subscriptions().create(List.of(sub));
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk
+import intellistream_datahub_sdk
 
 client.subscriptions.create([
-    datahub_sdk.Subscription(
+    intellistream_datahub_sdk.Subscription(
         external_id="engine_room",
         name="Engine room",
         timeseries=["engine_temperature", "engine_rpm"])])

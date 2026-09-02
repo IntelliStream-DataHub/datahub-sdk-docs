@@ -37,9 +37,9 @@ client.timeseries().retrieve(request).getItems().forEach(series ->
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk, pandas as pd
+import intellistream_datahub_sdk, pandas as pd
 
-rf = datahub_sdk.RetrieveFilter(
+rf = intellistream_datahub_sdk.RetrieveFilter(
     ts="engine_temperature",
     start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=1),
     end=pd.Timestamp.now(tz="UTC"),
@@ -102,7 +102,7 @@ client.timeseries().retrieve(request).getItems()
 <TabItem value="python" label="Python">
 
 ```python
-rf = datahub_sdk.RetrieveFilter(
+rf = intellistream_datahub_sdk.RetrieveFilter(
     ts="engine_temperature",
     start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=1),
     end=pd.Timestamp.now(tz="UTC"),
@@ -184,7 +184,7 @@ do {
 ```python
 cursor = None
 while True:
-    rf = datahub_sdk.RetrieveFilter(ts="engine_temperature",
+    rf = intellistream_datahub_sdk.RetrieveFilter(ts="engine_temperature",
                                     start=start, end=end, cursor=cursor)
     page = client.timeseries.retrieve_datapoints(rf)[0]
     for dp in page.get_datapoints():

@@ -22,12 +22,12 @@ New workspace? Run this once (Python) to create the station's series with an 8-h
 of readings, so the OEE roll-up has data. Safe to re-run.
 
 ```python
-import datahub_sdk, numpy as np, pandas as pd
+import intellistream_datahub_sdk, numpy as np, pandas as pd
 
-client = datahub_sdk.DataHubClient.from_env()
+client = intellistream_datahub_sdk.DataHubClient.from_env()
 
 for s, u in [("station_07_cycle_time_s", "s"), ("station_07_scrap", "count")]:
-    client.timeseries.create([datahub_sdk.TimeSeries(external_id=s, name=s, unit=u, value_type="float")])
+    client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id=s, name=s, unit=u, value_type="float")])
 idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=8 * 60, freq="1min")
 client.timeseries.insert_from_lists(timestamps=idx, values=11 + np.random.normal(0, 0.6, len(idx)), ts="station_07_cycle_time_s")
 client.timeseries.insert_from_lists(timestamps=idx, values=np.random.poisson(0.3, len(idx)).astype(float), ts="station_07_scrap")
@@ -58,12 +58,12 @@ client.timeseries().ingest(Map.of(
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk
+import intellistream_datahub_sdk
 
 client.timeseries.create([
-    datahub_sdk.TimeSeries(external_id="station_07_cycle_time_s",
+    intellistream_datahub_sdk.TimeSeries(external_id="station_07_cycle_time_s",
                            name="Station 07 cycle time", unit="s"),
-    datahub_sdk.TimeSeries(external_id="station_07_scrap", name="Station 07 scrap count", unit="count")])
+    intellistream_datahub_sdk.TimeSeries(external_id="station_07_scrap", name="Station 07 scrap count", unit="count")])
 
 client.timeseries.insert_from_lists(
     timestamps=timestamps, values=cycle_times, ts="station_07_cycle_time_s")
@@ -123,7 +123,7 @@ client.timeseries().retrieve(request).getItems().get(0).getDatapoints()
 ```python
 import pandas as pd
 
-rf = datahub_sdk.RetrieveFilter(
+rf = intellistream_datahub_sdk.RetrieveFilter(
     ts="station_07_cycle_time_s",
     start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=8),
     end=pd.Timestamp.now(tz="UTC"),
@@ -179,7 +179,7 @@ client.events().create(List.of(excursion));
 <TabItem value="python" label="Python">
 
 ```python
-client.events.create([datahub_sdk.Event(
+client.events.create([intellistream_datahub_sdk.Event(
     external_id=f"scrap_excursion_st07_{int(pd.Timestamp.now().timestamp())}",
     type="scrap_excursion", status="open",
     event_time=pd.Timestamp.now(tz="UTC"),
@@ -213,7 +213,7 @@ Chart the hourly average cycle time — the line the production dashboard watche
 ```python
 import matplotlib.pyplot as plt
 
-rf = datahub_sdk.RetrieveFilter(ts="station_07_cycle_time_s",
+rf = intellistream_datahub_sdk.RetrieveFilter(ts="station_07_cycle_time_s",
     start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=8), end=pd.Timestamp.now(tz="UTC"),
     aggregates=["avg"], granularity="1h")
 vals = [dp.average for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()]

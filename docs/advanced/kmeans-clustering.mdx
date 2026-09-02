@@ -39,15 +39,15 @@ then cluster. Assets land in peer groups you can benchmark within.
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk, numpy as np, pandas as pd
+import intellistream_datahub_sdk, numpy as np, pandas as pd
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
 
-client = datahub_sdk.DataHubClient.from_env()
+client = intellistream_datahub_sdk.DataHubClient.from_env()
 
 def signature(asset):
     def agg(metric, *aggs):
-        rf = datahub_sdk.RetrieveFilter(
+        rf = intellistream_datahub_sdk.RetrieveFilter(
             ts=f"{asset}_{metric}",
             start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=30),
             end=pd.Timestamp.now(tz="UTC"),
@@ -114,7 +114,7 @@ label-free anomaly signal. Flag it.
 dist = np.linalg.norm(Xs - km.cluster_centers_[km.labels_], axis=1)
 for asset, d in zip(assets, dist):
     if d > np.percentile(dist, 90):
-        client.events.create([datahub_sdk.Event(
+        client.events.create([intellistream_datahub_sdk.Event(
             external_id=f"peer_outlier_{asset}_{int(pd.Timestamp.now().timestamp())}",
             type="peer_outlier", status="open",
             event_time=pd.Timestamp.now(tz="UTC"),
@@ -129,7 +129,7 @@ Labelling history this way makes "we only see this fault in mode 3" answerable.
 
 ```python
 def load_series(external_id):        # one-minute averages over the recent window
-    rf = datahub_sdk.RetrieveFilter(
+    rf = intellistream_datahub_sdk.RetrieveFilter(
         ts=external_id,
         start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=14),
         end=pd.Timestamp.now(tz="UTC"),

@@ -21,12 +21,12 @@ New workspace? Run this once (Python) to create the region's dataset and a store
 sales series with a month of daily units. Safe to re-run.
 
 ```python
-import datahub_sdk, numpy as np, pandas as pd
+import intellistream_datahub_sdk, numpy as np, pandas as pd
 
-client = datahub_sdk.DataHubClient.from_env()
+client = intellistream_datahub_sdk.DataHubClient.from_env()
 
-region_id = client.datasets.create([datahub_sdk.Dataset(external_id="region_nordics", name="Nordics region")])[0].id
-client.timeseries.create([datahub_sdk.TimeSeries(external_id="store_oslo_01_sku_4471_sales",
+region_id = client.datasets.create([intellistream_datahub_sdk.Dataset(external_id="region_nordics", name="Nordics region")])[0].id
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id="store_oslo_01_sku_4471_sales",
     name="Oslo-01 SKU 4471 units sold", unit="units", value_type="float", data_set_id=region_id)])
 idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=30, freq="1d")
 client.timeseries.insert_from_lists(timestamps=idx, values=np.random.poisson(40, 30).astype(float),
@@ -59,12 +59,12 @@ client.timeseries().create(salesSeries);
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk
+import intellistream_datahub_sdk
 
 region_id = client.datasets.create([
-    datahub_sdk.Dataset(external_id="region_nordics", name="Nordics region")])[0].id
+    intellistream_datahub_sdk.Dataset(external_id="region_nordics", name="Nordics region")])[0].id
 
-client.timeseries.create([datahub_sdk.TimeSeries(
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(
     external_id="store_oslo_01_sku_4471_sales",
     name="Oslo 01 — SKU 4471 units sold", unit="units", value_type="float", data_set_id=region_id)])
 ```
@@ -138,7 +138,7 @@ Chart the SKU's daily sales — the demand signal replenishment runs on:
 ```python
 import matplotlib.pyplot as plt
 
-rf = datahub_sdk.RetrieveFilter(ts="store_oslo_01_sku_4471_sales",
+rf = intellistream_datahub_sdk.RetrieveFilter(ts="store_oslo_01_sku_4471_sales",
     start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=30), end=pd.Timestamp.now(tz="UTC"),
     aggregates=["sum"], granularity="1d")
 sales = [dp.sum for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()]

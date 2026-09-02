@@ -18,12 +18,12 @@ with the *shape* a model needs to learn, then ingests it.
 ## A reusable ingest helper
 
 ```python
-import datahub_sdk, numpy as np, pandas as pd
+import intellistream_datahub_sdk, numpy as np, pandas as pd
 
-client = datahub_sdk.DataHubClient.from_env()
+client = intellistream_datahub_sdk.DataHubClient.from_env()
 
 def ingest(external_id, index, values, unit=None, name=None):
-    client.timeseries.create([datahub_sdk.TimeSeries(
+    client.timeseries.create([intellistream_datahub_sdk.TimeSeries(
         external_id=external_id, name=name or external_id, unit=unit or "value", value_type="float")])
     client.timeseries.insert_from_lists(timestamps=index, values=np.asarray(values), ts=external_id)
     print(f"ingested {len(values):,} points → {external_id}")
@@ -128,7 +128,7 @@ failures as events, so each `(asset, day)` row can be labelled.
 ```python
 for day_offset in (40, 95, 160, 240):                     # a few past failures
     when = pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=day_offset)
-    client.events.create([datahub_sdk.Event(
+    client.events.create([intellistream_datahub_sdk.Event(
         external_id=f"esp_failure_a12_{int(when.timestamp())}",
         type="esp_failure", status="closed", event_time=when,
         metadata={"pump": "pump_esp_a12"})])
@@ -163,13 +163,13 @@ For the graph-feature builds ([fraud classification](/advanced/fraud-classificat
 ```python
 ring = ["account_77310", "account_44120", "account_61885", "account_22907"]   # a flagged laundering ring
 ordinary = [f"account_{i}" for i in range(1, 31)]                             # 30 ordinary accounts
-nodes = [datahub_sdk.Resource(external_id=a, name=a.replace("_", " ").title(), labels=["Account"])
+nodes = [intellistream_datahub_sdk.Resource(external_id=a, name=a.replace("_", " ").title(), labels=["Account"])
          for a in ordinary + ring]
 # ordinary accounts: an acyclic transfer web — money only flows "forward", so no loops or pass-through mules
-edges = [datahub_sdk.RelForm.by_external_ids(f"account_{i}", f"account_{i+step}", "sent_to")
+edges = [intellistream_datahub_sdk.RelForm.by_external_ids(f"account_{i}", f"account_{i+step}", "sent_to")
          for i in range(1, 31) for step in (1, 3) if i + step <= 30]
 # the flagged ring: a tight cycle fraud-classification walks out from account_77310 (funds loop back)
-edges += [datahub_sdk.RelForm.by_external_ids(ring[k], ring[(k+1) % len(ring)], "sent_to")
+edges += [intellistream_datahub_sdk.RelForm.by_external_ids(ring[k], ring[(k+1) % len(ring)], "sent_to")
           for k in range(len(ring))]
 client.resources.create(nodes, edges)
 ```

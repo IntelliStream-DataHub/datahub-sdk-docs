@@ -23,12 +23,12 @@ readings that dry out toward the irrigation threshold. (The drone-scan upload in
 needs a local image file — any file works.) Safe to re-run.
 
 ```python
-import datahub_sdk, numpy as np, pandas as pd
+import intellistream_datahub_sdk, numpy as np, pandas as pd
 
-client = datahub_sdk.DataHubClient.from_env()
+client = intellistream_datahub_sdk.DataHubClient.from_env()
 
 for s, u in [("field_north_40_soil_moisture", "pct"), ("field_north_40_soil_temp_c", "deg_c")]:
-    client.timeseries.create([datahub_sdk.TimeSeries(external_id=s, name=s, unit=u)])
+    client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id=s, name=s, unit=u)])
 idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=48, freq="1h")
 moisture = 35 - np.linspace(0, 15, 48) + np.random.normal(0, 1, 48)     # drying out
 client.timeseries.insert_from_lists(timestamps=idx, values=moisture, ts="field_north_40_soil_moisture")
@@ -56,12 +56,12 @@ client.timeseries().ingest(Map.of(
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk
+import intellistream_datahub_sdk
 
 client.timeseries.create([
-    datahub_sdk.TimeSeries(external_id="field_north_40_soil_moisture",
+    intellistream_datahub_sdk.TimeSeries(external_id="field_north_40_soil_moisture",
         name="North 40 soil moisture", unit="pct"),
-    datahub_sdk.TimeSeries(external_id="field_north_40_soil_temp_c",
+    intellistream_datahub_sdk.TimeSeries(external_id="field_north_40_soil_temp_c",
         name="North 40 soil temperature", unit="deg_c")])
 client.timeseries.insert_from_lists(
     timestamps=timestamps, values=moisture, ts="field_north_40_soil_moisture")
@@ -116,7 +116,7 @@ client.files().upload(
 <TabItem value="python" label="Python">
 
 ```python
-client.files.upload_file(datahub_sdk.FileUpload(
+client.files.upload_file(intellistream_datahub_sdk.FileUpload(
     path="north_40_2026_06_28.tif",                # local file
     destination_path="/fields/north_40/scans/",
     external_id="scan_north_40_2026_06_28",
@@ -180,7 +180,7 @@ Chart the soil moisture — the downward trend is what triggers irrigation:
 ```python
 import matplotlib.pyplot as plt
 
-rf = datahub_sdk.RetrieveFilter(ts="field_north_40_soil_moisture",
+rf = intellistream_datahub_sdk.RetrieveFilter(ts="field_north_40_soil_moisture",
     start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=2), end=pd.Timestamp.now(tz="UTC"))
 s = pd.Series({pd.to_datetime(p.timestamp): float(p.value)
                for p in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()}).sort_index()

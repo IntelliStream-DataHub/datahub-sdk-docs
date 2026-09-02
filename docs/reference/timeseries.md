@@ -31,9 +31,9 @@ client.timeseries().create(List.of(series));
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk
+import intellistream_datahub_sdk
 
-ts = datahub_sdk.TimeSeries(
+ts = intellistream_datahub_sdk.TimeSeries(
     external_id="engine_temperature",
     name="Engine temperature",
     unit="celsius")
@@ -91,7 +91,7 @@ client.timeseries().create(List.of(price));
 <TabItem value="python" label="Python">
 
 ```python
-client.timeseries.create([datahub_sdk.TimeSeries(
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(
     external_id="book_value_usd", name="Book value (USD)",
     unit="usd", value_type="numeric")])
 ```
@@ -144,7 +144,7 @@ Pass a `TimeseriesRetreiver` instead of the bare criteria to set an explicit `li
 <TabItem value="python" label="Python">
 
 ```python
-form = datahub_sdk.TimeSeriesFilterForm(
+form = intellistream_datahub_sdk.TimeSeriesFilterForm(
     data_set_id=12,              # this data set and every data set beneath it
     unit="celsius",
     limit=100)
@@ -346,7 +346,7 @@ points.getItems().forEach(c ->
 ```python
 import pandas as pd
 
-rf = datahub_sdk.RetrieveFilter(
+rf = intellistream_datahub_sdk.RetrieveFilter(
     ts="engine_temperature",
     start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=1),
     end=pd.Timestamp.now(tz="UTC"),

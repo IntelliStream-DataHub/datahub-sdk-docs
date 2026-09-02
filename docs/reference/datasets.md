@@ -45,9 +45,9 @@ client.datasets().create(List.of(dataset));
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk
+import intellistream_datahub_sdk
 
-dataset = datahub_sdk.Dataset(external_id="plant_a", name="Plant A")
+dataset = intellistream_datahub_sdk.Dataset(external_id="plant_a", name="Plant A")
 client.datasets.create([dataset])
 ```
 

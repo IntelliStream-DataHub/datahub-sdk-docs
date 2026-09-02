@@ -45,9 +45,9 @@ client.events().create(List.of(event));
 
 ```python
 from datetime import datetime, timezone
-import datahub_sdk
+import intellistream_datahub_sdk
 
-event = datahub_sdk.Event(
+event = intellistream_datahub_sdk.Event(
     external_id="door_open",
     type="alarm",
     event_time=datetime.now(timezone.utc))  # required: when the event occurred
@@ -99,8 +99,8 @@ DataWrapper<EventModel> events = client.events().filter(retriever);
 <TabItem value="python" label="Python">
 
 ```python
-filter = datahub_sdk.EventFilter(
-    basic_filter=datahub_sdk.BasicEventFilter(type="alarm"),
+filter = intellistream_datahub_sdk.EventFilter(
+    basic_filter=intellistream_datahub_sdk.BasicEventFilter(type="alarm"),
     limit=50)
 events = client.events.filter(filter)
 ```

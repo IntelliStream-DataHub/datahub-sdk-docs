@@ -39,16 +39,16 @@ Pull several channels over a period the operation ran normally, align them, and 
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk, numpy as np, pandas as pd
+import intellistream_datahub_sdk, numpy as np, pandas as pd
 from sklearn.preprocessing import StandardScaler
 
-client = datahub_sdk.DataHubClient.from_env()
+client = intellistream_datahub_sdk.DataHubClient.from_env()
 
 CHANNELS = ["rig_dw1_flow_in_gpm", "rig_dw1_flow_out_gpm",
             "rig_dw1_pit_volume_bbl", "rig_dw1_standpipe_psi"]
 
 def load(external_id, start, end):
-    rf = datahub_sdk.RetrieveFilter(ts=external_id, start=start, end=end, limit=100_000)
+    rf = intellistream_datahub_sdk.RetrieveFilter(ts=external_id, start=start, end=end, limit=100_000)
     pts = client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()
     return pd.Series([float(p.value) for p in pts],
                      index=pd.to_datetime([p.timestamp for p in pts])).sort_index()
@@ -154,12 +154,12 @@ Xr = sequences(recent, STEPS)
 error = np.mean((Xr - model.predict(Xr, verbose=0)) ** 2, axis=(1, 2))
 score_index = pd.date_range(periods=len(error), end=pd.Timestamp.now(tz="UTC"), freq="1s")
 
-client.timeseries.create([datahub_sdk.TimeSeries(
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(
     external_id="rig_dw1_anomaly_score", name="Rig DW1 multivariate anomaly score", unit="score", value_type="float")])
 client.timeseries.insert_from_lists(timestamps=score_index, values=error, ts="rig_dw1_anomaly_score")
 
 if error[-3:].mean() > THRESHOLD:
-    client.events.create([datahub_sdk.Event(
+    client.events.create([intellistream_datahub_sdk.Event(
         external_id=f"kick_detected_dw1_{int(pd.Timestamp.now().timestamp())}",
         type="kick_detected", status="critical",
         event_time=score_index[-1],

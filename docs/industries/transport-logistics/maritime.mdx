@@ -23,12 +23,12 @@ in air that drifts warm out of band. Step 1 below creates the subscription (befo
 listen loop) over these series. Safe to re-run.
 
 ```python
-import datahub_sdk, numpy as np, pandas as pd
+import intellistream_datahub_sdk, numpy as np, pandas as pd
 
-client = datahub_sdk.DataHubClient.from_env()
+client = intellistream_datahub_sdk.DataHubClient.from_env()
 
 for s in ["reefer_msc_1182_supply_c", "reefer_msc_1182_setpoint_c"]:
-    client.timeseries.create([datahub_sdk.TimeSeries(external_id=s, name=s, unit="deg_c", value_type="float")])
+    client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id=s, name=s, unit="deg_c", value_type="float")])
 idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=120, freq="1min")
 client.timeseries.insert_from_lists(timestamps=idx, values=np.full(120, -18.0), ts="reefer_msc_1182_setpoint_c")
 supply = np.full(120, -18.0); supply[-30:] += np.linspace(0, 6, 30)        # drifting warm
@@ -57,9 +57,9 @@ client.subscriptions().create(List.of(sub));
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk
+import intellistream_datahub_sdk
 
-client.subscriptions.create([datahub_sdk.Subscription(
+client.subscriptions.create([intellistream_datahub_sdk.Subscription(
     external_id="reefer_fleet", name="Reefer fleet",
     timeseries=["reefer_msc_1182_supply_c", "reefer_msc_1182_setpoint_c"])])
 ```
@@ -116,7 +116,7 @@ try (var stream = client.subscriptions().listen(List.of("reefer_fleet"))
 with client.subscriptions.listen(["reefer_fleet"]) as listener:
     for msg in listener:
         if out_of_band(msg.payload):              # |supply - setpoint| > tolerance
-            client.events.create([datahub_sdk.Event(
+            client.events.create([intellistream_datahub_sdk.Event(
                 external_id=f"reefer_excursion_1182_{int(pd.Timestamp.now().timestamp())}",
                 type="reefer_excursion", status="open",
                 event_time=pd.Timestamp.now(tz="UTC"),

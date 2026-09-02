@@ -65,9 +65,9 @@ DataWrapper<IndexNode> uploaded = client.files().upload(
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk
+import intellistream_datahub_sdk
 
-upload = datahub_sdk.FileUpload(
+upload = intellistream_datahub_sdk.FileUpload(
     path="report.csv",                 # local file
     destination_path="/reports/2026/",
     external_id="report_2026_q2",

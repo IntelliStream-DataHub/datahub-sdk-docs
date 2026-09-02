@@ -25,7 +25,7 @@ dependencies {
 <TabItem value="python" label="Python">
 
 ```bash
-pip install datahub-sdk
+pip install intellistream-datahub-sdk
 ```
 
 </TabItem>
@@ -72,13 +72,13 @@ client.timeseries().ingest(Map.of(
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk, pandas as pd
-from datahub_sdk import DataHubClient
+import intellistream_datahub_sdk, pandas as pd
+from intellistream_datahub_sdk import DataHubClient
 
 client = DataHubClient.from_env()
 
 client.timeseries.create([
-    datahub_sdk.TimeSeries(external_id="engine_temperature", unit="celsius", value_type="float")])
+    intellistream_datahub_sdk.TimeSeries(external_id="engine_temperature", unit="celsius", value_type="float")])
 
 client.timeseries.insert_from_lists(
     timestamps=[pd.Timestamp.now(tz="UTC")], values=[92.4], ts="engine_temperature")
@@ -128,7 +128,7 @@ client.timeseries().retrieve(request).getItems()
 <TabItem value="python" label="Python">
 
 ```python
-rf = datahub_sdk.RetrieveFilter(
+rf = intellistream_datahub_sdk.RetrieveFilter(
     ts="engine_temperature",
     start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=1),
     end=pd.Timestamp.now(tz="UTC"))

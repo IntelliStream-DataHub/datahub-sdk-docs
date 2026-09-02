@@ -23,12 +23,12 @@ New workspace? Run this once (Python) to create a fridge's temperature series, *
 subscription before we listen**, and push it above the 2–8 °C band. Safe to re-run.
 
 ```python
-import datahub_sdk, numpy as np, pandas as pd
+import intellistream_datahub_sdk, numpy as np, pandas as pd
 
-client = datahub_sdk.DataHubClient.from_env()
+client = intellistream_datahub_sdk.DataHubClient.from_env()
 
-client.timeseries.create([datahub_sdk.TimeSeries(external_id="fridge_pharmacy_12_temp_c", name="Pharmacy fridge 12 temp", unit="deg_c", value_type="float")])
-client.subscriptions.create([datahub_sdk.Subscription(
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id="fridge_pharmacy_12_temp_c", name="Pharmacy fridge 12 temp", unit="deg_c", value_type="float")])
+client.subscriptions.create([intellistream_datahub_sdk.Subscription(
     external_id="pharmacy_fridges", name="Pharmacy fridges", timeseries=["fridge_pharmacy_12_temp_c"])])
 idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=60, freq="1min")
 t = np.full(60, 4.5); t[-10:] = 9.3                 # rises above the 8 °C ceiling
@@ -70,7 +70,7 @@ try (var stream = client.subscriptions().listen(List.of("pharmacy_fridges"))
 with client.subscriptions.listen(["pharmacy_fridges"]) as listener:
     for msg in listener:
         if out_of_band(msg.payload, 2.0, 8.0):         # °C — vaccine fridge band
-            client.events.create([datahub_sdk.Event(
+            client.events.create([intellistream_datahub_sdk.Event(
                 external_id=f"cold_chain_excursion_f12_{int(pd.Timestamp.now().timestamp())}",
                 type="cold_chain_excursion", status="critical",
                 event_time=pd.Timestamp.now(tz="UTC"),

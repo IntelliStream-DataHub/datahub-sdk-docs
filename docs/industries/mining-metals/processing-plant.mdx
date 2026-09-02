@@ -23,11 +23,11 @@ New workspace? Run this once (Python) to create the mill's recovery series with 
 target. Safe to re-run.
 
 ```python
-import datahub_sdk, numpy as np, pandas as pd
+import intellistream_datahub_sdk, numpy as np, pandas as pd
 
-client = datahub_sdk.DataHubClient.from_env()
+client = intellistream_datahub_sdk.DataHubClient.from_env()
 
-client.timeseries.create([datahub_sdk.TimeSeries(external_id="mill_1_recovery_pct", name="Mill 1 recovery %", unit="pct", value_type="float")])
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id="mill_1_recovery_pct", name="Mill 1 recovery %", unit="pct", value_type="float")])
 idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=12, freq="1h")
 rec = np.full(12, 91.0); rec[-4:] -= np.linspace(0, 3, 4)        # dips below the 91% target
 client.timeseries.insert_from_lists(timestamps=idx, values=rec, ts="mill_1_recovery_pct")
@@ -63,7 +63,7 @@ client.timeseries().retrieve(request).getItems().get(0).getDatapoints()
 ```python
 import pandas as pd
 
-rf = datahub_sdk.RetrieveFilter(
+rf = intellistream_datahub_sdk.RetrieveFilter(
     ts="mill_1_recovery_pct",
     start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=12),
     end=pd.Timestamp.now(tz="UTC"),
@@ -120,7 +120,7 @@ client.events().create(List.of(loss));
 <TabItem value="python" label="Python">
 
 ```python
-client.events.create([datahub_sdk.Event(
+client.events.create([intellistream_datahub_sdk.Event(
     external_id=f"recovery_loss_mill1_{int(pd.Timestamp.now().timestamp())}",
     type="recovery_loss", status="open",
     event_time=pd.Timestamp.now(tz="UTC"),
@@ -160,7 +160,7 @@ Chart recovery against target — the dip is metal walking out with the tailings
 ```python
 import matplotlib.pyplot as plt
 
-rf = datahub_sdk.RetrieveFilter(ts="mill_1_recovery_pct",
+rf = intellistream_datahub_sdk.RetrieveFilter(ts="mill_1_recovery_pct",
     start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=12), end=pd.Timestamp.now(tz="UTC"),
     aggregates=["avg"], granularity="1h")
 v = [dp.average for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()]

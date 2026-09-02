@@ -32,7 +32,7 @@ DatahubClient client = DatahubClient.create(DatahubConfig.builder()
 <TabItem value="python" label="Python">
 
 ```python
-from datahub_sdk import DataHubClient
+from intellistream_datahub_sdk import DataHubClient
 
 # from the environment (or an explicit .env file)
 client = DataHubClient.from_env()
@@ -45,7 +45,7 @@ client = DataHubClient(base_url="https://api.intellistream.ai", token="...")
 For `async`/`await`, use `AsyncDataHubClient` instead — same methods, awaited:
 
 ```python
-from datahub_sdk import AsyncDataHubClient
+from intellistream_datahub_sdk import AsyncDataHubClient
 client = AsyncDataHubClient.from_env()
 ```
 
@@ -340,7 +340,7 @@ try {
 Methods return plain `list[T]`. Non-2xx raises `DataHubException`:
 
 ```python
-from datahub_sdk import DataHubException
+from intellistream_datahub_sdk import DataHubException
 
 try:
     resources = client.resources.by_ids(["pump_1"])

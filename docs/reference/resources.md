@@ -115,11 +115,11 @@ System.out.println(created.getNodes().size() + " resources, "
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk
+import intellistream_datahub_sdk
 
-plant = datahub_sdk.Resource(external_id="plant_oslo", name="Oslo Plant", labels=["Plant"])
-pump = datahub_sdk.Resource(external_id="pump_1", name="Pump 1", labels=["Pump"])
-contains = datahub_sdk.RelForm.by_external_ids("plant_oslo", "pump_1", "contains")
+plant = intellistream_datahub_sdk.Resource(external_id="plant_oslo", name="Oslo Plant", labels=["Plant"])
+pump = intellistream_datahub_sdk.Resource(external_id="pump_1", name="Pump 1", labels=["Pump"])
+contains = intellistream_datahub_sdk.RelForm.by_external_ids("plant_oslo", "pump_1", "contains")
 
 result = client.resources.create([plant, pump], [contains])
 print(len(result.nodes), "resources,", len(result.relations), "relations")
@@ -170,7 +170,7 @@ Use `filter(new ResourceRetreiver())` for structured filters (labels, metadata, 
 <TabItem value="python" label="Python">
 
 ```python
-form = datahub_sdk.SearchAndFilterForm(query="pump", limit=10)
+form = intellistream_datahub_sdk.SearchAndFilterForm(query="pump", limit=10)
 matches = client.resources.search(form)
 ```
 

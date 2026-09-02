@@ -50,16 +50,16 @@ if (tooHot) {
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk, pandas as pd
+import intellistream_datahub_sdk, pandas as pd
 
-rf = datahub_sdk.RetrieveFilter(
+rf = intellistream_datahub_sdk.RetrieveFilter(
     ts="engine_temperature",
     start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=1),
     end=pd.Timestamp.now(tz="UTC"))
 
 points = client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()
 if any(float(dp.value) > 110.0 for dp in points):
-    client.events.create([datahub_sdk.Event(
+    client.events.create([intellistream_datahub_sdk.Event(
         external_id=f"overheat_press_07_{int(pd.Timestamp.now().timestamp())}",
         type="overheat",
         status="open",
@@ -121,8 +121,8 @@ DataWrapper<EventModel> overheats = client.events().filter(retriever);
 <TabItem value="python" label="Python">
 
 ```python
-overheats = client.events.filter(datahub_sdk.EventFilter(
-    basic_filter=datahub_sdk.BasicEventFilter(type="overheat"),
+overheats = client.events.filter(intellistream_datahub_sdk.EventFilter(
+    basic_filter=intellistream_datahub_sdk.BasicEventFilter(type="overheat"),
     limit=100))
 ```
 

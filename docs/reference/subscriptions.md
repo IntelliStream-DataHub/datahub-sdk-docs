@@ -30,9 +30,9 @@ client.subscriptions().delete(List.of(IdCollection.createFromExternalId("engine_
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk
+import intellistream_datahub_sdk
 
-sub = datahub_sdk.Subscription(
+sub = intellistream_datahub_sdk.Subscription(
     external_id="engine_temps",
     name="Engine temps",
     timeseries=["engine_temperature"])

@@ -24,16 +24,16 @@ into a product, shipped out — so the downstream recall trace returns the affec
 Safe to re-run.
 
 ```python
-import datahub_sdk
+import intellistream_datahub_sdk
 
-client = datahub_sdk.DataHubClient.from_env()
+client = intellistream_datahub_sdk.DataHubClient.from_env()
 
 client.resources.create(
-    [datahub_sdk.Resource(external_id=x, name=x, labels=[x]) for x in
+    [intellistream_datahub_sdk.Resource(external_id=x, name=x, labels=[x]) for x in
      ["lot_acme_8842", "part_bearing_55", "product_gearbox_910", "shipment_eu_2204"]],
-    [datahub_sdk.RelForm.by_external_ids("lot_acme_8842", "part_bearing_55", "supplied"),
-     datahub_sdk.RelForm.by_external_ids("part_bearing_55", "product_gearbox_910", "built_into"),
-     datahub_sdk.RelForm.by_external_ids("product_gearbox_910", "shipment_eu_2204", "shipped_in")])
+    [intellistream_datahub_sdk.RelForm.by_external_ids("lot_acme_8842", "part_bearing_55", "supplied"),
+     intellistream_datahub_sdk.RelForm.by_external_ids("part_bearing_55", "product_gearbox_910", "built_into"),
+     intellistream_datahub_sdk.RelForm.by_external_ids("product_gearbox_910", "shipment_eu_2204", "shipped_in")])
 ```
 
 ## 1. Model the chain of custody
@@ -67,12 +67,12 @@ static RelForm rel(String type, String from, String to) {
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk
+import intellistream_datahub_sdk
 
 chain = [
-    datahub_sdk.RelForm.by_external_ids("lot_acme_8842", "part_bearing_55", "supplied"),
-    datahub_sdk.RelForm.by_external_ids("part_bearing_55", "product_gearbox_910", "built_into"),
-    datahub_sdk.RelForm.by_external_ids("product_gearbox_910", "shipment_eu_2204", "shipped_in"),
+    intellistream_datahub_sdk.RelForm.by_external_ids("lot_acme_8842", "part_bearing_55", "supplied"),
+    intellistream_datahub_sdk.RelForm.by_external_ids("part_bearing_55", "product_gearbox_910", "built_into"),
+    intellistream_datahub_sdk.RelForm.by_external_ids("product_gearbox_910", "shipment_eu_2204", "shipped_in"),
 ]
 client.resources.create(nodes, chain)
 ```

@@ -25,12 +25,12 @@ New workspace? Run this once (Python) to create a piezometer's pore-pressure ser
 trigger. Safe to re-run.
 
 ```python
-import datahub_sdk, numpy as np, pandas as pd
+import intellistream_datahub_sdk, numpy as np, pandas as pd
 
-client = datahub_sdk.DataHubClient.from_env()
+client = intellistream_datahub_sdk.DataHubClient.from_env()
 
-client.timeseries.create([datahub_sdk.TimeSeries(external_id="piezometer_p14_pore_pressure_kpa", name="Piezometer P14 pore pressure", unit="kpa", value_type="float")])
-client.subscriptions.create([datahub_sdk.Subscription(
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id="piezometer_p14_pore_pressure_kpa", name="Piezometer P14 pore pressure", unit="kpa", value_type="float")])
+client.subscriptions.create([intellistream_datahub_sdk.Subscription(
     external_id="tsf_instruments", name="Tailings instruments", timeseries=["piezometer_p14_pore_pressure_kpa"])])
 idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=90, freq="1h")
 client.timeseries.insert_from_lists(timestamps=idx, values=150 + np.linspace(0, 40, 90),   # rises past ~180 trigger
@@ -75,7 +75,7 @@ with client.subscriptions.listen(["tsf_instruments"]) as listener:
     for msg in listener:
         level = trigger_level(msg.payload)             # None | "amber" | "red"
         if level:
-            client.events.create([datahub_sdk.Event(
+            client.events.create([intellistream_datahub_sdk.Event(
                 external_id=f"tailings_alarm_p14_{int(pd.Timestamp.now().timestamp())}",
                 type="tailings_alarm",
                 status="critical" if level == "red" else "warning",

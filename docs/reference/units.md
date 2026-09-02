@@ -59,10 +59,10 @@ DataWrapper<UnitModel> result = client.units().byIds(List.of(lookup));
 <TabItem value="python" label="Python">
 
 ```python
-import datahub_sdk
+import intellistream_datahub_sdk
 
 by_ext = client.units.by_external_ids("celsius")
-by_id = client.units.by_ids([datahub_sdk.IdCollection(id=7)])
+by_id = client.units.by_ids([intellistream_datahub_sdk.IdCollection(id=7)])
 ```
 
 </TabItem>
