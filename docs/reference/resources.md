@@ -719,7 +719,7 @@ connecting them back to the start.
 
 | Field | Default | Meaning |
 | --- | --- | --- |
-| `id` | — | Where to start. **Numeric id only** — see below. |
+| `id` / `externalId` | — | Where to start. Supply exactly one, as for `fetchRelated`. |
 | `endLabels` | — | Labels that qualify as a match, e.g. `["TIMESERIES"]`. The walk continues past them. |
 | `limit` | `10` | How many matching end-nodes to return. |
 | `relationshipTypes` | all | Which edge types the walk may follow. |
@@ -729,18 +729,16 @@ That is the difference worth internalising: with `fetchRelated` you pick a radiu
 out what is inside it, which on an unfamiliar graph is a guess. With `fetch-nearest` you name
 what you are looking for and how many you want, and the radius follows.
 
-:::caution `externalId` is accepted but not read
-The request form carries an `externalId` field, but this endpoint starts from `id` only —
-sending an external id alone gets you a `404`. Resolve it to a numeric id with `byIds` first.
-`fetchRelated` takes either.
-:::
+The endpoint resolves an `externalId` for you, and so does the Java form. The Python and Rust
+clients build the request from a numeric `id` only, so there resolve an external id with
+`by_ids` first when that is all you have.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
 
 ```java
 FetchNearestResourcesForm form = new FetchNearestResourcesForm();
-form.setId(5677892L);                       // numeric id, not external id
+form.setExternalId("pump_1");               // or form.setId(5677892L)
 form.setEndLabels(List.of("TIMESERIES"));
 form.setLimit(10);
 form.setExcludedLabels(List.of("POLICY"));
@@ -753,7 +751,7 @@ ResourceNetwork nearest = client.resources().fetchNearest(form);
 
 ```python
 nearest = client.resources.fetch_nearest(
-    5677892,                       # numeric id, not external id
+    5677892,                       # the Python client takes the numeric id
     end_labels=["TIMESERIES"],
     limit=10,
     excluded_labels=["POLICY"])
@@ -766,7 +764,7 @@ nearest = client.resources.fetch_nearest(
 use intellistream_datahub_sdk::resources::FetchNearestResourcesForm;
 
 let nearest = api.resources.fetch_nearest(
-    &FetchNearestResourcesForm::from_id(5677892)   // numeric id, not external id
+    &FetchNearestResourcesForm::from_id(5677892)   // the Rust client takes the numeric id
         .with_end_labels(vec!["TIMESERIES".into()])
         .with_limit(10)
         .with_excluded_labels(vec!["POLICY".into()])).await?;
