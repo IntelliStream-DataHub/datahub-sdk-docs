@@ -64,8 +64,10 @@ forever.
 
 ### Layer 2 — the naming policy {#the-naming-policy}
 
-A convention an administrator configures on top of the floor. It applies to **resources and
-data sets**; enforcement sits on those write paths.
+A convention an administrator configures on top of the floor. It applies to **every node type
+whose external id is an identity**: resources and assets, data sets, time-series, functions and
+policies. Enforcement sits on the one write path they share, so it cannot cover one create
+endpoint and miss another.
 
 | Preset | Accepts |
 | --- | --- |
@@ -341,7 +343,7 @@ value, the policy appends a fresh `OPEN` after the `RESOLVED`, and the replay sa
 onto the raise already stored, so an entity written a thousand times contributes one `OPEN`
 event, not a thousand.
 
-Findings are raised for resources, data sets and time series — everything whose external id
+Findings are raised for every node type the policy covers: everything whose external id
 is a unique identity. Events raise none, whatever the policy says; a finding being an event
 does not change that.
 

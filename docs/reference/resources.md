@@ -27,22 +27,115 @@ it, and compared without case. Mirror the tag your operation already maintains �
 | `metadata` | map&lt;string, string&gt; | Flat key/value, filterable by exact match. |
 | `source` | string, 2–128 | The upstream system of record this came from (`SAP`, a historian, a file drop). |
 | `dataSetId` | number | The data set the resource belongs to. |
-| `geoLocation` | GeoJSON geometry | `Point`, `Polygon`, … Validated on write; stored verbatim. |
-| `isRoot` | boolean | Whether the resource is a navigation root. Deletes are checked against reachability from a root — see [Delete](#delete). |
+| `geoLocation` | GeoJSON geometry | `Point`, `Polygon`, … Validated on write; stored verbatim. Returned only on [assets](#typed-reads). |
+| `isRoot` | boolean | Whether the resource is a navigation root. Deletes are checked against reachability from a root — see [Delete](#delete). Returned only on resources and assets. |
 | `relatedResources` | object[] | Read-only view of the graph: `{ id, externalId, relationshipType, direction }` per connected node. Populated where the graph is loaded, empty otherwise. |
-| `createdTime`, `lastUpdatedTime` | epoch millis | Server-set. |
+| `createdTime`, `lastUpdatedTime` | epoch millis | Server-set. A create body may carry them, but they are ignored: the stored values are the server's. |
 
 Labels are how the platform types a node. The type-label (`ASSET`, `TIMESERIES`, `DATASET`,
 `POLICY`, `FUNCTION`) is what the create pipeline reads to decide which kind of entity to
 build, and free-form labels ride alongside it. That is also why one `/resources/create` call
 can hold a mix of node types — a time-series next to an asset — rather than needing one
-endpoint per type.
+endpoint per type. The same label types what a read returns: see
+[Reads come back typed](#typed-reads).
 
 :::note Numeric ids cross the wire as JSON strings
 `id` and `dataSetId` serialize as `"5677892"`, not `5677892` — ids can exceed the 53-bit
 integer a JSON number is safe for in JavaScript. The clients parse them back for you. The same
 holds for the ids on an [edge](./edges#body), `start` and `end` included.
 :::
+
+## Reads come back typed {#typed-reads}
+
+The read endpoints (`/resources/{id}`, `byids`, `filter`, `search`, `fetch-related`,
+`fetch-nearest`) return each node in the shape of its kind, and the type-label inside
+`labels` is the discriminator. There is deliberately no separate type property on the wire:
+an element whose labels contain `TIMESERIES` *is* the time-series shape.
+
+| Type-label present | Shape returned |
+| --- | --- |
+| `ASSET` | An asset: the body above, `geoLocation` included. |
+| `TIMESERIES` | A [time-series](./timeseries): `unit`, `unitExternalId`, `valueType`. |
+| `DATASET` | A [data set](./datasets). |
+| `POLICY` | A policy: `type`, `value`, `deactivated`, `templateId`. |
+| `FUNCTION` | A function. |
+| none | A plain resource, the body above. |
+
+Three rules govern which fields appear where:
+
+- A time-series carries its **full label set**, not only `["TIMESERIES"]`.
+- `isRoot` belongs to resources and assets; `geoLocation` belongs to assets. A flat resource
+  body naming a `geoLocation` is a `400`: a plain resource has nowhere to store one, so it is
+  refused rather than accepted and dropped. Send an `ASSET`-labelled body instead.
+- A policy carries no `nodeType` field. The `POLICY` label is the type.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+These calls return `DataWrapper<NodeModel>`, and the concrete class of each item is the
+subtype, so pattern-match to reach type-specific fields. `fetchRelated`/`fetchNearest` still
+return a `ResourceNetwork`; its `nodes` are `NodeModel` too.
+
+```java
+for (NodeModel node : client.resources().filter(retriever).getItems()) {
+    if (node instanceof Timeseries ts) {
+        System.out.println(ts.getExternalId() + " in " + ts.getUnit());
+    }
+}
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+Each item is the same class the type's own endpoint returns, so `isinstance` works and a
+time-series from `resources.filter()` behaves exactly like one from `timeseries.by_ids()`.
+Two new classes join the set: `Asset` and `Policy`.
+
+```python
+from intellistream_datahub_sdk import TimeSeries
+
+for node in client.resources.filter(external_id="pump_*"):
+    if isinstance(node, TimeSeries):
+        print(node.external_id, node.unit)
+```
+
+When you are dispatching from data rather than branching, every node class also carries
+`node_type`, one of `asset`, `timeseries`, `function`, `resource`, `dataset`, `policy`:
+
+```python
+by_type = {}
+for node in client.resources.filter(external_id="pump_*"):
+    by_type.setdefault(node.node_type, []).append(node)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+Reads return `DataWrapper<Node>` (or `GraphDataWrapper<Node>`), where `Node` is an enum with
+one variant per type. Match it, or use the accessors for the fields every node shares.
+
+```rust
+use intellistream_datahub_sdk::Node;
+
+for node in api.resources.filter(&form).await?.get_items() {
+    match node {
+        Node::TimeSeries(ts) => println!("{} in {:?}", ts.external_id, ts.unit),
+        other => println!("{} ({:?})", other.external_id(), other.kind()),
+    }
+}
+```
+
+`Node` is `#[non_exhaustive]`, so a node type added later is not a breaking change for a
+`match` that already has a catch-all arm.
+
+</TabItem>
+</Tabs>
+
+Create and update echoes are typed the same way, so an asset updated through
+`/resources/update` comes back as an asset carrying its `geoLocation`. One difference on the
+update echo: `relatedResources` is left empty on purpose. The request touched only some of the
+node's edges, and answering with those alone would be indistinguishable from answering with all
+of them. A delete has no echo at all, being a `204` with no body.
 
 ## Look up
 
@@ -57,9 +150,9 @@ compare the returned items against what you asked for when a miss matters.
 ```java
 import ai.intellistream.datahub.models.IdCollection;
 
-Resource pump = client.resources().getById(5677892).getItems().iterator().next();
+NodeModel pump = client.resources().getById(5677892).getItems().iterator().next();
 
-DataWrapper<Resource> some = client.resources().byIds(List.of(
+DataWrapper<NodeModel> some = client.resources().byIds(List.of(
         IdCollection.createFromExternalId("pump_1"),
         IdCollection.createFromId(5677892)));
 ```
@@ -109,9 +202,30 @@ characters of `description`, 256 metadata entries, 64 labels and 64 KiB of raw G
 
 A relation may reference a node being created in the same request by its `externalId`, or
 point at one that already exists. An edge whose endpoint is neither is a `400` naming the
-endpoint it could not resolve. Re-using an `externalId` that already exists in the tenant is
-a `409` whose `duplicated` list names which ones — use [update](#update) to change the
-existing resource instead.
+endpoint it could not resolve.
+
+Two more checks run over the whole batch before anything is written, on **every** node create
+endpoint: `/resources`, `/assets`, `/datasets`, `/functions`, `/policies` and `/timeseries`
+alike. Both refuse the whole request, so a rejected batch creates nothing.
+
+| Refused | Status | Named in |
+| --- | --- | --- |
+| An `externalId` already taken in the tenant, or repeated within the same batch. Compared without case. | `409` | `error.duplicated`, one entry per offending id |
+| A `dataSetId` that does not exist, or that resolves to a node which is not a data set. | `400` | `error.fields`, one entry per offending id |
+
+```json
+{
+  "error": {
+    "code": 409,
+    "message": "A node with that externalId already exists.",
+    "duplicated": [{ "externalId": "pump_1" }]
+  }
+}
+```
+
+Use [update](#update) to change an existing resource rather than re-creating it. Access is
+decided before either check, so a caller who may not write the data set is told that (`403`)
+instead of being handed a `400` about an id they were never allowed to name.
 
 :::note Edges into datasets and time-series are validated
 Two endpoint rules apply to every edge, on create and on update (an update can retarget an
@@ -278,7 +392,7 @@ retriever.getFilter().setName(List.of("pipe%"));
 retriever.getFilter().setMetadata(Map.of("work_order", "wo-sap-12344"));
 retriever.getFilter().setDataSetId(List.of(IdCollection.createFromId(12L)));
 
-DataWrapper<Resource> matches = client.resources().filter(retriever);
+DataWrapper<NodeModel> matches = client.resources().filter(retriever);
 ```
 
 </TabItem>
@@ -368,7 +482,7 @@ can return rows it did not before.
 ResourceSearch search = new ResourceSearch();
 search.setLimit(10);
 search.getSearch().setQuery("pump");
-DataWrapper<Resource> matches = client.resources().search(search);
+DataWrapper<NodeModel> matches = client.resources().search(search);
 ```
 
 </TabItem>
@@ -527,6 +641,14 @@ connected site an unbounded `depth` will hit 5 000 nodes long before it runs out
 and what you get back is a *neighbourhood*, not the component you asked for. Bound `depth`
 to 1–3 unless you know the graph is sparse.
 
+Nodes from `fetchRelated` and `fetch-nearest` come back
+[typed by label](#typed-reads) but sparsely populated: the graph holds a subset of each
+node's columns, so a node from these endpoints is not the full record. Fetch by id when you
+need everything.
+
+A `TIMESERIES` node from these endpoints carries `unit`, `unitExternalId` and `valueType`.
+Every node carries its `metadata`.
+
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
 
@@ -641,6 +763,68 @@ let nearest = api.resources.fetch_nearest(
 
 </TabItem>
 </Tabs>
+
+## The `/assets` endpoints {#assets}
+
+An **asset** is the node type that can be a navigation root and the only one that carries a
+`geoLocation`. It has its own endpoint family, and every call in it is the pipeline above with
+the `ASSET` type pinned: the same ACLs, the same [naming policy](./external-ids#the-naming-policy),
+the same [create checks](#create-resources-and-relations), the same status codes. Reach for it
+when a call should only ever see assets, and for `/resources` when one call carries or returns
+several node types.
+
+| Endpoint | Behaves as | Worth knowing |
+| --- | --- | --- |
+| `POST /assets/create` | [create](#create-resources-and-relations) | Nodes only, no `relations` array. `201`, and the echo is asset-shaped. `labels` may be omitted: `ASSET` is added for you. |
+| `GET /assets/{id}` | [look up](#look-up) | One asset, wrapped in `items` like every other read. |
+| `POST /assets/byids` | [look up](#look-up) | Ids that are missing, are not assets, or are not readable are omitted rather than failing the call. |
+| `POST /assets/filter` | [filter](#filter) | The same criteria, the same paging. A `nodeType` in the body is replaced, see below. |
+| `POST /assets/search` | [search](#search) | Same replacement, and the `filter` block is still [accepted and ignored](#search). |
+| `POST /assets/update` | [update](#update) | Takes `nodes` and `relations` exactly as `/resources/update` does. |
+| `POST` or `DELETE /assets/delete` | [delete](#delete) | `204`, and the same [connectivity check](#delete). |
+
+```http
+POST /assets/create
+{
+  "items": [
+    {
+      "externalId": "plant_oslo",
+      "name": "Oslo Plant",
+      "labels": ["Plant"],
+      "isRoot": true,
+      "geoLocation": { "type": "Point", "coordinates": [10.75, 59.91] }
+    }
+  ]
+}
+```
+
+:::caution `nodeType` in the body is replaced, not merged
+A `nodeType` you send to `/assets/filter` or `/assets/search` is overwritten with `asset`.
+`nodeType` entries are combined with **OR**, so honouring a supplied `["timeseries"]` would
+*widen* a request made to `/assets` into a mixed query instead of narrowing it. Ask
+`/resources/filter` when you want a mixed set.
+:::
+
+:::note A `404` here answers three questions at once
+`GET /assets/{id}` replies the same way to an id that does not exist, an id belonging to a node
+of some other type, and an asset in a data set you may not read. That is deliberate: a
+distinguishable `403` would confirm that an id exists.
+:::
+
+## The `/functions` endpoints {#functions}
+
+A **function** is a plain node distinguished by its `FUNCTION` label, with the same shape as a
+resource. Its family is `POST /functions/create`, `GET /functions/list`, `GET /functions/{id}`,
+`POST /functions/update` and `POST` or `DELETE /functions/delete`, on the same shared pipeline.
+`GET /functions/list` takes no filter: the inventory is expected to be small.
+
+`GET /functions/{id}` is new, and completes the read surface: it returns the one function
+wrapped in `items`, and reports a function you may not read as missing (`404`) rather than
+forbidden, exactly as `GET /assets/{id}` does.
+
+The Java client has no `assets()` or `functions()` service, so reach for the endpoints there.
+Creating an asset through `resources().create` with an `ASSET` label is the same pipeline and
+gives you the same asset back.
 
 ## What each client covers {#client-coverage}
 
