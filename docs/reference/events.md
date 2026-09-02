@@ -56,8 +56,8 @@ HTTP caller should expect the quotes.
 `relatedResources` replaced a `relatedResourceIds` / `relatedResourceExternalIds` pair. The two
 were independent inputs and drifted: a mismatched pair was unioned into an event describing both
 resources, and a patch setting only the external ids left the stored ids stale. There are no
-aliases, and events ignore unknown properties, so a client still sending the old field names gets
-a `200` with its relations silently dropped. Java SDK users get a compile break on the removed
+aliases: a client still sending the old field names is refused with a `400` naming them as
+[unknown fields](./client#unknown-fields). Java SDK users get a compile break on the removed
 setters instead.
 
 Supply an `id`, an `externalId`, or both. The server resolves whichever side you left out and
