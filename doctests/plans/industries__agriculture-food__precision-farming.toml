@@ -1,0 +1,46 @@
+page = "docs/industries/agriculture-food/precision-farming.mdx"
+
+# Blocks on this page:
+#   python #1   L25    Set up demo data
+#   java   #1   L44    1. Model fields and stream soil sensors
+#   python #2   L58    1. Model fields and stream soil sensors
+#   rust   #1   L73    1. Model fields and stream soil sensors
+#   java   #2   L101   2. Attach the drone imagery to the field
+#   python #3   L118   2. Attach the drone imagery to the field
+#   rust   #2   L129   2. Attach the drone imagery to the field
+#   java   #3   L147   2. Attach the drone imagery to the field
+#   python #4   L155   2. Attach the drone imagery to the field
+#   rust   #3   L163   2. Attach the drone imagery to the field
+#   python #5   L180   See the result
+
+[blocks]
+python = 5
+java = 3
+rust = 3
+
+[python]
+timeout = 600
+
+prologue = """
+
+"""
+
+[java]
+disabled = "Java scenario not written yet."
+
+[rust]
+disabled = "Rust scenario not written yet."
+
+# Step 1 writes 'your timestamps'; the demo block above just built exactly that as `idx`.
+[[python.inject]]
+before = 2
+code = """
+timestamps = idx
+"""
+
+[owns]
+files = ["scan_north_40_2026_06_28"]
+timeseries = ["field_north_40_soil_moisture", "field_north_40_soil_temp_c"]
+
+[expect]
+timeseries = ["field_north_40_soil_moisture", "field_north_40_soil_temp_c"]

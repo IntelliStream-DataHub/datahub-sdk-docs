@@ -1,0 +1,32 @@
+page = "docs/industries/oil-and-gas/emissions.mdx"
+
+# Blocks on this page:
+#   python #1   L25    Set up demo data
+#   java   #1   L46    1. Roll emissions up for reporting
+#   python #2   L64    1. Roll emissions up for reporting
+#   rust   #1   L79    1. Roll emissions up for reporting
+#   java   #2   L110   2. Catch excess flaring early
+#   python #3   L123   2. Catch excess flaring early
+#   rust   #2   L134   2. Catch excess flaring early
+#   python #4   L156   See the result
+
+[blocks]
+python = 4
+java = 2
+rust = 2
+
+[python]
+timeout = 600
+
+[java]
+disabled = "Java scenario not written yet."
+
+[rust]
+disabled = "Rust scenario not written yet."
+
+[owns]
+events = ["flaring_exceedance_north_*"]
+timeseries = ["platform_north_flare_volume_m3"]
+
+[expect]
+timeseries = ["platform_north_flare_volume_m3"]

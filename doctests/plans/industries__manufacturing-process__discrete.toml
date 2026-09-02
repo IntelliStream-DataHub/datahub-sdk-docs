@@ -1,0 +1,64 @@
+page = "docs/industries/manufacturing-process/discrete.mdx"
+
+# Blocks on this page:
+#   python #1   L24    Set up demo data
+#   java   #1   L44    1. Model the line and stream its output
+#   python #2   L60    1. Model the line and stream its output
+#   rust   #1   L75    1. Model the line and stream its output
+#   java   #2   L105   2. Roll up to hourly OEE inputs
+#   python #3   L123   2. Roll up to hourly OEE inputs
+#   rust   #2   L139   2. Roll up to hourly OEE inputs
+#   java   #3   L168   3. Flag a quality excursion
+#   python #4   L181   3. Flag a quality excursion
+#   rust   #3   L192   3. Flag a quality excursion
+#   python #5   L213   See the result
+
+[blocks]
+python = 5
+java = 3
+rust = 3
+
+[python]
+timeout = 600
+# The demo block and step 1 create exactly the same two series and both ingest into
+# them — the same action written twice, for a reader who has data and one who does
+# not. Running both is a duplicate create. The numbered step is the tutorial, so it
+# is what runs, with the client coming from the quickstart as it would for a reader.
+exclude = [1]
+requires = ["quickstart"]
+
+prologue = """
+from tutorial_support import Recorder
+
+# Placeholders the page leaves to the reader — 'your dashboard', 'your
+# alerting'. Recorders keep what they are handed so the run can prove the
+# tutorial's logic actually reached them.
+record_hourly_performance = Recorder("record_hourly_performance")
+
+"""
+
+[java]
+disabled = "Java scenario not written yet."
+
+[rust]
+disabled = "Rust scenario not written yet."
+
+# Step 1 ingests the reader's own cycle times over the demo block's index.
+[[python.inject]]
+before = 2
+code = """
+import numpy as np, pandas as pd
+
+# Step 1 ingests "your" cycle times. With the demo block left out, this is the
+# reader's own sampling: eight hours of minute-resolution station output.
+idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=8 * 60, freq="1min")
+timestamps = idx
+cycle_times = 11 + np.random.normal(0, 0.6, len(idx))
+"""
+
+[owns]
+events = ["scrap_excursion_st07_*"]
+timeseries = ["station_07_cycle_time_s", "station_07_scrap"]
+
+[expect]
+timeseries = ["station_07_cycle_time_s", "station_07_scrap"]

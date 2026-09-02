@@ -1,0 +1,41 @@
+page = "docs/reference/units.md"
+
+# Blocks on this page:
+#   java   #1   L17    List all units
+#   python #1   L27    List all units
+#   rust   #1   L35    List all units
+#   java   #2   L51    Look up
+#   python #2   L61    Look up
+#   rust   #2   L71    Look up
+
+[blocks]
+python = 2
+java = 2
+rust = 2
+
+[python]
+timeout = 600
+# An API reference, not a tutorial: each fence is a self-contained example, and they
+# are meant to be read independently. Running them as one program would invent
+# conflicts a reader never meets — the delete example removing what the write example
+# needs — so each block runs on its own.
+independent = true
+
+# Each example needs a client. Composing the quickstart in to get one would also
+# create its `engine_temperature`, which several of these pages create themselves;
+# `from_env()` is the constructor this section documents, so this is the reader's
+# own call.
+prologue = """
+import intellistream_datahub_sdk
+client = intellistream_datahub_sdk.DataHubClient.from_env()
+"""
+
+[java]
+disabled = "Java scenario not written yet."
+
+[rust]
+disabled = "Rust scenario not written yet."
+
+# The catalogue listing must actually name a unit the platform ships.
+[expect]
+stdout = ["temperature_deg_c"]

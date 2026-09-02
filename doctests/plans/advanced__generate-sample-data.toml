@@ -1,0 +1,66 @@
+page = "docs/advanced/generate-sample-data.mdx"
+
+# Blocks on this page:
+#   python #1   L20    A reusable ingest helper
+#   python #2   L39    A. A degrading sensor signal
+#   python #3   L56    A. A degrading sensor signal
+#   python #4   L70    B. A production decline curve
+#   python #5   L89    C. Correlated multivariate process data, with a fault
+#   python #6   L113   D. Sparse lab samples vs. dense sensors
+#   python #7   L128   E. A labelled failure history (events) and the sensors leading up to it
+#   python #8   L141   E. A labelled failure history (events) and the sensors leading up to it
+#   python #9   L163   F. A small graph
+#   python #10  L181   F. A small graph
+#   python #11  L200   G. An electrical feeder load curve
+#   python #12  L219   H. Fish-pen oxygen, with crash episodes
+#   python #13  L242   I. Operating channels — one unit's regimes and a peer fleet
+#   python #14  L273   J. Correlated drilling channels, with a kick
+#   python #15  L299   K. Messy raw sensors to clean
+
+[blocks]
+python = 15
+
+[python]
+timeout = 600
+
+# This page exists to populate a workspace, so it owns a lot — and much of it is
+# minted at run time: the fraud graph builds `account_1..30` from a range, and the
+# process/drilling/operating-mode fixtures ingest whatever keys their generator
+# functions return. Those are patterns; the sweep expands them against the backend.
+# Anything missed here survives the sweep and makes the page fail on its next run
+# with a duplicate create, which is exactly what "Safe to re-run" must not do.
+[owns]
+resources = ["account_*"]
+events = ["esp_failure_a12_*"]
+timeseries = [
+  "account_*",
+  "cdu_1_*",
+  "rig_dw1_*",
+  "unit_3_*",
+  "pump_07_*", "pump_08_*", "pump_11_*", "pump_19_*", "pump_esp_a12_*",
+  "pen_h_07_*",
+  "engine_temperature_raw", "engine_vibration_raw",
+  "feeder_f12_load_mw", "well_a12_oil_rate_bpd",
+]
+
+# A representative sample rather than the whole inventory: if the helper works at all
+# it works for every call, and naming one series per fixture family keeps the check
+# meaningful without restating the page.
+[expect]
+timeseries = [
+  "pump_07_vibration_mm_s",
+  "well_a12_oil_rate_bpd",
+  "cdu_1_feed_bpd",
+  "unit_3_load_mw",
+  "feeder_f12_load_mw",
+  "pen_h_07_dissolved_oxygen_mg_l",
+  "engine_temperature_raw",
+]
+
+# Datapoint counts, not just existence: the recipes read these series, and a series
+# that exists but is still empty fails them for a reason that is not their own.
+[expect.datapoints]
+pump_07_vibration_mm_s = 1000
+cdu_1_feed_bpd = 1000
+unit_3_load_mw = 1000
+pen_h_07_dissolved_oxygen_mg_l = 1000

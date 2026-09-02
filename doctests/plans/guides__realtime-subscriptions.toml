@@ -1,0 +1,33 @@
+page = "docs/guides/realtime-subscriptions.mdx"
+
+# python #1 L33  — 1. Create a subscription
+# python #2 L107 — 2. Listen and ack                 (not covered — see below)
+# python #3 L151 — Change the interest set at runtime (not covered — see below)
+[blocks]
+python = 3
+java = 4
+rust = 3
+
+[python]
+requires = ["quickstart"]
+only = [1]
+timeout = 120
+
+# Blocks 2 and 3 are deliberately left out rather than quietly bounded. Block 2
+# blocks forever on a websocket and only returns when a datapoint arrives, and
+# block 3 uses `listener` after the `with` that owns it has closed. Testing them
+# needs a second process writing datapoints while the listener runs — worth
+# building, but a different harness, and pretending otherwise would mean a green
+# test over code nobody ran. The [blocks] pin above still catches edits to them.
+[java]
+disabled = "Java scenario not written yet."
+
+[rust]
+disabled = "Rust scenario not written yet."
+
+[owns]
+timeseries = ["engine_temperature"]
+subscriptions = ["engine_room"]
+
+[expect]
+subscriptions = ["engine_room"]

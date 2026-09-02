@@ -1,0 +1,46 @@
+page = "docs/industries/energy-utilities/grid.mdx"
+
+# Blocks on this page:
+#   python #1   L25    Set up demo data
+#   java   #1   L45    1. Model the network
+#   python #2   L67    1. Model the network
+#   rust   #1   L79    1. Model the network
+#   java   #2   L114   2. Roll telemetry up for the dashboard
+#   python #3   L132   2. Roll telemetry up for the dashboard
+#   rust   #2   L146   2. Roll telemetry up for the dashboard
+#   java   #3   L174   3. Overload alarm
+#   python #4   L187   3. Overload alarm
+#   rust   #3   L198   3. Overload alarm
+#   python #5   L219   See the result
+
+[blocks]
+python = 5
+java = 3
+rust = 3
+
+[python]
+timeout = 600
+
+prologue = """
+from tutorial_support import Recorder
+
+# Placeholders the page leaves to the reader — 'your dashboard', 'your
+# alerting'. Recorders keep what they are handed so the run can prove the
+# tutorial's logic actually reached them.
+chart = Recorder("chart")
+"""
+
+[java]
+disabled = "Java scenario not written yet."
+
+[rust]
+disabled = "Rust scenario not written yet."
+
+[owns]
+events = ["feeder_overload_f12_*"]
+resources = ["grid_region_east", "substation_oslo_1"]
+timeseries = ["feeder_f12_load_mw"]
+
+[expect]
+resources = ["grid_region_east", "substation_oslo_1"]
+timeseries = ["feeder_f12_load_mw"]

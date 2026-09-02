@@ -1,0 +1,52 @@
+page = "docs/industries/technology-operations/network.mdx"
+
+# Blocks on this page:
+#   python #1   L26    Set up demo data
+#   java   #1   L55    1. Find the busy-hour congestion
+#   python #2   L73    1. Find the busy-hour congestion
+#   rust   #1   L89    1. Find the busy-hour congestion
+#   java   #2   L121   2. Localize a fault to shared backhaul
+#   python #3   L134   2. Localize a fault to shared backhaul
+#   rust   #2   L144   2. Localize a fault to shared backhaul
+
+[blocks]
+python = 3
+java = 2
+rust = 2
+
+[python]
+timeout = 600
+
+prologue = """
+from tutorial_support import Recorder
+
+# Placeholders the page leaves to the reader — 'your dashboard', 'your
+# alerting'. Recorders keep what they are handed so the run can prove the
+# tutorial's logic actually reached them.
+flag_if_saturated = Recorder("flag_if_saturated")
+"""
+
+[java]
+disabled = "Java scenario not written yet."
+
+[rust]
+disabled = "Rust scenario not written yet."
+
+# The page models the network and traverses it in the next breath. The graph read
+# path trails writes by a second or two, and an empty neighbourhood is a valid
+# answer rather than an error — so without this the page prints the wrong
+# conclusion and the test cannot tell that from a real one.
+[[python.inject]]
+before = 3
+code = """
+from tutorial_support import wait_for_related
+wait_for_related(client, "cell_oslo_4412")
+"""
+
+[owns]
+resources = ["backhaul_link_88", "cell_oslo_4412", "cell_oslo_4418", "controller_rnc_3"]
+timeseries = ["cell_oslo_4412_prb_util", "cell_oslo_4418_prb_util"]
+
+[expect]
+resources = ["backhaul_link_88", "cell_oslo_4412", "cell_oslo_4418", "controller_rnc_3"]
+timeseries = ["cell_oslo_4412_prb_util", "cell_oslo_4418_prb_util"]

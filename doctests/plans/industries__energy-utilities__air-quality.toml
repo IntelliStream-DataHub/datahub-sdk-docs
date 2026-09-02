@@ -1,0 +1,31 @@
+page = "docs/industries/energy-utilities/air-quality.mdx"
+
+# Blocks on this page:
+#   python #1   L25    Set up demo data
+#   java   #1   L45    1. Find the right unit
+#   python #2   L54    1. Find the right unit
+#   rust   #1   L64    1. Find the right unit
+#   java   #2   L82    2. Tag each series with its unit
+#   python #3   L95    2. Tag each series with its unit
+#   rust   #2   L107   2. Tag each series with its unit
+#   python #4   L135   See the result
+
+[blocks]
+python = 4
+java = 2
+rust = 2
+
+[python]
+timeout = 600
+
+[java]
+disabled = "Java scenario not written yet."
+
+[rust]
+disabled = "Rust scenario not written yet."
+
+[owns]
+timeseries = ["station_kirkeveien_co", "station_kirkeveien_no2", "station_kirkeveien_pm25"]
+
+[expect]
+timeseries = ["station_kirkeveien_co", "station_kirkeveien_no2", "station_kirkeveien_pm25"]

@@ -1,0 +1,77 @@
+page = "docs/tutorial.mdx"
+
+# The step-by-step path: what a reader accumulates working down the page.
+# The finished program at the bottom is a separate scenario — tutorial-complete.toml —
+# because it is a different promise ("copy this file and run it") and needs a
+# different bounded run.
+#
+#   python #1 L152 Step 1 — Build the client
+#   python #2 L272 Step 2 — Ensure the time series exist
+#   python #3 L374 Step 3 — Sample the data
+#   python #4 L453 Step 4 — Ingest on a tick
+#   python #5 L767 The complete program        <- tutorial-complete.toml
+[blocks]
+python = 5
+java = 6
+rust = 10
+
+[python]
+only = [1, 2, 3, 4]
+timeout = 180
+
+# Step 1 teaches the OAuth2 client-credentials constructor by name, so testing it
+# against a token-only stack would prove nothing about the constructor the page
+# actually shows. Without these the test skips and says so.
+requires_env = ["CLIENT_ID", "CLIENT_SECRET", "TOKEN_URI"]
+requires_python = ["psutil"]
+
+# What the prose establishes between the code blocks. The page introduces METRICS
+# and `host` in narrative and names psutil in its install step, so a reader has
+# them by Step 2; the harness supplies exactly that and nothing more.
+#
+# Deliberately NOT supplied: the SDK import. Step 2 calls `datahub_sdk.TimeSeries`
+# but no step-path block ever imports it — only the complete listing at the bottom
+# does. Handing it over here would hide that gap, which is precisely the kind of
+# thing this suite exists to surface.
+imports = """
+import os
+import socket
+from datetime import datetime, timezone
+import psutil
+"""
+prologue = """
+METRICS = {
+    "system_memory_used": "System memory used",
+    "system_memory_available": "System memory available",
+    "system_swap_used": "System swap used",
+}
+host = os.environ.get("HOST_ID", socket.gethostname().lower())
+"""
+
+[python.env]
+HOST_ID = "doctest"
+
+[java]
+disabled = "Java scenario not written yet — the page's six blocks include a Gradle file and a partial class body that need a scaffold decision."
+
+[rust]
+disabled = "Rust scenario not written yet — the page carries both sync and async variants (10 blocks) and the plan must choose one path."
+
+[owns]
+timeseries = [
+  "system_memory_used_doctest",
+  "system_memory_available_doctest",
+  "system_swap_used_doctest",
+]
+
+[expect]
+timeseries = [
+  "system_memory_used_doctest",
+  "system_memory_available_doctest",
+  "system_swap_used_doctest",
+]
+
+# Step 4 says it ingests one datapoint per series per tick. Proving the series
+# exist is not enough — the tutorial's subject is getting data in.
+[expect.datapoints]
+system_memory_used_doctest = 1

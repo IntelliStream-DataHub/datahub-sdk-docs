@@ -1,0 +1,29 @@
+page = "docs/guides/model-assets-graph.mdx"
+
+# python #1 L64  — Create the graph
+# python #2 L140 — Read the graph back
+[blocks]
+python = 2
+java = 2
+rust = 2
+
+[python]
+requires = ["quickstart"]
+timeout = 180
+
+[java]
+disabled = "Java scenario not written yet."
+
+[rust]
+disabled = "Rust scenario not written yet."
+
+# Edges are deleted with their end nodes; the sweep already orders resources
+# before datasets and retries, so naming the three nodes is enough.
+
+[owns]
+timeseries = ["engine_temperature"]
+resources = ["plant_oslo", "line_a", "press_07"]
+
+[expect]
+resources = ["plant_oslo", "line_a", "press_07"]
+stdout = ["3 nodes, 2 edges"]

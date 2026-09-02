@@ -1,0 +1,69 @@
+page = "docs/industries/technology-operations/data-centers.mdx"
+
+# Blocks on this page:
+#   python #1   L25    Set up demo data
+#   java   #1   L53    1. Catch a thermal problem early
+#   python #2   L75    1. Catch a thermal problem early
+#   rust   #1   L90    1. Catch a thermal problem early
+#   java   #2   L128   3. When racks overheat together, find the cooling unit
+#   python #3   L141   3. When racks overheat together, find the cooling unit
+#   rust   #2   L151   3. When racks overheat together, find the cooling unit
+
+[blocks]
+python = 3
+java = 2
+rust = 2
+
+[python]
+timeout = 600
+
+prologue = """
+from tutorial_support import Recorder, feed, take
+
+# Placeholders the page leaves to the reader — 'your dashboard', 'your
+# alerting'. Recorders keep what they are handed so the run can prove the
+# tutorial's logic actually reached them.
+inlet_above = Recorder("inlet_above")
+"""
+
+# The page's payoff is the listen loop, so it runs — bounded, not skipped. Two
+# declared substitutions make that possible: one starts a background writer so
+# messages actually arrive (a silent stream would prove nothing), the other caps
+# the loop at three messages and 45 seconds. Both must keep matching the page, so
+# a rewritten loop fails here rather than hanging CI.
+[[python.replace]]
+find = """with client.subscriptions.listen(["hall_2_thermal"]) as listener:"""
+repl = """with client.subscriptions.listen(["hall_2_thermal"]) as listener:
+    feed(client, ["rack_r14_inlet_temp_c"], points=40, every=0.3)"""
+
+[[python.replace]]
+find = """    for msg in listener:"""
+repl = """    for msg in take(listener, 3, 45):"""
+
+[java]
+disabled = "Java scenario not written yet."
+
+[rust]
+disabled = "Rust scenario not written yet."
+
+# The page models the network and traverses it in the next breath. The graph read
+# path trails writes by a second or two, and an empty neighbourhood is a valid
+# answer rather than an error — so without this the page prints the wrong
+# conclusion and the test cannot tell that from a real one.
+[[python.inject]]
+before = 3
+code = """
+from tutorial_support import wait_for_related
+wait_for_related(client, "rack_r14")
+"""
+
+[owns]
+events = ["thermal_warning_r14_*"]
+resources = ["crac_unit_2", "rack_r14", "rack_r15"]
+subscriptions = ["hall_2_thermal"]
+timeseries = ["rack_r14_inlet_temp_c"]
+
+[expect]
+resources = ["crac_unit_2", "rack_r14", "rack_r15"]
+subscriptions = ["hall_2_thermal"]
+timeseries = ["rack_r14_inlet_temp_c"]

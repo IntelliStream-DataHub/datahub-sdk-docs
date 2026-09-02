@@ -1,0 +1,32 @@
+page = "docs/advanced/random-forest-soft-sensor.mdx"
+
+# Blocks on this page:
+#   python #1   L42    1. Assemble lab targets against sensor features
+#   java   #1   L66    1. Assemble lab targets against sensor features
+#   rust   #1   L84    1. Assemble lab targets against sensor features
+#   python #2   L111   2. Train the regressor
+#   python #3   L131   3. Infer continuously and publish the virtual sensor
+
+[blocks]
+python = 3
+java = 1
+rust = 1
+
+[python]
+timeout = 600
+# Every series this recipe reads is seeded by the sample-data page, which the
+# docs tell the reader to run first. It runs once per session rather than being
+# composed into all thirteen recipes.
+requires_once = ["advanced__generate-sample-data"]
+
+[java]
+disabled = "Java scenario not written yet."
+
+[rust]
+disabled = "Rust scenario not written yet."
+
+[owns]
+timeseries = ["cdu_1_product_sulfur_ppm_soft"]
+
+[expect]
+timeseries = ["cdu_1_product_sulfur_ppm_soft"]

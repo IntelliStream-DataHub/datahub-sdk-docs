@@ -1,0 +1,37 @@
+page = "docs/reference/client.md"
+
+# Blocks on this page:
+#   java   #1   L17    Client & configuration
+#   python #1   L34    Client & configuration
+#   python #2   L47    Client & configuration
+#   rust   #1   L55    Client & configuration
+#   rust   #2   L69    Client & configuration
+#   java   #2   L148   Exchanging an external token (jwt-bearer)
+#   python #3   L164   Exchanging an external token (jwt-bearer)
+#   rust   #3   L182   Exchanging an external token (jwt-bearer)
+#   java   #3   L226   From HashiCorp Vault (Java)
+#   java   #4   L251   Durable ingest buffering
+#   python #4   L273   Durable ingest buffering
+#   rust   #4   L290   Durable ingest buffering
+#   java   #5   L325   Results & errors
+#   python #5   L342   Results & errors
+#   rust   #5   L357   Results & errors
+
+[blocks]
+python = 5
+java = 5
+rust = 5
+
+[python]
+disabled = """Not a tutorial: this page lists client constructors, and its snippets point at
+https://api.intellistream.ai and an external Entra/Keycloak token exchange. Running them would
+either dial production or need identity-provider secrets that prove nothing about the SDK. The
+constructors it documents are exercised where they are actually used — the buffering client in
+tutorial.toml, from_env() across every other plan."""
+
+
+[java]
+disabled = "Java scenario not written yet."
+
+[rust]
+disabled = "Rust scenario not written yet."

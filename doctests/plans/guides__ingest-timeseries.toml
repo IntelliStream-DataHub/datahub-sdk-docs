@@ -1,0 +1,45 @@
+page = "docs/guides/ingest-timeseries.mdx"
+
+# python #1 L47 — Ingest a million readings
+[blocks]
+python = 1
+java = 1
+rust = 1
+
+# The page opens on a reader who already has a series. Rather than conjuring one,
+# the quickstart runs first: this tests that the two pages compose, which is how
+# they are actually read.
+[python]
+requires = ["quickstart"]
+timeout = 900   # a million datapoints is the point of the page, not a detail to trim
+
+[java]
+disabled = "the Java block is a fragment over an undefined `readings` map; needs a prologue decision."
+
+[rust]
+disabled = "the Rust block is a fragment over an undefined `readings` vec; needs a prologue decision."
+
+# INTERMITTENT, AND THE INTERMITTENCE IS THE BUG.
+# This page fails on roughly half of runs with
+#   pyo3_runtime.PanicException: assertion `left == right` failed; left: 200, right: 204
+# from dataplatform-rust-sdk `src/timeseries/mod.rs:392`, which does
+#   assert_eq!(r.get_http_status_code().unwrap(), 204);
+# in production code. The backend answers a batched insert with 200 sometimes and 204
+# others; both are successes, and the SDK panics on one of them. A panic crosses the
+# PyO3 boundary as `pyo3_runtime.PanicException`, so a caller cannot even catch it.
+#
+# The page itself is correct — the same million-point insert succeeds when run by hand.
+# Do not paper over this by relaxing the plan: the flake is the signal.
+
+[owns]
+timeseries = ["engine_temperature"]
+
+[expect]
+timeseries = ["engine_temperature"]
+# A million rows take a while to become visible to the read path.
+settle_secs = 180.0
+
+# The page's headline is a million readings. Checking for one datapoint would let
+# a silently-truncating batch path pass, so the assertion matches the claim.
+[expect.datapoints]
+engine_temperature = 1000000

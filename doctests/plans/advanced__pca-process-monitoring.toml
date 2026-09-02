@@ -1,0 +1,33 @@
+page = "docs/advanced/pca-process-monitoring.mdx"
+
+# Blocks on this page:
+#   python #1   L43    1. Learn normal operation
+#   java   #1   L72    1. Learn normal operation
+#   rust   #1   L90    1. Learn normal operation
+#   python #2   L118   2. Define the monitoring statistics and their limits
+#   python #3   L140   3. Monitor live and name the culprit sensor
+
+[blocks]
+python = 3
+java = 1
+rust = 1
+
+[python]
+timeout = 600
+# Every series this recipe reads is seeded by the sample-data page, which the
+# docs tell the reader to run first. It runs once per session rather than being
+# composed into all thirteen recipes.
+requires_once = ["advanced__generate-sample-data"]
+
+[java]
+disabled = "Java scenario not written yet."
+
+[rust]
+disabled = "Rust scenario not written yet."
+
+[owns]
+events = ["process_deviation_cdu1_*"]
+
+# The page's payoff: a deviation event once the process leaves its normal envelope.
+[expect]
+events = ["process_deviation_cdu1_*"]

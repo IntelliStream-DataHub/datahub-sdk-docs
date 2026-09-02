@@ -1,0 +1,65 @@
+page = "docs/industries/transport-logistics/supply-chain.mdx"
+
+# Blocks on this page:
+#   python #1   L26    Set up demo data
+#   java   #1   L47    1. Model the chain of custody
+#   java   #2   L56    1. Model the chain of custody
+#   python #2   L69    1. Model the chain of custody
+#   rust   #1   L83    1. Model the chain of custody
+#   java   #3   L106   2. Trace a recall downstream
+#   python #3   L120   2. Trace a recall downstream
+#   rust   #2   L133   2. Trace a recall downstream
+
+[blocks]
+python = 3
+java = 3
+rust = 2
+
+[python]
+timeout = 600
+# The demo-data block and step 1 are the same action written twice: the block
+# creates the graph inline, the step creates it from a `stations`/`nodes` variable.
+# A reader does one or the other, and running both is a duplicate create. The
+# numbered step is the tutorial, so that is what runs; the client it needs comes
+# from the quickstart, as it would for a reader arriving here.
+exclude = [1]
+requires = ["quickstart"]
+
+prologue = """
+
+"""
+
+[java]
+disabled = "Java scenario not written yet."
+
+[rust]
+disabled = "Rust scenario not written yet."
+
+# The page names `nodes` in this step but only ever builds the list inside the
+# demo-data block above. This is that same list, so the step models the world the
+# page describes rather than an invented one.
+[[python.inject]]
+before = 2
+code = """
+nodes = [intellistream_datahub_sdk.Resource(external_id=x, name=x, labels=[x]) for x in
+     ["lot_acme_8842", "part_bearing_55", "product_gearbox_910", "shipment_eu_2204"]]
+"""
+
+# The page models the network and traverses it in the next breath. The graph read
+# path trails writes by a second or two, and an empty neighbourhood is a valid
+# answer rather than an error — so without this the page prints the wrong
+# conclusion and the test cannot tell that from a real one.
+[[python.inject]]
+before = 3
+code = """
+from tutorial_support import wait_for_related
+wait_for_related(client, "lot_acme_8842")
+"""
+
+[owns]
+resources = ["lot_acme_8842", "part_bearing_55", "product_gearbox_910", "shipment_eu_2204"]
+
+# Step 1 builds the chain of custody through `nodes`, and the recall walk is the payoff.
+[expect]
+resources = ["lot_acme_8842", "part_bearing_55", "product_gearbox_910", "shipment_eu_2204"]
+stdout = ["recall shipment:"]

@@ -1,0 +1,56 @@
+page = "docs/industries/agriculture-food/salmon-farming.mdx"
+
+# Blocks on this page:
+#   python #1   L27    Set up demo data
+#   java   #1   L51    1. Watch pen conditions live — and aerate before a crash
+#   python #2   L73    1. Watch pen conditions live — and aerate before a crash
+#   rust   #1   L88    1. Watch pen conditions live — and aerate before a crash
+#   java   #2   L119   2. Protect feed margin
+#   python #3   L133   2. Protect feed margin
+#   rust   #2   L146   2. Protect feed margin
+
+[blocks]
+python = 3
+java = 2
+rust = 2
+
+[python]
+timeout = 600
+
+prologue = """
+from tutorial_support import Recorder, feed, take
+
+# Placeholders the page leaves to the reader — 'your dashboard', 'your
+# alerting'. Recorders keep what they are handed so the run can prove the
+# tutorial's logic actually reached them.
+oxygen_below = Recorder("oxygen_below")
+"""
+
+# The page's payoff is the listen loop, so it runs — bounded, not skipped. Two
+# declared substitutions make that possible: one starts a background writer so
+# messages actually arrive (a silent stream would prove nothing), the other caps
+# the loop at three messages and 45 seconds. Both must keep matching the page, so
+# a rewritten loop fails here rather than hanging CI.
+[[python.replace]]
+find = """with client.subscriptions.listen(["farm_hardanger_pens"]) as listener:"""
+repl = """with client.subscriptions.listen(["farm_hardanger_pens"]) as listener:
+    feed(client, ["pen_h_07_dissolved_oxygen_mg_l"], points=40, every=0.3)"""
+
+[[python.replace]]
+find = """    for msg in listener:"""
+repl = """    for msg in take(listener, 3, 45):"""
+
+[java]
+disabled = "Java scenario not written yet."
+
+[rust]
+disabled = "Rust scenario not written yet."
+
+[owns]
+events = ["low_oxygen_h07_*"]
+subscriptions = ["farm_hardanger_pens"]
+timeseries = ["pen_h_07_biomass_kg", "pen_h_07_dissolved_oxygen_mg_l", "pen_h_07_feed_kg", "pen_h_07_water_temp_c"]
+
+[expect]
+subscriptions = ["farm_hardanger_pens"]
+timeseries = ["pen_h_07_biomass_kg", "pen_h_07_dissolved_oxygen_mg_l", "pen_h_07_feed_kg", "pen_h_07_water_temp_c"]
