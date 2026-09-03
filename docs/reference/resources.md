@@ -864,13 +864,12 @@ create does, and a naming-policy refusal is the same `400` problem body a create
 | `403` | A data set the caller may not write to. |
 | `413` | Over a transfer limit: more than 2 000 000 nodes or relationships in the file, or a file larger than 512 MB. Nothing is imported. |
 
-:::caution The general request-body cap applies first
-`POST /resources/import` is not exempt from the [request body size](./limits#request-body-size)
-cap, which is 4 MiB unless the deployment raises `datahub.limits.max-body-bytes`. A larger
-file is refused with that cap's own `413` (`.../errors/request-too-large`) before the import
-reads it, so the 512 MB figure above is the format's ceiling, not what a default deployment
-accepts. The upload's size also counts against the tenant's daily ingest byte quota.
-:::
+Like a file upload, the import is exempt from the general
+[request body size](./limits#request-body-size) cap and from the daily ingest byte quota: it
+is consumed as it arrives, and the 512 MB ceiling is checked on the bytes as they stream in.
+The nodes and relationships it creates count against their own daily quotas through the
+ordinary create path. A reverse proxy in front of the API has to pass the upload through
+unbuffered and uncapped, as the shipped nginx examples do for `/resources/import`.
 
 No client wraps the pair. Call them over HTTP with the bearer token the client already holds:
 

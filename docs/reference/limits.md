@@ -84,6 +84,7 @@ them not being real is not.
 | `POST /timeseries/data` | 16 MiB |
 | Everything else | 4 MiB |
 | `PUT /files` and `GET /files/download/**` | exempt, they stream |
+| `POST /resources/import` and `GET /resources/export/{id}` | exempt, they stream; the [file format](#graph-transfer) has its own ceilings |
 
 ```json
 {
@@ -97,11 +98,6 @@ them not being real is not.
 
 A `413` is **terminal**. The same request will never become acceptable by being sent again,
 so split the batch instead of retrying it.
-
-`POST /resources/import` is under the 4 MiB cap like everything else, even though the
-[graph file format](./resources#graph-transfer) itself allows up to 512 MB. A deployment that
-imports larger graphs raises `datahub.limits.max-body-bytes`, which is deployment-wide, and
-the ceiling on any reverse proxy in front of it.
 
 ## Graph transfer {#graph-transfer}
 
