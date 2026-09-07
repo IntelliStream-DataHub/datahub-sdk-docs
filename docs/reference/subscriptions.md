@@ -21,7 +21,7 @@ sub.setName("Engine temps");
 sub.setTimeseries(List.of(IdCollection.createFromExternalId("engine_temperature")));
 client.subscriptions().create(List.of(sub));
 
-DataWrapper<Subscription> all = client.subscriptions().list(new SubscriptionRetriever());
+DataWrapper<Subscription> all = client.subscriptions().filter(new SubscriptionRetriever());
 
 client.subscriptions().delete(List.of(IdCollection.createFromExternalId("engine_temps")));
 ```
@@ -70,6 +70,37 @@ Access is granted through Keycloak **organization groups**: `/datasets/<external
 data set (and everything beneath it), or the wildcard `/datasets/*/read` for all of them.
 [Dataset access control →](./datasets#access-control)
 :::
+
+## Find subscriptions {#find}
+
+`GET /subscriptions?limit=` returns the newest `limit` subscriptions, no body required. For
+anything narrower, `POST /subscriptions/filter` takes the same envelope every other collection's
+filter does, with criteria combined by **AND**:
+
+| Criterion | Matching |
+| --- | --- |
+| `id`, `externalId`, `name` | Patterns, case-insensitive. `*` and `%` are wildcards, `_` is literal, and an entry with no wildcard matches exactly. |
+| `timeseries` | Subscriptions bound to **any** of these time-series, each named by `id`, `externalId`, or both. |
+| `createdTime`, `lastUpdatedTime` | `{ "min": …, "max": … }` bounds. |
+
+`limit` defaults to 1000 and is capped at 10000, and the page can be ordered and walked exactly as
+[timeseries](./timeseries#sorting-and-paging) can: `sort` takes `id`, `externalId`, `name`,
+`createdTime` or `lastUpdatedTime`, and the response carries `nextCursor` while more remain.
+
+```json
+{
+  "limit": 100,
+  "filter": {
+    "externalId": ["engine_*"],
+    "timeseries": [{ "externalId": "engine_temperature" }]
+  },
+  "sort": { "property": ["createdTime"], "order": "asc" }
+}
+```
+
+This replaced `POST /subscriptions/list`, which took a `filter` argument in a shape nothing else
+in the API used: its own default page size, a sort that was not validated, and no cursor, so a
+tenant past the first page could not reach the rest.
 
 ## Live delivery
 
@@ -186,8 +217,10 @@ the server redelivers it — so make your handler idempotent.
 | Operation | Java | Python | Rust |
 | --- | --- | --- | --- |
 | Create | `subscriptions().create` | `subscriptions.create` | `subscriptions.create` |
-| List | `subscriptions().list` | `subscriptions.list` | `subscriptions.list` |
+| List | `subscriptions().list` (HTTP `GET /subscriptions`) | `subscriptions.list` | `subscriptions.list` |
+| Filter | `subscriptions().filter` | HTTP | HTTP |
 | Delete | `subscriptions().delete` | `subscriptions.delete` | `subscriptions.delete` |
 | Live delivery | `subscriptions().listen` | `subscriptions.listen` | `subscriptions.listen` |
 
-Full parity — subscriptions are the one area where all three clients cover the same ground.
+Close to parity. Java gained `filter` when the endpoint did; the Python and Rust clients
+reach the same criteria through the endpoint directly.

@@ -103,7 +103,7 @@ replenishment. See [Datasets reference](/reference/datasets) and
 ```java
 DataSetRetreiver retriever = new DataSetRetreiver();
 retriever.getFilter().setExternalIdPrefix("region_nordics");   // scope to the region's dataset
-DataWrapper<DataSetModel> regional = client.datasets().list(retriever);
+DataWrapper<DataSetModel> regional = client.datasets().filter(retriever);
 ```
 
 </TabItem>

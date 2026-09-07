@@ -336,6 +336,33 @@ To disconnect two resources without touching either of them, [delete the edge](.
 [Deleting a resource](#delete) is the heavier move: it takes every relation the resource had
 with it.
 
+## List
+
+`GET /resources?limit=` returns the newest `limit` resources you may read, with no body and no
+criteria. It is the cheap "what have I got" read, and **every node type answers it the same way**:
+
+| Endpoint | Returns |
+| --- | --- |
+| `GET /resources?limit=` | The newest resources you may read. |
+| `GET /assets?limit=` | The same, restricted to assets. |
+| `GET /datasets?limit=` | Data sets. |
+| `GET /timeseries?limit=` | Time-series. It also takes `dataSetId=` to scope to one data set and everything beneath it. |
+| `GET /events?limit=` | Events. |
+| `GET /policies?limit=` | Policies. |
+| `GET /functions?limit=` | Functions. |
+
+`limit` defaults to **1000** and is capped at **10000**; above that is a `400` rather than a
+silent clamp, so a short page always means you ran out of rows. Absent, zero or negative all mean
+"you decide" and give you the default. These are the same numbers `POST /<collection>/filter`
+uses, so which one you reach for cannot change the page size you get.
+
+The listing is the **first page only**: it never returns a `nextCursor`. A walk needs a `sort` and
+a cursor to continue it, and both belong in a request body, so paging lives on `/filter` below.
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" "$API/resources?limit=50"
+```
+
 ## Filter
 
 `POST /resources/filter` finds resources by structured criteria. Everything you supply is
@@ -825,9 +852,10 @@ distinguishable `403` would confirm that an id exists.
 ## The `/functions` endpoints {#functions}
 
 A **function** is a plain node distinguished by its `FUNCTION` label, with the same shape as a
-resource. Its family is `POST /functions/create`, `GET /functions/list`, `GET /functions/{id}`,
+resource. Its family is `POST /functions/create`, `GET /functions`, `GET /functions/{id}`,
 `POST /functions/update` and `POST` or `DELETE /functions/delete`, on the same shared pipeline.
-`GET /functions/list` takes no filter: the inventory is expected to be small.
+`GET /functions` takes no criteria beyond `limit`: the inventory is expected to be small. It was
+`GET /functions/list`, the one collection that spelled the listing with a path segment.
 
 `GET /functions/{id}` is new, and completes the read surface: it returns the one function
 wrapped in `items`, and reports a function you may not read as missing (`404`) rather than

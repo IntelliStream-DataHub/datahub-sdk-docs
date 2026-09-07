@@ -116,8 +116,10 @@ entries are combined with OR — which is why they are named in the singular. `l
 1000 and is capped at 10000, and the page can be ordered and walked exactly as
 [timeseries](./timeseries#sorting-and-paging) can.
 
-`POST /datasets/list` is the same handler with an empty filter, so it returns everything your
-token may read.
+`GET /datasets?limit=` is the shorthand for this call with no criteria: the newest `limit` data
+sets your token may read, no body required. It replaced `POST /datasets/list`, which took this
+very body and ran this very handler, so the two were one operation under two names. Criteria,
+ordering and paging stay here on `/filter`; the listing returns no `nextCursor`.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
