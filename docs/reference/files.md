@@ -182,6 +182,32 @@ let written = api.files.download_to_path(99, "q2.csv").await?;
 </TabItem>
 </Tabs>
 
+### Partial and conditional reads
+
+`GET /files/download/{id}` takes a byte range and a conditional request. The clients do not wrap
+this yet, so it is for calling the endpoint over HTTP directly: resuming a large download that
+dropped, or reading a file's header without pulling the whole thing.
+
+| Request header | Response |
+| --- | --- |
+| `Range: bytes=0-1023` | `206` with `Content-Range`, carrying only those bytes |
+| `Range: bytes=-1024` | The last 1024 bytes |
+| `Range: bytes=1024-` | Everything from that offset onwards |
+| `If-None-Match: "<etag>"` | `304` while the file is unchanged |
+| `If-Range: "<etag>"` | The range while the file is unchanged, otherwise the whole file |
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" -H "Range: bytes=0-1023" \
+  https://api.example.com/files/download/99
+```
+
+The `ETag` is the file's SHA-256, the same value `checksum` carries in its metadata. Send it back
+as `If-Range` when resuming: without it, a download that resumes against a file which changed in
+the meantime splices two different bodies together and reports success.
+
+A range starting past the end of the file gets a `416`. Several ranges in one header are answered
+with the whole file, since `multipart/byteranges` is not supported.
+
 ## Delete
 
 <Tabs groupId="lang">
