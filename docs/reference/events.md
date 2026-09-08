@@ -286,36 +286,165 @@ same pattern on `createdTime` double-counts the boundary millisecond.
 
 ### Advanced filters {#advanced-filters}
 
-`advancedFilter` sits alongside `filter` and builds a boolean expression when flat AND is not
-enough, "type is alarm **or** the source is SAP", or "everything except the `test_` prefix".
-Combine with `and`, `or` and `not`; the leaves take one of three operators:
-
-| Operator | Meaning |
-| --- | --- |
-| `equals` | `property` equals `value`. |
-| `prefix` | `property` starts with `value`. |
-| `in` | `property` is one of `values`. |
-
-Filterable properties are `id`, `externalId`, `type`, `subType`, `source`, `dataSetId` and
-`metadata`. Anything else is rejected with a `400` naming the offending property, rather than
-being ignored.
+`advancedFilter` sits alongside `filter` and takes a **boolean expression**, written the way you
+would write a `WHERE` clause. Use it when flat AND is not enough: "type is alarm **or** the source
+is SAP", or "everything except the `test_` prefix".
 
 ```json
 {
   "filter": { "type": "alarm" },
-  "advancedFilter": {
-    "or": [
-      { "equals": { "property": ["source"], "value": "SAP" } },
-      { "prefix": { "property": ["externalId"], "value": "PO-" } }
-    ]
-  },
+  "advancedFilter": "source = 'SAP' OR externalId LIKE 'PO-%'",
   "limit": 200
 }
 ```
 
-Two things to know. `property` is a list, but only its **first** entry is read, there is no
-nested path into `metadata`. And every value is compared as a string, so `dataSetId` matches
-`"43"`, not `43`.
+`filter` and `advancedFilter` are combined with **AND**, so the example above means "an alarm,
+and additionally either from SAP or with a `PO-` external id". Either may be used without the
+other.
+
+The dialect is **PostgreSQL-flavoured**. Function names, `::` casts, `ILIKE`, `<>` beside `!=`,
+`--` and `/* */` comments and single-quoted strings with `''` escaping all behave as they do in
+Postgres. A leading `WHERE` is accepted and ignored, so pasting a clause out of a Postgres query
+usually works.
+
+:::caution `AND` binds tighter than `OR`
+As in SQL, so `a OR b AND c` means `a OR (b AND c)`, which is often not what the parentheses in
+the rest of an expression suggest. Parenthesise when you mean otherwise; nothing warns you,
+because the expression is valid either way.
+:::
+
+#### What you can filter on
+
+| Field | Type |
+| --- | --- |
+| `id` | Event id (UUID) |
+| `externalId`, `type`, `subType`, `status`, `source`, `description` | Text |
+| `dataSetId` | Number |
+| `eventTime`, `createdTime`, `lastUpdatedTime` | Timestamp |
+| `metadata['key']` | Text, always. See below. |
+
+Names are the same ones `filter` uses, and matching is case-insensitive, so `subtype` and
+`subType` both work. Anything else is rejected by name; there is no way to reach a column that is
+not on this list.
+
+#### Operators
+
+`=` `!=` `<>` `<` `<=` `>` `>=`, `LIKE`, `ILIKE`, `IN (…)`, `BETWEEN … AND …`, `IS NULL`, and
+`NOT` before any of them. Combine with `AND`, `OR`, `NOT` and parentheses.
+
+```text
+type NOT LIKE 'pump%'
+status IN ('OPEN', 'IN_PROGRESS')
+dataSetId BETWEEN 1 AND 5
+eventTime > '2026-01-01' AND eventTime < '2026-02-01'
+subType IS NOT NULL
+```
+
+Timestamps accept `2026-01-01`, `2026-01-01 12:30` and `2026-01-01T12:30:00Z`. A value that is
+not a date is refused before the query runs, rather than failing inside the database.
+
+A quoted value may not contain a tab or a newline. Those cannot be sent as query parameters, so
+they are refused with a 400 rather than producing a confusing failure further down; match around
+them with `LIKE` instead.
+
+#### Functions
+
+| Function | Meaning |
+| --- | --- |
+| `to_timestamp(x)`, `to_date(x)` | Read text as a date or timestamp |
+| `to_int(x)`, `to_number(x)` | Read text as a whole number or a decimal |
+| `to_bool(x)` | Read text as a boolean: `true/false`, `t/f`, `yes/no`, `y/n`, `on/off`, `1/0` |
+| `date_part('year' \| 'month' \| 'day', x)` | Extract a part of a date, as a number |
+| `has_key('k')` | Whether the event's metadata has this key |
+| `lower(x)`, `upper(x)`, `length(x)` | As in Postgres |
+| `now()` | Current time |
+
+`::` is shorthand for the converters: `metadata['n']::int` is the same as `to_int(metadata['n'])`.
+Cast targets are `int`, `bigint`, `integer`, `float`, `numeric`, `boolean`, `bool`, `date` and
+`timestamp`.
+
+Any other function is rejected. This is an allow-list rather than a block-list, so nothing else in
+the underlying database is reachable, whatever it is called.
+
+#### Metadata is text, and you have to say what it is
+
+Every metadata value is stored as text, so comparing one as anything else needs a converter. This
+is deliberate: inferring the type from the other side of the comparison would mean one operand
+silently changing how the other is read.
+
+```text
+metadata['count'] > 5                    ✗ 400, "wrap it: to_int(metadata['count'])"
+to_int(metadata['count']) > 5            ✓
+metadata['count']::int > 5               ✓  same thing
+metadata['site'] = 'bergen'              ✓  text against text needs nothing
+```
+
+:::caution A missing metadata key reads as an empty string, not null
+So `metadata['nope'] IS NULL` would never match anything, and `metadata['nope'] = ''` matches
+every event that lacks the key. Ask with `has_key('nope')` instead. As a convenience,
+`metadata['k'] IS NULL` is answered as "this key is absent", because the literal reading is
+never useful.
+
+`subType` and `status` are genuinely nullable, so `IS NULL` on those two means what it says.
+:::
+
+#### When an expression is refused
+
+A rejected expression is a **400**, and no query runs: an expression the API cannot read is never
+partly applied, which would return everything you may see while quietly ignoring what you asked
+for. The problem detail carries enough to fix it:
+
+```json
+{
+  "type": "https://intellistream.ai/errors/filter-expression",
+  "title": "Invalid filter expression",
+  "detail": "'toDate' is the ClickHouse spelling. This filter uses PostgreSQL names, so use 'to_date'.",
+  "offset": 0,
+  "length": 6,
+  "suggestion": "to_date",
+  "suggestedQuery": "to_date(metadata['t']) = '2026-01-01'",
+  "help": "Function names follow PostgreSQL; ClickHouse spellings are mapped internally."
+}
+```
+
+`offset` and `length` point at the token at fault, so an editor can underline it, and
+`suggestedQuery` is your expression with the fix already applied. `suggestedQuery` is **absent
+when the repair is ambiguous**, so treat its presence as "there is one obvious fix" rather than
+"there is a fix". Common corrections are named outright rather than guessed at: database
+spellings such as `toDate` or `mapContains`, and physical column names such as `sub_type` or
+`event_time`, both map back to what this API calls them.
+
+#### Limits
+
+An expression may be 4 096 characters, nest 20 levels, hold 200 terms and call 20 functions.
+Subqueries, `SELECT`, `HAVING`, `UNION` and `JOIN` are not supported; those keywords are
+recognised so that using one tells you the feature is missing rather than that your column name
+is unknown.
+
+#### Moving from the old nested form
+
+Before this release `advancedFilter` took a nested `and`/`or`/`not` object with `equals`,
+`prefix` and `in` leaves. That form is now refused with a 400.
+
+| Old | Now |
+| --- | --- |
+| `{"equals": {"property": ["type"], "value": "alarm"}}` | `type = 'alarm'` |
+| `{"prefix": {"property": ["externalId"], "value": "PO-"}}` | `externalId LIKE 'PO-%'` |
+| `{"in": {"property": ["status"], "values": ["a","b"]}}` | `status IN ('a', 'b')` |
+| `{"and": [x, y]}` | `x AND y` |
+| `{"or": [x, y]}` | `x OR y` |
+| `{"not": x}` | `NOT x` |
+| `range`, `containsAny`, `containsAll`, `isSet` (SDK-side only) | See below |
+
+The last row is worth knowing if you used the Rust SDK: `range`, `containsAny` and `containsAll`
+had no server-side implementation and returned a 500, and `isSet` reached a code path that could
+not read the property it was given. They never worked, so there is nothing to migrate, and the
+equivalents are now `BETWEEN`, `IN`, repeated `AND`, and `has_key` or `IS NOT NULL`.
+
+Two other differences: values used to be compared as strings whatever the field, so `dataSetId`
+matched `"43"` rather than `43`, and the old `property` was a list whose first entry alone was
+read, with no way to reach an individual metadata key. Both are gone: types are real, and
+`metadata['key']` is addressable.
 
 ### Ordering and paging {#paging}
 
@@ -773,6 +902,7 @@ The three clients cover every event endpoint, the facet endpoints included.
 | Filter | `events().filter` | `events.filter` | `events.filter` |
 | Filter with `sort` | `EventRetreiver.sort` | `sort_by` / `sort_order` | `set_sort` |
 | Filter with paging | `EventRetreiver.cursor` | `cursor` | `set_cursor` |
+| [Advanced filter](#advanced-filters) | `EventRetreiver.setAdvancedFilter` | `advanced_filter` | `set_advanced_filter` |
 | Update | `events().update` | `events.update` | `events.update` |
 | Full-text search | `events().search` | `events.search` | `events.search` |
 | Count | `events().count` | `events.count` | `events.count` |
