@@ -73,15 +73,23 @@ data set (and everything beneath it), or the wildcard `/datasets/*/read` for all
 
 ## Find subscriptions {#find}
 
-`GET /subscriptions?limit=` returns the newest `limit` subscriptions, no body required. For
-anything narrower, `POST /subscriptions/filter` takes the same envelope every other collection's
-filter does, with criteria combined by **AND**:
+`GET /subscriptions?limit=` returns the newest `limit` subscriptions your token may read, no
+body required. For anything narrower, `POST /subscriptions/filter` takes the same envelope every
+other collection's filter does, with criteria combined by **AND**:
 
 | Criterion | Matching |
 | --- | --- |
 | `id`, `externalId`, `name` | Patterns, case-insensitive. `*` and `%` are wildcards, `_` is literal, and an entry with no wildcard matches exactly. |
 | `timeseries` | Subscriptions bound to **any** of these time-series, each named by `id`, `externalId`, or both. |
 | `createdTime`, `lastUpdatedTime` | `{ "min": …, "max": … }` bounds. |
+
+Each field above except `createdTime` and `lastUpdatedTime` takes **either a bare value or an
+array**, and the entries of an array are combined with **OR**, exactly as on the other
+collections' filters.
+
+Both endpoints return only subscriptions you can read in full: every timeseries a subscription
+binds must sit in a dataset you have read access to, the same rule `create` above and
+[live delivery](#live-delivery) enforce. One ungranted timeseries hides the whole subscription.
 
 `limit` defaults to 1000 and is capped at 10000, and the page can be ordered and walked exactly as
 [timeseries](./timeseries#sorting-and-paging) can: `sort` takes `id`, `externalId`, `name`,
