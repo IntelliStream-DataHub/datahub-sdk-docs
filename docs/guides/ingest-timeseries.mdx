@@ -8,18 +8,20 @@ import TabItem from '@theme/TabItem';
 # High-throughput ingestion
 
 A common job: push a steady, high-volume stream of sensor readings in so a dashboard
-or alerting rule can act on them. The SDK does the heavy lifting — it **chunks the
-data into batches and sends them concurrently**, retrying transient failures.
+or alerting rule can act on them. The SDK **chunks the data into batches and sends them
+concurrently**, retrying transient failures.
 
-:::note How it works
-Datapoints are split into batches (default **10,000** per request — the store is
-optimised for large batches), sent concurrently up to a bounded in-flight limit, and
-transient failures (HTTP 429/5xx, network) are retried. The Java client returns an
-`IngestResult` summarising what landed and what didn't.
+:::info Needs a sandbox
+This guide writes into `engine_temperature`, which section **A** of
+[Seed a sandbox](/guides/seed-a-sandbox) creates.
 :::
 
-:::caution Stay inside the ingest caps
-The defaults already fit, so this only matters if you have tuned something:
+:::note How it works, and the caps it fits
+Datapoints are split into batches of **10,000** per request (the store is optimised for
+large batches), sent concurrently up to a bounded in-flight limit, and transient failures
+(HTTP 429/5xx, network) are retried. The Java client returns an `IngestResult` summarising
+what landed and what didn't. The defaults already fit the caps, so the table only matters if
+you have tuned something:
 
 | Cap | Value |
 | --- | --- |
@@ -41,9 +43,19 @@ and both retried for you. See [Limits & quotas](/reference/limits).
 `ingest` groups datapoints by series external id and returns an `IngestResult`.
 
 ```java
+import java.time.Instant;
+import java.util.*;
+
 var client = DatahubClient.fromEnv();
 
-// readings: Map<String, List<Datapoint>> grouped by time-series external id
+// a million readings, one per second from the start of 2026
+Instant start = Instant.parse("2026-01-01T00:00:00Z");
+List<Datapoint> points = new ArrayList<>(1_000_000);
+for (int i = 0; i < 1_000_000; i++) {
+    points.add(Datapoint.of(start.plusSeconds(i), 90 + 5 * Math.random()));
+}
+Map<String, List<Datapoint>> readings = Map.of("engine_temperature", points);
+
 IngestResult result = client.timeseries().ingest(readings,
     IngestOptions.builder()
         .batchSize(10_000)     // datapoints per request
@@ -52,6 +64,10 @@ IngestResult result = client.timeseries().ingest(readings,
         .build());
 
 System.out.printf("ingested %,d, failed %,d%n", result.succeeded(), result.failed());
+if (!result.isComplete()) {
+    result.errors().forEach(e -> System.err.println(e.statusCode() + ": " + e.message()));
+    throw new IllegalStateException("ingest incomplete");
+}
 ```
 
 </TabItem>
@@ -60,34 +76,67 @@ System.out.printf("ingested %,d, failed %,d%n", result.succeeded(), result.faile
 `insert_from_lists` takes whole arrays (NumPy / pandas) and batches them for you.
 
 ```python
-import numpy as np, pandas as pd
+import intellistream_datahub_sdk, numpy as np, pandas as pd
 
-client = DataHubClient.from_env()
+client = intellistream_datahub_sdk.DataHubClient.from_env()
 
+# a million readings, one per second from the start of 2026
 client.timeseries.insert_from_lists(
     timestamps=pd.date_range("2026-01-01", periods=1_000_000, freq="s", tz="UTC"),
-    values=np.random.rand(1_000_000),
+    values=90 + 5 * np.random.rand(1_000_000),
     ts="engine_temperature")
+
+# read the first hour back: 3 600 readings
+rf = intellistream_datahub_sdk.RetrieveFilter(
+    ts="engine_temperature",
+    start=pd.Timestamp("2026-01-01 00:00", tz="UTC"),
+    end=pd.Timestamp("2026-01-01 01:00", tz="UTC"),
+    limit=10_000)
+points = client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()
+print(f"{len(points)} readings in the first hour")
+assert len(points) >= 3600, len(points)
 ```
 
 </TabItem>
 <TabItem value="rust" label="Rust">
 
-`insert_datapoints` auto-batches large inputs (chunks above ~100k points).
+`insert_datapoints` auto-batches large inputs (chunks at the 100 000-point collection cap).
 
 ```rust
+use chrono::{Duration, TimeZone, Utc};
 use intellistream_datahub_sdk::create_api_service;
-use intellistream_datahub_sdk::generic::{DataWrapper, DatapointsCollection};
+use intellistream_datahub_sdk::generic::{DataWrapper, DatapointString, DatapointsCollection, RetrieveFilter};
 
 let api = create_api_service();
+
+// a million readings, one per second from the start of 2026
+let start = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap();
+let readings: Vec<DatapointString> = (0..1_000_000)
+    .map(|i| DatapointString::from_datetime(
+        start + Duration::seconds(i),
+        &format!("{:.2}", 90.0 + (i % 50) as f64 / 10.0)))
+    .collect();
 
 let mut dw = DataWrapper::new();
 dw.add_item(DatapointsCollection {
     external_id: Some("engine_temperature".into()),
-    datapoints: readings,        // Vec<DatapointString { timestamp, value }>
+    datapoints: readings,
     ..Default::default()
 });
 api.time_series.insert_datapoints(&mut dw).await?;
+
+// read the first hour back: 3 600 readings
+let first_hour = RetrieveFilter {
+    external_id: Some("engine_temperature".into()),
+    start: Some(start),
+    end: Some(start + Duration::hours(1)),
+    limit: Some(10_000),
+    ..Default::default()
+};
+let points = api.time_series.retrieve_datapoints(&DataWrapper::from(vec![first_hour])).await?;
+let n = points.get_items()[0].datapoints.len();
+println!("{n} readings in the first hour");
+assert!(n >= 3600, "expected 3600 readings, got {n}");
 ```
 
 </TabItem>
@@ -105,14 +154,14 @@ The `ingest` knobs let you trade throughput against load on the server:
 | `failFast` | `false` | Abort on the first failed batch instead of collecting errors. |
 
 When `failFast` is off, inspect `result.errors()` for the per-batch failures. See the
-[Time-series reference](/reference/timeseries#ingestresult) for the full result shape.
+[Time series reference](/reference/timeseries#ingestresult) for the full result shape.
 
 ## Then chart the trend
 
-Once the data is in, roll it up to hourly or daily buckets for a dashboard — see
-[Query & aggregate time-series](./query-and-aggregate.mdx).
+Once the data is in, roll it up to hourly or daily buckets for a dashboard, see
+[Query & aggregate time series](./query-and-aggregate.mdx).
 
 :::warning Ordering
-Batches are sent in parallel, so there is **no cross-batch ordering guarantee** —
+Batches are sent in parallel, so there is **no cross-batch ordering guarantee**,
 which is fine for time-stamped data, since each datapoint carries its own timestamp.
 :::

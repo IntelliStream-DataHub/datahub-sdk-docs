@@ -8,7 +8,7 @@ import TabItem from '@theme/TabItem';
 # Client & configuration
 
 The client is the entry point: it owns a shared HTTP connection and token handling and
-exposes one accessor per service. It is safe to share — **create one and reuse it** for
+exposes one accessor per service. It is safe to share: **create one and reuse it** for
 the lifetime of your application.
 
 <Tabs groupId="lang">
@@ -42,7 +42,7 @@ client = DataHubClient.from_envfile("/path/to/.env")
 client = DataHubClient(base_url="https://api.intellistream.ai", token="...")
 ```
 
-For `async`/`await`, use `AsyncDataHubClient` instead — same methods, awaited:
+For `async`/`await`, use `AsyncDataHubClient` instead, same methods, awaited:
 
 ```python
 from intellistream_datahub_sdk import AsyncDataHubClient
@@ -63,7 +63,7 @@ Every method is `async`, so call them from an async runtime (e.g. `#[tokio::main
 `.await` the result.
 
 Don't want async? Enable the `blocking` cargo feature and use
-`intellistream_datahub_sdk::blocking` instead — the same services and methods without
+`intellistream_datahub_sdk::blocking` instead, the same services and methods without
 `.await`, driven by the SDK's own runtime (the `reqwest` / `reqwest::blocking` split):
 
 ```rust
@@ -80,7 +80,7 @@ let api = blocking::create_api_service();
 | Service | Java | Python | Rust |
 | --- | --- | --- | --- |
 | Resources | `client.resources()` | `client.resources` | `api.resources` |
-| Time-series | `client.timeseries()` | `client.timeseries` | `api.time_series` |
+| Time series | `client.timeseries()` | `client.timeseries` | `api.time_series` |
 | Datasets | `client.datasets()` | `client.datasets` | `api.datasets` |
 | Events | `client.events()` | `client.events` | `api.events` |
 | Units | `client.units()` | `client.units` | `api.units` |
@@ -97,7 +97,6 @@ bearer token **or** OAuth2 client-credentials (the SDK fetches and refreshes the
 | `BASE_URL` | API base URL (required) |
 | `TOKEN` | Static bearer token |
 | `CLIENT_ID` / `CLIENT_SECRET` / `TOKEN_URI` | OAuth2 client-credentials (all three) |
-| `PROJECT_NAME` | Optional project/tenant hint |
 
 `fromEnv()` / `from_env()` / `create_api_service()` read these from the environment,
 falling back to a `.env` file in the working directory (real environment variables win).
@@ -117,8 +116,6 @@ When the claim is present but names an organization this deployment holds no ten
 (never onboarded, or since removed), every call fails **`403`** with an
 `application/problem+json` body of `type: ".../errors/unknown-tenant"` naming the refused
 `organizationId`. Retrying never helps: an administrator has to register the organization.
-This previously surfaced as a `500`, so retry logic that keys on 5xx should be told to give
-up on it.
 
 | Variable | Java builder | Python kwarg | Rust setter | When you need it |
 | --- | --- | --- | --- | --- |
@@ -135,8 +132,8 @@ up on it.
 | The identity provider refused the token | Calls succeed, then start failing part-way through a run | Get a new token |
 
 The second one catches long-running processes. The API checks your token locally (signature,
-expiry, issuer) and separately reads your dataset grants from the identity provider's UserInfo
-endpoint, so a token can pass the first check and still be refused by the second: it is unexpired,
+expiry, issuer) and separately reads your data set grants from the identity provider's UserInfo
+endpoint. A token can pass the first check and still be refused by the second: it is unexpired,
 but the session behind it has ended, because an idle or maximum session lifetime elapsed or
 somebody signed out. The response carries `WWW-Authenticate: Bearer error="invalid_token"` and a
 problem+json body with `type: ".../errors/token-rejected"`.
@@ -168,7 +165,7 @@ Setting an assertion source switches the request at `TOKEN_URI` from client-cred
 
 | Variable | Java builder | Python kwarg | Rust setter | Meaning |
 | --- | --- | --- | --- | --- |
-| `ASSERTION` | `.assertion(...)` | `assertion=` | `set_assertion(...)` | A ready-made JWT. Never refreshed — prefer the credentials below. |
+| `ASSERTION` | `.assertion(...)` | `assertion=` | `set_assertion(...)` | A ready-made JWT. Never refreshed, prefer the credentials below. |
 | `ASSERTION_CLIENT_ID` / `ASSERTION_CLIENT_SECRET` / `ASSERTION_TOKEN_URI` | `.assertionCredentials(...)` | `assertion_client_id=` / `assertion_client_secret=` / `assertion_token_url=` | `set_assertion_credentials(...)` | Fetch the assertion with client credentials from another provider (all three). |
 | `ASSERTION_SCOPE` | `.assertionScope(...)` | `assertion_scope=` | `set_assertion_scope(...)` | `scope` for the assertion request. |
 | `ASSERTION_AUDIENCE` | `.assertionAudience(...)` | `assertion_audience=` | `set_assertion_audience(...)` | `audience` for the assertion request. |
@@ -242,16 +239,17 @@ ASSERTION_SCOPE=api://<entra-application-id>/.default
 ```
 
 The exchanged token is cached and refreshed exactly like a client-credentials one. The assertion
-itself is **never** cached — providers commonly reject a replayed assertion, so every exchange
+itself is **never** cached, providers commonly reject a replayed assertion, so every exchange
 starts from a fresh request.
 
 :::caution Server-side setup is required
 The identity provider must be configured to trust the external issuer, and the external identity
 must map to a real user on that side. For Keycloak that means an Identity Provider with **JWT
 Authorization Grant** enabled (Keycloak 26.5+), a client with the matching capability, and a
-linked user carrying the roles and tenant claim. See `EntraID.md` in the platform repository for
-the full walkthrough, including the audience and assertion-lifetime settings that trip up a first
-attempt.
+linked user carrying the roles and tenant claim. See
+[`EntraID.md`](https://github.com/IntelliStream-DataHub/datahub-platform/blob/master/EntraID.md)
+in the platform repository for the full walkthrough, including the audience and
+assertion-lifetime settings that trip up a first attempt.
 :::
 
 ### From HashiCorp Vault (Java)
@@ -269,14 +267,14 @@ DatahubConfig cfg = DatahubConfig.fromVaultAppRoleEnv("datahub/sdk");          /
 ## Durable ingest buffering
 
 Optional and **off by default**. When enabled, datapoint and event ingestion that can't reach the
-API — or is rejected with an auth failure (HTTP 401/403, e.g. an expired or rotated token) — spools
-to disk and is flushed automatically on the next ingest call, so neither a transient outage nor a
+API, or is rejected with an auth failure (HTTP 401/403, e.g. an expired or rotated token), spools
+to disk and is flushed automatically on the next ingest call. Neither a transient outage nor a
 credential hiccup loses data or raises. The buffer is a segmented, compressed log (gzip in Java,
 zstd in Rust/Python) bounded on two axes, either of which may be left unset; an unset axis defaults
 to **72 hours** / **5 GiB** once buffering is on:
 
-- **time** — datapoints/events older than the window are dropped.
-- **size** — when the on-disk spool exceeds the cap, the oldest segment is dropped.
+- **time**: datapoints/events older than the window are dropped.
+- **size**: when the on-disk spool exceeds the cap, the oldest segment is dropped.
 
 It is memory-safe: the spool is drained in segments, so even a multi-gigabyte buffer never loads
 into memory, and it is recovered from disk on the next start.
@@ -301,7 +299,7 @@ if (r.buffered() > 0) {
 ```
 
 `fromEnv()` instead reads `BUFFER_RETENTION` (an ISO-8601 duration, e.g. `PT72H`),
-`BUFFER_MAX_BYTES` and `BUFFER_DIRECTORY` — setting either bound turns buffering on.
+`BUFFER_MAX_BYTES` and `BUFFER_DIRECTORY`. Setting either bound turns buffering on.
 
 </TabItem>
 <TabItem value="python" label="Python">
@@ -347,7 +345,7 @@ A [lifetime ceiling](./limits#lifetime-ceilings) answers `403` too, and that one
 missing grant is fixed out of band and the data then flushes; a ceiling never becomes
 acceptable by being replayed, so spooling it would fill the buffer with data the server
 refuses every time. The client matches the problem `type`, so an ordinary permission `403`
-still buffers exactly as before.
+is buffered.
 :::
 
 :::note Retries are idempotent
@@ -364,7 +362,7 @@ response surfaces as an exception/error carrying the HTTP status and the raw bod
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
 
-Methods return `DataWrapper<T>` — `getItems()` holds the results. Non-2xx throws
+Methods return `DataWrapper<T>`: `getItems()` holds the results. Non-2xx throws
 `DatahubApiException`:
 
 ```java
@@ -396,7 +394,7 @@ except DataHubException as e:
 </TabItem>
 <TabItem value="rust" label="Rust">
 
-Methods return `Result<DataWrapper<T>, ResponseError>` — `get_items()` holds the results,
+Methods return `Result<DataWrapper<T>, ResponseError>`: `get_items()` holds the results,
 and `ResponseError` exposes `get_status()` and `get_message()` (its `Display` prints both):
 
 ```rust
@@ -438,12 +436,45 @@ the whole batch once you have fixed them.
 
 Two responses are worth recognising by shape:
 
-- **`400` with `type: ".../errors/naming-policy"`** — one or more external ids broke the
+- **`400` with `type: ".../errors/naming-policy"`**: one or more external ids broke the
   configured [naming policy](./external-ids#the-naming-policy). Nothing was created; the
   `violations` array names each one and suggests a replacement.
-- **A `warnings` array beside `items` on a `2xx`** — the write succeeded, and the ids in it
-  are in a data steward's queue. The field is absent when empty, so existing code is
-  unaffected.
+- **A `warnings` array beside `items` on a `2xx`**: the write succeeded, and the ids in it
+  are in a data steward's queue. The field is absent when empty.
 
 Both shapes, and the rules behind them, are in
 [External ids & naming](./external-ids).
+
+### Unknown fields are refused {#unknown-fields}
+
+A request body naming a field the endpoint does not have is a `400`, not a silent success. A
+typo, or a field that has since been retired, would otherwise be dropped and answered `200`,
+telling you a change was applied when nothing happened. The body is an
+[RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) problem document of
+`type: ".../errors/unreadable-request-body"`, with one `errors` entry per offender, each
+located by a JSON Pointer and listing the names accepted at that position:
+
+```json
+{
+  "type": "https://intellistream.ai/errors/unreadable-request-body",
+  "title": "Bad Request",
+  "status": 400,
+  "detail": "Unknown field: eventTime",
+  "errors": [
+    {
+      "detail": "Unknown field",
+      "pointer": "#/items/0/update/eventTime",
+      "allowedFields": ["dataSetId", "description", "externalId", "metadata",
+                        "relatedResources", "source", "status", "subType", "type"]
+    }
+  ]
+}
+```
+
+Every offender in the body is reported at once, at whatever depth it sits, so several stale
+fields cost one round trip rather than one each. A body that cannot be parsed at all,
+malformed JSON or a value of the wrong shape, answers with the same `type` and a `detail`
+naming the problem, plus `line` and `column` where the parser can say.
+
+The clients only ever send fields they declare, so this reaches you when you build a body by
+hand, or keep an old field name in one.

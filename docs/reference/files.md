@@ -41,8 +41,12 @@ let listing = api.files.list_directory_by_path("/reports/2026").await?;
 
 ## Upload
 
-The Java client uploads raw `content` bytes to a destination `path`; the Python and Rust
-clients upload a local file and a `destination_path`.
+The server takes one path, `X-Datahub-Path`: the full path of the file including its name
+(`/reports/2026/q2.csv`), from which it splits the name off the last `/`. The Java client
+sends the `path` you give it as-is, so include the file name and a leading `/`. The Python
+and Rust clients take a `destination_path` folder plus a `name` (defaulting to the local
+file's name) and join the two into that same full path. The Java client uploads raw `content`
+bytes; the Python and Rust clients read a local file.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -52,7 +56,7 @@ byte[] content = Files.readAllBytes(Path.of("report.csv"));
 
 DataWrapper<IndexNode> uploaded = client.files().upload(
         FileUploadRequest.builder()
-                .path("reports/2026/q2.csv")
+                .path("/reports/2026/q2.csv")
                 .content(content)
                 .contentType("text/csv")        // default: application/octet-stream
                 .externalId("report_2026_q2")   // optional
@@ -96,9 +100,52 @@ let uploaded = api.files.upload_file(upload).await?;
 </TabItem>
 </Tabs>
 
+The upload echo carries the stored node, id included. Read it back from the folder listing:
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+client.files().list("/reports/2026").getItems()
+        .forEach(n -> System.out.println(n.getId() + "  " + n.getName() + "  " + n.getSize()));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+for node in client.files.list_directory_by_path("/reports/2026"):
+    print(node.id, node.name, node.size)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+for node in api.files.list_directory_by_path("/reports/2026").await?.get_items() {
+    println!("{:?}  {}  {}", node.id, node.name, node.size);
+}
+```
+
+</TabItem>
+</Tabs>
+
+### When it fails {#errors}
+
+| Status | Means |
+| --- | --- |
+| `403` | You lack write access to the data set named in `dataSetId`, or to the parent folder's data set. |
+| `404` | On download: no file with that id, or a file in a data set you may not read. The two are not distinguished, so a hidden file's existence is not leaked. |
+| `409` | A file with that path, or that `externalId`, already exists. Uniqueness is tenant-wide, not per data set. |
+
+There is no size cap on `PUT /files`: the upload streams to disk and is exempt from the
+[request-body limit](./limits#request-body-size).
+
 ## Download {#download}
 
-All three clients download a file's raw bytes by id. Python and Rust add a streaming variant
+All three clients download a file's raw bytes by id. The id is numeric: Python and Rust take
+it as an integer, Java as a string, because the endpoint also accepts an external id in that
+position (`download("report_2026_q2")` works in Java). Python and Rust add a streaming variant
 that writes straight to a path, so a large file never has to sit in memory whole.
 
 <Tabs groupId="lang">
@@ -174,4 +221,4 @@ api.files.delete(&DataWrapper::from(vec![IdAndExtId::from_external_id("report_20
 | Delete | `files().delete` | `files.delete` | `files.delete` |
 
 Python and Rust add `download_to_path`, which streams to disk instead of holding the whole
-file in memory — see [Download](#download).
+file in memory, see [Download](#download).

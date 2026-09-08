@@ -7,7 +7,7 @@ title: Generate sample data
 
 :::info Start here
 The advanced scenarios **read** series, events and graphs that already exist. To run any
-of them end-to-end, first populate a sandbox with realistic synthetic data — that's what
+of them end-to-end, first populate a sandbox with realistic synthetic data, that's what
 this page does, using the same SDK ingestion calls you'd use for real data. Point each
 scenario's `external_id`s at the series you create here.
 :::
@@ -23,8 +23,12 @@ import intellistream_datahub_sdk, numpy as np, pandas as pd
 client = intellistream_datahub_sdk.DataHubClient.from_env()
 
 def ingest(external_id, index, values, unit=None, name=None):
-    client.timeseries.create([intellistream_datahub_sdk.TimeSeries(
-        external_id=external_id, name=name or external_id, unit=unit or "value", value_type="float")])
+    try:
+        client.timeseries.create([intellistream_datahub_sdk.TimeSeries(
+            external_id=external_id, name=name or external_id, unit=unit or "value", value_type="float")])
+    except intellistream_datahub_sdk.DataHubException as e:
+        if e.status_code != 409:          # a second run finds the series already there
+            raise
     client.timeseries.insert_from_lists(timestamps=index, values=np.asarray(values), ts=external_id)
     print(f"ingested {len(values):,} points → {external_id}")
 ```
@@ -34,11 +38,13 @@ def ingest(external_id, index, values, unit=None, name=None):
 For [predictive maintenance](/advanced/predictive-maintenance),
 [LSTM anomaly detection](/advanced/lstm-anomaly-detection) and
 [health scoring](/advanced/asset-health-score): a vibration signal that runs healthy,
-then develops a fault — rising amplitude and impulsiveness over the final stretch.
+then develops a fault, rising amplitude and impulsiveness over the final stretch. It is
+written at **one reading a second**, which is the rate the predictive-maintenance page's
+`SAMPLE_HZ` and window length assume.
 
 ```python
 def degrading_vibration(hours=24, fs_per_hour=3600):
-    n = hours * fs_per_hour
+    n = hours * fs_per_hour                    # one reading a second
     idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=n, freq="1s")
     t = np.linspace(0, 1, n)
     healthy = 0.6 * np.sin(2 * np.pi * 50 * np.arange(n) / fs_per_hour)   # base tone
@@ -50,8 +56,8 @@ idx, vib = degrading_vibration()
 ingest("pump_07_vibration_mm_s", idx, vib, unit="mm_s")
 ```
 
-The same pump's slower signals — bearing temperature, oil pressure, and a stand-in
-anomaly score — feed the [asset health score](/advanced/asset-health-score):
+The same pump's slower signals, bearing temperature, oil pressure, and a stand-in
+anomaly score, feed the [asset health score](/advanced/asset-health-score):
 
 ```python
 hrs = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=24*60, freq="1h")
@@ -65,7 +71,7 @@ ingest("pump_07_vibration_anomaly", hrs, np.clip(np.linspace(0, 0.9, n) + np.ran
 ## B. A production decline curve
 
 For [LSTM forecasting](/advanced/lstm-forecasting): a hyperbolic decline with noise and a
-weekly wobble — the shape of a producing well's rate.
+weekly wobble, the shape of a producing well's rate.
 
 ```python
 def decline_curve(days=540, qi=1200, b=0.8, d=0.006):
@@ -174,7 +180,7 @@ edges += [intellistream_datahub_sdk.RelForm.by_external_ids(ring[k], ring[(k+1) 
 client.resources.create(nodes, edges)
 ```
 
-Fraud classification turns the money *in* and *out* of each account into features — a
+Fraud classification turns the money *in* and *out* of each account into features, a
 pass-through mule shows inflow ≈ outflow, an ordinary account doesn't. Seed both series
 for every account in the graph:
 
@@ -194,7 +200,7 @@ for acct, (base, ratio) in profiles.items():
 ## G. An electrical feeder load curve
 
 For [demand forecasting](/advanced/demand-forecasting): 120 days of hourly feeder load
-with the daily double-peak, a lighter weekend, and a slow seasonal drift — the shape the
+with the daily double-peak, a lighter weekend, and a slow seasonal drift, the shape the
 forecaster learns.
 
 ```python
@@ -214,7 +220,7 @@ ingest("feeder_f12_load_mw", idx, load, unit="mw")
 
 For the [oxygen-crash early warning](/advanced/oxygen-crash-early-warning): 30 days of
 dissolved oxygen and water temperature at 15-minute resolution, with a few episodes where
-oxygen plunges — the crashes the model learns to see coming.
+oxygen plunges, the crashes the model learns to see coming.
 
 ```python
 def pen_oxygen(days=30):
@@ -232,7 +238,7 @@ ingest("pen_h_07_dissolved_oxygen_mg_l", idx, do, unit="mg_l")
 ingest("pen_h_07_water_temp_c", idx, temp, unit="celsius")
 ```
 
-## I. Operating channels — one unit's regimes and a peer fleet
+## I. Operating channels, one unit's regimes and a peer fleet
 
 For [K-Means](/advanced/kmeans-clustering): four channels for `unit_3` as it swings
 between idle, ramp, steady and overload (the *operating regimes* section clusters on all
@@ -266,7 +272,7 @@ for asset, scale, phase in [("pump_07", 0.9, 0.0), ("pump_08", 1.05, 0.4),
 ## J. Correlated drilling channels, with a kick
 
 For the multivariate [LSTM autoencoder](/advanced/lstm-anomaly-detection): section C's
-exact shape with drilling names — mud flow-in, flow-out, pit volume and standpipe pressure
+exact shape with drilling names, mud flow-in, flow-out, pit volume and standpipe pressure
 move together until a late **kick** (gas influx) pushes returns and pit volume up while
 standpipe pressure sags, breaking the joint pattern the autoencoder learned.
 
@@ -291,9 +297,9 @@ for tag, values in channels.items():
 ## K. Messy raw sensors to clean
 
 For the [data pipeline & lineage](/advanced/data-cleaning-lineage) build: two *raw* engine
-sensors carrying the real-world defects that pipeline exists to fix — spike outliers,
+sensors carrying the real-world defects that pipeline exists to fix, spike outliers,
 scattered `NaN` dropouts, a longer gap and a stuck/flatline stretch. (Everything
-downstream — the `*_clean`, feature and score series — is written *by* that recipe, so
+downstream, the `*_clean`, feature and score series, is written *by* that recipe, so
 only these raw inputs are seeded here.)
 
 ```python
@@ -345,5 +351,5 @@ print(f"{(bar > LIMIT_BAR).sum()} of {len(bar)} readings are above {LIMIT_BAR}")
 
 With the sandbox populated, every advanced scenario will find the series, events and
 graph it reads. As you swap in real data, the only thing that changes is where the
-numbers come from — the [ingestion guide](/guides/ingest-timeseries) covers doing it at
+numbers come from, the [ingestion guide](/guides/ingest-timeseries) covers doing it at
 production volume.
