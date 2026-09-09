@@ -86,6 +86,14 @@ let api = blocking::create_api_service();
 | Units | `client.units()` | `client.units` | `api.units` |
 | Files | `client.files()` | `client.files` | `api.files` |
 | Subscriptions | `client.subscriptions()` | `client.subscriptions` | `api.subscriptions` |
+| Edges | `client.edges()` | `client.edges` | `api.edges` |
+| Labels | not in Java | `client.labels` | `api.labels` |
+| Functions | not in Java | `client.functions` | `api.functions` |
+
+Python and Rust carry two services Java does not, `labels` and
+[`functions`](./resources#functions). Both are ordinary endpoint families, so from Java
+reach for the endpoints directly. No client has an `assets` service yet either;
+[the `/assets` endpoints](./resources#assets) say what to call instead.
 
 ## Authentication
 
