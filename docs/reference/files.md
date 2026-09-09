@@ -245,6 +245,16 @@ api.files.delete(&DataWrapper::from(vec![IdAndExtId::from_external_id("report_20
 | Upload | `files().upload` | `files.upload_file` | `files.upload_file` |
 | Download | `files().download` | `files.download` / `files.download_to_path` | `files.download` / `files.download_to_path` |
 | Delete | `files().delete` | `files.delete` | `files.delete` |
+| Look up by id / external id | HTTP | `files.get_by_id` / `files.get_by_external_id` | `files.get_by_id` / `files.get_by_external_id` |
+| Search by name | HTTP | `files.search` | `files.search` |
+| Update metadata | HTTP | `files.update` | `files.update` |
+| List the trash | HTTP | `files.list_trash` | `files.list_trash` |
+| Restore from the trash | HTTP | `files.restore` | `files.restore` |
 
 Python and Rust add `download_to_path`, which streams to disk instead of holding the whole
 file in memory, see [Download](#download).
+
+The five rows marked HTTP are `GET /files`, `GET /files/search`, `POST /files/update`,
+`GET /files/trash` and `POST /files/restore`. They exist on the API and in the other two
+clients; the Java client covers upload, download, listing and delete only, so call the
+endpoints directly for the rest.
