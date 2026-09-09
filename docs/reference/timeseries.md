@@ -365,10 +365,15 @@ A datapoint is a `(timestamp, value)` pair grouped under a series' external id. 
 capped at **64 characters** on the wire, which fits any number and any status code, and one
 collection holds at most **100 000** datapoints (10 000 for a `text` or `mixed` series).
 
+A `timestamp` is an epoch, and its size decides the unit: **10 digits or fewer is seconds, 11 or
+more is milliseconds**. `1767225600` and `1767225600000` are the same instant,
+`2026-01-01T00:00:00Z`. That holds everywhere the API takes an epoch, for a bare JSON number and a
+quoted string alike; an ISO-8601 string keeps its own offset instead.
+
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
 
-Timestamps are **epoch milliseconds** as strings:
+Timestamps are strings on the wire:
 
 ```java
 DatapointsCollection collection = new DatapointsCollection();
@@ -477,7 +482,7 @@ window:
 | Field | Meaning |
 | --- | --- |
 | `id` / `externalId` | The series. |
-| `start`, `end` | ISO-8601 or epoch millis. At least one is required. |
+| `start`, `end` | ISO-8601, or an epoch on the [seconds-or-millis rule](#write-datapoints). At least one is required. |
 | `limit` | Datapoints per page, default 100, at most 100 000. |
 | `aggregates` | Any of `avg`, `sum`, `min`, `max`, lower-case. A name outside that set is dropped, not rejected. `avg` comes back as `average`. |
 | `granularity` | A number and a unit: `s`, `m`, `h`, `d`, `w`, `mo`, `y`, or the words `sec`, `min`, `hour`, `day`, `week`, `month`, `year` and their plurals (`15m`, `1h`, `30 min`). Bare `m` is a minute; a month is `mo`. Required when `aggregates` is set. |
@@ -564,9 +569,9 @@ Each item names one series by `externalId` or `id`, and both window bounds are o
 | `exclusiveEnd` only | Everything before that instant |
 | Neither | Every datapoint of the series, leaving its definition, edges and subscriptions |
 
-A bound is either ISO-8601 or epoch milliseconds; anything else is a 400 naming the field, as is
-a series that does not exist. Python, Rust and Java's `Instant` overload take real datetimes, so
-those always send the ISO form.
+A bound is either ISO-8601 or an epoch on the [seconds-or-millis rule](#write-datapoints); anything
+else is a 400 naming the field, as is a series that does not exist. Python, Rust and Java's
+`Instant` overload take real datetimes, so those always send the ISO form.
 
 Like a series delete, this is handed off and completes shortly after the call returns, and it
 cannot be undone.
@@ -591,7 +596,7 @@ For several series at once, or to name one by id, pass `DeleteDatapoint` items i
 ```java
 DeleteDatapoint window = new DeleteDatapoint();
 window.setId(7L);
-window.setInclusiveBegin("1767225600000");     // epoch millis is the other accepted form
+window.setInclusiveBegin("1767225600000");     // or "1767225600", the same instant in seconds
 
 client.timeseries().deleteDatapoints(List.of(window));
 ```

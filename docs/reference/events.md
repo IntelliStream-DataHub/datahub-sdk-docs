@@ -28,7 +28,7 @@ event even when a `snake_case` policy is rejecting it on resources.
 | --- | --- | --- |
 | `id` | UUID string | The event's identity. Time-ordered UUID v7, see the note under [Create](#create). |
 | `externalId` | string, 3–256 | **Required.** The subject's key in the source system. Shared across events on purpose. |
-| `eventTime` | epoch millis, or ISO-8601 on the way in | **Required.** When it happened at the source. Never defaulted, see [Create](#create). |
+| `eventTime` | epoch seconds or millis, or ISO-8601 on the way in | **Required.** When it happened at the source. Never defaulted, see [Create](#create). |
 | `type` | string, 3–128 | Top-level categorization (`alarm`, `work_order`). |
 | `subType` | string, 3–128 | Refinement of `type` (`overpressure`). |
 | `status` | string, 3–128 | Free-form lifecycle marker (`OPEN`, `acknowledged`). No state machine is enforced. |
@@ -44,6 +44,13 @@ event even when a `snake_case` policy is rejecting it on resources.
 gateway that was offline over a weekend backfills Monday morning, so every event it sends
 carries a weekend `eventTime` and a Monday `createdTime`. Filter on `eventTime` to ask *when
 did it happen*, on `createdTime` to ask *when did we learn about it*.
+
+:::note An epoch's size decides its unit
+On the way in, an epoch of **10 digits or fewer is seconds** and **11 or more is milliseconds**, so
+`1767225600` and `1767225600000` are the same instant, `2026-01-01T00:00:00Z`. That covers
+`eventTime` and the `min` / `max` bounds of every time filter below, for a bare JSON number and a
+quoted string alike. An ISO-8601 string keeps its own offset.
+:::
 
 :::note Numeric ids cross the wire as JSON strings
 `dataSetId` and the `id` of each `relatedResources` entry serialize as `"12"`, not `12`. Ids can
