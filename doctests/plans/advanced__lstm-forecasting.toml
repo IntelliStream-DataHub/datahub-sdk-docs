@@ -1,0 +1,31 @@
+page = "docs/advanced/lstm-forecasting.mdx"
+
+# Blocks on this page:
+#   python #1   L43    1. Load the history
+#   java   #1   L66    1. Load the history
+#   rust   #1   L84    1. Load the history
+#   python #2   L114   2. Frame it as input window → forecast horizon
+#   python #3   L132   3. Train the LSTM
+#   python #4   L149   4. Forecast the horizon and write it back
+
+[blocks]
+python = 4
+java = 1
+rust = 1
+
+[python]
+timeout = 600
+# The page tells the reader to install this; without it the test skips with that
+# reason rather than failing, because a missing optional dependency says nothing
+# about whether the tutorial is correct.
+requires_python = ["tensorflow"]
+# Every series this recipe reads is seeded by the sample-data page, which the
+# docs tell the reader to run first. It runs once per session rather than being
+# composed into all thirteen recipes.
+requires_once = ["advanced__generate-sample-data"]
+
+[owns]
+timeseries = ["well_a12_oil_rate_forecast"]
+
+[expect]
+timeseries = ["well_a12_oil_rate_forecast"]

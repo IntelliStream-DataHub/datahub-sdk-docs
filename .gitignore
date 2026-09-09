@@ -26,3 +26,13 @@ yarn-error.log*
 # IDE
 /.idea/
 *.iml
+
+# Doc-tutorial test suite: local venv, credentials and build caches.
+# The tests, plans and harness themselves are committed — only these are not.
+/doctests/.venv/
+/doctests/.env
+/doctests/.token
+/doctests/.java-classpath
+/doctests/.rust-runner/
+/doctests/**/__pycache__/
+/doctests/.pytest_cache/

@@ -1,0 +1,74 @@
+page = "docs/reference/subscriptions.md"
+
+# Blocks on this page:
+#   java   #1   L17    Manage subscriptions
+#   python #1   L32    Manage subscriptions
+#   rust   #1   L49    Manage subscriptions
+#   java   #2   L85    Live delivery
+#   java   #3   L98    Live delivery
+#   python #2   L117   Live delivery
+#   rust   #2   L130   Live delivery
+
+[blocks]
+python = 2
+java = 3
+rust = 2
+
+[python]
+timeout = 600
+# An API reference, not a tutorial: each fence is a self-contained example, and they
+# are meant to be read independently. Running them as one program would invent
+# conflicts a reader never meets — the delete example removing what the write example
+# needs — so each block runs on its own.
+independent = true
+
+prologue = """
+import intellistream_datahub_sdk
+client = intellistream_datahub_sdk.DataHubClient.from_env()
+
+# Every example here subscribes to `engine_temperature`, this section's running
+# example. A reader arrives with it from the quickstart; each block runs against a
+# clean slate, so it is created here rather than assumed.
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(
+    external_id="engine_temperature", name="Engine temperature",
+    unit="celsius", value_type="float")])
+
+from tutorial_support import Recorder, feed, take
+
+# Placeholders the page leaves to the reader; a Recorder keeps what it is handed.
+process = Recorder("process")
+"""
+
+# The page's payoff is the listen loop, so it runs — bounded, not skipped. Two
+# declared substitutions make that possible: one starts a background writer so
+# messages actually arrive (a silent stream would prove nothing), the other caps
+# the loop at three messages and 45 seconds. Both must keep matching the page, so
+# a rewritten loop fails here rather than hanging CI.
+[[python.replace]]
+find = """with client.subscriptions.listen(["engine_temps"]) as listener:"""
+repl = """with client.subscriptions.listen(["engine_temps"]) as listener:
+    feed(client, ["engine_temperature"], points=40, every=0.3)"""
+
+[[python.replace]]
+find = """    for msg in listener:"""
+repl = """    for msg in take(listener, 3, 45):"""
+
+# The listen example assumes the subscription from the create example above still
+# exists — but that example ends by deleting it, and each block starts clean anyway.
+# This puts the subscription in place for the one block that needs it, without
+# touching the block that demonstrates create and delete.
+[[python.inject]]
+before = 2
+code = """
+client.subscriptions.create([intellistream_datahub_sdk.Subscription(
+    external_id="engine_temps", name="Engine temps", timeseries=["engine_temperature"])])
+"""
+
+[owns]
+# Includes the series the prologue creates: anything a fixture makes must be owned,
+# or the sweep leaves it and the next block fails on a duplicate.
+timeseries = ["engine_temperature"]
+subscriptions = ["engine_temps"]
+
+[expect]
+subscriptions = ["engine_temps"]

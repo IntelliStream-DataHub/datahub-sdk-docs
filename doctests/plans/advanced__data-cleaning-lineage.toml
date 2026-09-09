@@ -1,0 +1,37 @@
+page = "docs/advanced/data-cleaning-lineage.mdx"
+
+# Blocks on this page:
+#   python #1   L36    1. Run the transformations, writing each result back
+#   python #2   L59    1. Run the transformations, writing each result back
+#   python #3   L96    2. Record the lineage graph
+#   python #4   L138   3. The payoff — trace it backward
+#   python #5   L151   4. The payoff — trace it forward (impact analysis)
+
+[blocks]
+python = 5
+
+[python]
+timeout = 600
+# Every series this recipe reads is seeded by the sample-data page, which the
+# docs tell the reader to run first. It runs once per session rather than being
+# composed into all thirteen recipes.
+requires_once = ["advanced__generate-sample-data"]
+
+# The page models the network and traverses it in the next breath. The graph read
+# path trails writes by a second or two, and an empty neighbourhood is a valid
+# answer rather than an error — so without this the page prints the wrong
+# conclusion and the test cannot tell that from a real one.
+[[python.inject]]
+before = 4
+code = """
+from tutorial_support import wait_for_related
+wait_for_related(client, "engine_health_score")
+"""
+
+[owns]
+resources = ["assemble_fn", "band_fn", "clean_temp_fn", "clean_vib_fn", "rms_fn", "roc_fn", "roll_mean_fn", "score_fn"]
+timeseries = ["engine_feature_vector", "engine_health_score", "engine_temp_roc", "engine_temp_roll_mean", "engine_temperature_clean", "engine_vib_band", "engine_vib_rms", "engine_vibration_clean"]
+
+[expect]
+resources = ["assemble_fn", "band_fn", "clean_temp_fn", "clean_vib_fn", "rms_fn", "roc_fn", "roll_mean_fn", "score_fn"]
+timeseries = ["engine_feature_vector", "engine_health_score", "engine_temp_roc", "engine_temp_roll_mean", "engine_temperature_clean", "engine_vib_band", "engine_vib_rms", "engine_vibration_clean"]

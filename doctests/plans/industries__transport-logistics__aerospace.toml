@@ -1,0 +1,35 @@
+page = "docs/industries/transport-logistics/aerospace.mdx"
+
+# Blocks on this page:
+#   python #1   L25    Set up demo data
+#   java   #1   L49    1. Model the fleet to the component
+#   python #2   L77    1. Model the fleet to the component
+#   rust   #1   L90    1. Model the fleet to the component
+#   java   #2   L129   2. A part looks suspect — find the blast radius
+#   python #3   L141   2. A part looks suspect — find the blast radius
+#   rust   #2   L152   2. A part looks suspect — find the blast radius
+
+[blocks]
+python = 3
+java = 2
+rust = 2
+
+[python]
+timeout = 600
+
+# The page models the network and traverses it in the next breath. The graph read
+# path trails writes by a second or two, and an empty neighbourhood is a valid
+# answer rather than an error — so without this the page prints the wrong
+# conclusion and the test cannot tell that from a real one.
+[[python.inject]]
+before = 3
+code = """
+from tutorial_support import wait_for_related
+wait_for_related(client, "part_type_hp_47")
+"""
+
+[owns]
+resources = ["aircraft_ln_312", "aircraft_ln_318", "aircraft_ln_401", "hyd_pump_ln_312_1", "hyd_pump_ln_318_1", "hyd_pump_ln_401_1", "part_type_hp_47"]
+
+[expect]
+resources = ["aircraft_ln_312", "aircraft_ln_318", "aircraft_ln_401", "hyd_pump_ln_312_1", "hyd_pump_ln_318_1", "hyd_pump_ln_401_1", "part_type_hp_47"]

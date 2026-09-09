@@ -1,0 +1,82 @@
+page = "docs/industries/oil-and-gas/production.mdx"
+
+# Blocks on this page:
+#   python #1   L25    Set up demo data
+#   java   #1   L49    1. Model the field
+#   python #2   L81    1. Model the field
+#   rust   #1   L99    1. Model the field
+#   java   #2   L143   2. Stream sensor data at volume
+#   python #3   L153   2. Stream sensor data at volume
+#   rust   #2   L165   2. Stream sensor data at volume
+#   java   #3   L189   3. Alarm on an out-of-bounds reading
+#   python #4   L207   3. Alarm on an out-of-bounds reading
+#   rust   #3   L220   3. Alarm on an out-of-bounds reading
+#   java   #4   L252   4. Are two alarms one fault? Ask the graph
+#   python #5   L267   4. Are two alarms one fault? Ask the graph
+#   rust   #4   L278   4. Are two alarms one fault? Ask the graph
+#   python #6   L304   See the result
+
+[blocks]
+python = 6
+java = 4
+rust = 4
+
+[python]
+timeout = 600
+
+prologue = """
+import pandas as _pd
+import intellistream_datahub_sdk as _fx
+
+# The reader's own "give me this series over the last N hours" helper. The page
+# passes its result straight to retrieve_datapoints, so the name promises a
+# RetrieveFilter. A placeholder returning something else fails at the SDK boundary —
+# and one that happened to satisfy it would mean the retrieve was never exercised.
+def _window(external_id, hours):
+    now = _pd.Timestamp.now(tz="UTC")
+    return _fx.RetrieveFilter(ts=external_id, start=now - _pd.Timedelta(hours=hours), end=now)
+
+def last_hour(external_id):
+    return _window(external_id, 1)
+
+    now = _pd.Timestamp.now(tz="UTC")
+    return _fx.RetrieveFilter(ts=external_id, start=now - _pd.Timedelta(hours=hours), end=now)
+
+def last_hour(external_id):
+    return _window(external_id, 1)
+
+from tutorial_support import Recorder
+
+# Placeholders the page leaves to the reader; a Recorder keeps what it is handed.
+
+"""
+
+# Step 1 ingests the reader's sampled channels over the demo block's index.
+[[python.inject]]
+before = 2
+code = """
+timestamps = idx
+flow_bpd = np.full(len(idx), 900.0)
+pressure_bar = np.full(len(idx), 95.0)
+temperature_c = np.full(len(idx), 78.0)
+"""
+
+# The page models the network and traverses it in the next breath. The graph read
+# path trails writes by a second or two, and an empty neighbourhood is a valid
+# answer rather than an error — so without this the page prints the wrong
+# conclusion and the test cannot tell that from a real one.
+[[python.inject]]
+before = 5
+code = """
+from tutorial_support import wait_for_related
+wait_for_related(client, "wellhead_temp_a12")
+"""
+
+[owns]
+events = ["esp_anomaly_a12_*"]
+resources = ["field_north_sea", "pump_esp_a12", "well_a12"]
+timeseries = ["casing_temperature_c", "flow_rate_bpd", "pump_intake_pressure_bar", "wellhead_pressure_bar"]
+
+[expect]
+resources = ["field_north_sea", "pump_esp_a12", "well_a12"]
+timeseries = ["casing_temperature_c", "flow_rate_bpd", "pump_intake_pressure_bar", "wellhead_pressure_bar"]

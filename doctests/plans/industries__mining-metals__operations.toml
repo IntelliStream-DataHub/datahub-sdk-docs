@@ -1,0 +1,52 @@
+page = "docs/industries/mining-metals/operations.mdx"
+
+# Blocks on this page:
+#   python #1   L24    Set up demo data
+#   java   #1   L48    1. Spot a machine trending to failure
+#   python #2   L66    1. Spot a machine trending to failure
+#   rust   #1   L79    1. Spot a machine trending to failure
+#   java   #2   L110   2. See throughput against plan
+#   python #3   L128   2. See throughput against plan
+#   rust   #2   L144   2. See throughput against plan
+
+[blocks]
+python = 3
+java = 2
+rust = 2
+
+[python]
+timeout = 600
+
+prologue = """
+import pandas as _pd
+import intellistream_datahub_sdk as _fx
+
+# The reader's own "give me this series over the last N hours" helper. The page
+# passes its result straight to retrieve_datapoints, so the name promises a
+# RetrieveFilter. A placeholder returning something else fails at the SDK boundary —
+# and one that happened to satisfy it would mean the retrieve was never exercised.
+def _window(external_id, hours):
+    now = _pd.Timestamp.now(tz="UTC")
+    return _fx.RetrieveFilter(ts=external_id, start=now - _pd.Timedelta(hours=hours), end=now)
+
+def last_hour(external_id):
+    return _window(external_id, 1)
+
+    now = _pd.Timestamp.now(tz="UTC")
+    return _fx.RetrieveFilter(ts=external_id, start=now - _pd.Timedelta(hours=hours), end=now)
+
+def last_hour(external_id):
+    return _window(external_id, 1)
+
+from tutorial_support import Recorder
+
+# Placeholders the page leaves to the reader; a Recorder keeps what it is handed.
+compare_to_plan = Recorder("compare_to_plan")
+"""
+
+[owns]
+events = ["equipment_warning_785_*"]
+timeseries = ["crusher_01_throughput_tph", "truck_785_oil_pressure_kpa"]
+
+[expect]
+timeseries = ["crusher_01_throughput_tph", "truck_785_oil_pressure_kpa"]

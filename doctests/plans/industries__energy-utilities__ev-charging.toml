@@ -1,0 +1,46 @@
+page = "docs/industries/energy-utilities/ev-charging.mdx"
+
+# Blocks on this page:
+#   python #1   L24    Set up demo data
+#   java   #1   L46    1. Detect a dead charger immediately
+#   python #2   L68    1. Detect a dead charger immediately
+#   rust   #1   L83    1. Detect a dead charger immediately
+#   python #3   L116   See the result
+
+[blocks]
+python = 3
+java = 1
+rust = 1
+
+[python]
+timeout = 600
+
+prologue = """
+from tutorial_support import Recorder, feed, take
+
+# Placeholders the page leaves to the reader; a Recorder keeps what it is handed.
+faulted = Recorder("faulted")
+"""
+
+# The page's payoff is the listen loop, so it runs — bounded, not skipped. Two
+# declared substitutions make that possible: one starts a background writer so
+# messages actually arrive (a silent stream would prove nothing), the other caps
+# the loop at three messages and 45 seconds. Both must keep matching the page, so
+# a rewritten loop fails here rather than hanging CI.
+[[python.replace]]
+find = """with client.subscriptions.listen(["network_status"]) as listener:"""
+repl = """with client.subscriptions.listen(["network_status"]) as listener:
+    feed(client, ["charger_oslo_14_status"], points=40, every=0.3)"""
+
+[[python.replace]]
+find = """    for msg in listener:"""
+repl = """    for msg in take(listener, 3, 45):"""
+
+[owns]
+events = ["charger_down_oslo_14_*"]
+subscriptions = ["network_status"]
+timeseries = ["charger_oslo_14_status"]
+
+[expect]
+subscriptions = ["network_status"]
+timeseries = ["charger_oslo_14_status"]

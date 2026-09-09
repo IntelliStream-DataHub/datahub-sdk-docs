@@ -1,0 +1,26 @@
+page = "docs/guides/seed-a-sandbox.mdx"
+
+# The page the other guides were missing: it creates the series, resources and events
+# they read, "using the SDK's own calls, so every guide can be run end to end". Its own
+# table says which guide needs which section, and the guides' plans now point here
+# through `requires_once` instead of carrying hand-written fixtures.
+[blocks]
+python = 6
+
+[python]
+timeout = 600
+# The seeding half only. The guides below compose this in to get the world the
+# page promises them; the page's own closing self-check is a separate promise,
+# tested by guides__seed-a-sandbox.toml. Splitting them means a bug in the check
+# reports against the page rather than failing five guides that seeded fine.
+only = [1, 2, 3, 4, 5]
+
+[owns]
+events = ["alarm_sensor_a_*", "alarm_sensor_b_*"]
+resources = ["cooling_system", "pump_a", "pump_b", "sensor_a", "sensor_b", "skid_1"]
+timeseries = ["engine_oil_pressure", "engine_rpm", "engine_temperature"]
+
+[expect]
+timeseries = ["engine_temperature", "engine_rpm", "engine_oil_pressure"]
+resources = ["cooling_system", "skid_1", "pump_a", "pump_b", "sensor_a", "sensor_b"]
+events = ["alarm_sensor_a_*", "alarm_sensor_b_*"]

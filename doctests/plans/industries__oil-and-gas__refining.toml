@@ -1,0 +1,33 @@
+page = "docs/industries/oil-and-gas/refining.mdx"
+
+# Blocks on this page:
+#   python #1   L25    Set up demo data
+#   java   #1   L44    1. Track the process KPIs
+#   python #2   L63    1. Track the process KPIs
+#   rust   #1   L79    1. Track the process KPIs
+#   java   #2   L109   2. Catch a process upset early
+#   python #3   L122   2. Catch a process upset early
+#   rust   #2   L133   2. Catch a process upset early
+#   python #4   L155   See the result
+
+[blocks]
+python = 4
+java = 2
+rust = 2
+
+[python]
+timeout = 600
+
+prologue = """
+from tutorial_support import Recorder
+
+# Placeholders the page leaves to the reader; a Recorder keeps what it is handed.
+record_energy_intensity = Recorder("record_energy_intensity")
+"""
+
+[owns]
+events = ["process_upset_cdu1_*"]
+timeseries = ["cdu_1_energy_gj"]
+
+[expect]
+timeseries = ["cdu_1_energy_gj"]

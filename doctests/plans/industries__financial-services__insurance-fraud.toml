@@ -1,0 +1,59 @@
+page = "docs/industries/financial-services/insurance-fraud.mdx"
+
+# Blocks on this page:
+#   python #1   L25    Set up demo data
+#   java   #1   L49    1. Model claims and the parties they share
+#   python #2   L62    1. Model claims and the parties they share
+#   rust   #1   L77    1. Model claims and the parties they share
+#   java   #2   L101   2. Expand a suspicious claim into its ring
+#   python #3   L114   2. Expand a suspicious claim into its ring
+#   rust   #2   L125   2. Expand a suspicious claim into its ring
+
+[blocks]
+python = 3
+java = 2
+rust = 2
+
+[python]
+timeout = 600
+# The demo-data block and step 1 are the same action written twice: the block
+# creates the graph inline, the step creates it from a `stations`/`nodes` variable.
+# A reader does one or the other, and running both is a duplicate create. The
+# numbered step is the tutorial, so that is what runs; the client it needs comes
+# from the quickstart, as it would for a reader arriving here.
+exclude = [1]
+requires = ["quickstart"]
+
+prologue = """
+
+"""
+
+# The page names `nodes` in this step but only ever builds the list inside the
+# demo-data block above. This is that same list, so the step models the world the
+# page describes rather than an invented one.
+[[python.inject]]
+before = 2
+code = """
+nodes = [intellistream_datahub_sdk.Resource(external_id=x, name=x, labels=[lbl]) for x, lbl in
+     [("claim_88421", "Claim"), ("claim_88455", "Claim"), ("party_jdoe", "Party"),
+      ("phone_47120099", "Phone"), ("shop_quickfix", "Shop")]]
+"""
+
+# The page models the network and traverses it in the next breath. The graph read
+# path trails writes by a second or two, and an empty neighbourhood is a valid
+# answer rather than an error — so without this the page prints the wrong
+# conclusion and the test cannot tell that from a real one.
+[[python.inject]]
+before = 3
+code = """
+from tutorial_support import wait_for_related
+wait_for_related(client, "claim_88421")
+"""
+
+[owns]
+resources = ["claim_88421", "claim_88455", "party_jdoe", "phone_47120099", "policy_55righ", "shop_quickfix"]
+
+# Step 1 builds the claim graph through `nodes`, and the shared-party link is the payoff.
+[expect]
+resources = ["claim_88421", "claim_88455", "party_jdoe", "phone_47120099", "shop_quickfix"]
+stdout = ["linked claims:"]

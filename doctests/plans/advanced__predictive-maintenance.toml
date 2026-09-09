@@ -1,0 +1,28 @@
+page = "docs/advanced/predictive-maintenance.mdx"
+
+# Blocks on this page:
+#   python #1   L47    Step 1 — Get a stretch of healthy data
+#   java   #1   L67    Step 1 — Get a stretch of healthy data
+#   rust   #1   L83    Step 1 — Get a stretch of healthy data
+#   python #2   L120   Step 2 — Turn the raw wiggle into a few meaningful numbers
+#   python #3   L156   Step 3 — Let the model learn "normal"
+#   python #4   L176   Step 4 — Score new data, and write the answer back
+
+[blocks]
+python = 4
+java = 1
+rust = 1
+
+[python]
+timeout = 600
+# Every series this recipe reads is seeded by the sample-data page, which the
+# docs tell the reader to run first. It runs once per session rather than being
+# composed into all thirteen recipes.
+requires_once = ["advanced__generate-sample-data"]
+
+[owns]
+events = ["degradation_predicted_pump_07_*"]
+timeseries = ["pump_07_vibration_anomaly"]
+
+[expect]
+timeseries = ["pump_07_vibration_anomaly"]

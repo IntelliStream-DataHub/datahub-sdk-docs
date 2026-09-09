@@ -1,0 +1,29 @@
+page = "docs/advanced/kmeans-clustering.mdx"
+
+# Blocks on this page:
+#   python #1   L41    1. Asset cohorts — group assets that behave alike
+#   java   #1   L70    1. Asset cohorts — group assets that behave alike
+#   rust   #1   L87    1. Asset cohorts — group assets that behave alike
+#   python #2   L113   The payoff: the asset that doesn't fit its cohort
+#   python #3   L130   2. Operating regimes — group an asset's *states*
+#   python #4   L158   3. Network communities — cluster the graph
+#   python #5   L191   Choosing k
+
+[blocks]
+python = 5
+java = 1
+rust = 1
+
+[python]
+timeout = 600
+# Every series this recipe reads is seeded by the sample-data page, which the
+# docs tell the reader to run first. It runs once per session rather than being
+# composed into all thirteen recipes.
+requires_once = ["advanced__generate-sample-data"]
+
+[owns]
+events = ["peer_outlier_*"]
+
+# The page's payoff: the asset that does not fit its cohort is raised as an event.
+[expect]
+events = ["peer_outlier_*"]

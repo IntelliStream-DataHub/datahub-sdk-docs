@@ -1,0 +1,30 @@
+page = "docs/guides/correlate-alarms.mdx"
+
+# python #1 L57  — 2. Walk each alarm's neighbourhood
+# python #2 L110 — 3. Find the shared subsystem
+[blocks]
+python = 2
+java = 2
+rust = 2
+
+[python]
+# Per the sandbox page's own table: the cooling system, its two sensors and their alarms.
+requires = ["guides__seed-a-sandbox-data"]
+timeout = 180
+
+# The sandbox above creates the graph this guide walks. The wait is still needed: the
+# graph read path trails writes, and an empty neighbourhood is a valid answer rather
+# than an error, so without it the guide prints the wrong conclusion.
+prologue = """
+from tutorial_support import wait_for_related
+wait_for_related(client, "sensor_a", relationship_types=["PART_OF"])
+"""
+
+[owns]
+timeseries = ["engine_temperature"]
+resources = ["sensor_a", "sensor_b", "cooling_system"]
+
+# The guide's whole payoff is naming the shared subsystem, and its own comment
+# says the answer is {'cooling_system'} — so that is what the test demands to see.
+[expect]
+stdout = ["Both alarms are part of:", "cooling_system"]
