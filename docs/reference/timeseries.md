@@ -365,6 +365,22 @@ A datapoint is a `(timestamp, value)` pair grouped under a series' external id. 
 capped at **64 characters** on the wire, which fits any number and any status code, and one
 collection holds at most **100 000** datapoints (10 000 for a `text` or `mixed` series).
 
+A `timestamp` is an epoch or an ISO-8601 string. **An epoch is milliseconds, always.** It carries
+no zone of its own, so it is UTC, and the accepted range is 12 to 14 digits, which reaches from
+1973 to past the year 5000. Seconds are refused rather than converted: the 10-digit `1767225600` is
+a malformed timestamp and comes back as an error, where `1767225600000` is `2026-01-01T00:00:00Z`.
+
+An ISO-8601 string keeps whatever offset or zone it carries, and **it has to carry one**:
+
+- `2024-06-17T14:34:56+02:00` and `2024-06-17T12:34:56Z` are the same instant. The offset is kept,
+  never dropped.
+- Minute precision (`2024-06-17T14:34+02:00`), fractional seconds (`2024-06-17T12:34:56.123Z`) and
+  a bracketed region id (`2024-06-17T14:34:56+02:00[Europe/Oslo]`) all parse.
+- `2024-06-17T12:34:56` and `2024-06-17` are **rejected**. No zone is assumed, because guessing one
+  is the same silent hours-out error as dropping one.
+
+That holds everywhere the API takes a timestamp, for a bare JSON number and a quoted string alike.
+
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
 
@@ -477,7 +493,7 @@ window:
 | Field | Meaning |
 | --- | --- |
 | `id` / `externalId` | The series. |
-| `start`, `end` | ISO-8601 or epoch millis. At least one is required. |
+| `start`, `end` | ISO-8601 or epoch millis, on the [timestamp rules](#write-datapoints). At least one is required. |
 | `limit` | Datapoints per page, default 100, at most 100 000. |
 | `aggregates` | Any of `avg`, `sum`, `min`, `max`, lower-case. A name outside that set is dropped, not rejected. `avg` comes back as `average`. |
 | `granularity` | A number and a unit: `s`, `m`, `h`, `d`, `w`, `mo`, `y`, or the words `sec`, `min`, `hour`, `day`, `week`, `month`, `year` and their plurals (`15m`, `1h`, `30 min`). Bare `m` is a minute; a month is `mo`. Required when `aggregates` is set. |
@@ -564,9 +580,9 @@ Each item names one series by `externalId` or `id`, and both window bounds are o
 | `exclusiveEnd` only | Everything before that instant |
 | Neither | Every datapoint of the series, leaving its definition, edges and subscriptions |
 
-A bound is either ISO-8601 or epoch milliseconds; anything else is a 400 naming the field, as is
-a series that does not exist. Python, Rust and Java's `Instant` overload take real datetimes, so
-those always send the ISO form.
+A bound is either ISO-8601 or epoch milliseconds, on the [timestamp rules](#write-datapoints);
+anything else is a 400 naming the field, as is a series that does not exist. Python, Rust and
+Java's `Instant` overload take real datetimes, so those always send the ISO form.
 
 Like a series delete, this is handed off and completes shortly after the call returns, and it
 cannot be undone.
@@ -591,7 +607,7 @@ For several series at once, or to name one by id, pass `DeleteDatapoint` items i
 ```java
 DeleteDatapoint window = new DeleteDatapoint();
 window.setId(7L);
-window.setInclusiveBegin("1767225600000");     // epoch millis is the other accepted form
+window.setInclusiveBegin("1767225600000");     // epoch millis is the other form, never seconds
 
 client.timeseries().deleteDatapoints(List.of(window));
 ```

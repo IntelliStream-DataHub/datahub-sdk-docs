@@ -45,6 +45,14 @@ gateway that was offline over a weekend backfills Monday morning, so every event
 carries a weekend `eventTime` and a Monday `createdTime`. Filter on `eventTime` to ask *when
 did it happen*, on `createdTime` to ask *when did we learn about it*.
 
+:::note A timestamp is ISO-8601 or epoch milliseconds
+Milliseconds is the only epoch unit, so `1767225600000` is `2026-01-01T00:00:00Z` while the
+10-digit seconds form `1767225600` is refused rather than converted. An ISO-8601 string keeps its
+own offset and **has to carry one**: `2024-06-17T12:34:56` with no zone is rejected, not read as
+UTC. That covers `eventTime` and the `min` / `max` bounds of every time filter below, for a bare
+JSON number and a quoted string alike. [Timestamps in full →](./timeseries#write-datapoints)
+:::
+
 :::note Numeric ids cross the wire as JSON strings
 `dataSetId` and the `id` of each `relatedResources` entry serialize as `"12"`, not `12`. Ids can
 exceed the 53-bit integer a JSON number is safe for in JavaScript, and a silently rounded id
