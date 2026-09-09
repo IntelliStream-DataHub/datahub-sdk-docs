@@ -215,3 +215,39 @@ def test_sdk_response_noise_is_folded_out_of_reports():
     noisy = 'Response body for path: http://x/y\n{"items":[1]}\nreal failure here'
     assert "real failure here" in runners.tidy(noisy)
     assert "Response body for path" not in runners.tidy(noisy)
+
+
+# ------------------------------------------------------------------ sweep
+
+
+def test_a_refused_delete_retries_with_the_stranded_resource_included():
+    """The sweep must take the API's advice, or it silently leaves nodes behind.
+
+    Pages share one graph, so the node blocking a delete often belongs to a different
+    page and no plan can name it in advance. Giving up here leaves it, the next run's
+    create is a duplicate, and the backend reports that as a 500 — which reads exactly
+    like a broken tutorial. This is how 67 pages were once blamed for one leftover.
+    """
+    import backend
+
+    refusal = ('{"error":{"code":400,"fields":[{"type":"strandedResource",'
+               '"externalId":"pump_temp_a12"}],"message":"Include them in the deletion"}}')
+    attempts = []
+
+    def delete(ids):
+        attempts.append(list(ids))
+        if "pump_temp_a12" not in ids:
+            raise RuntimeError(refusal)
+
+    removed = backend._delete_with_stranded(delete, "cooling_system", RuntimeError(refusal))
+    assert removed == 2
+    assert attempts[-1] == ["cooling_system", "pump_temp_a12"]
+
+
+def test_a_refusal_naming_nothing_is_given_up_on():
+    import backend
+
+    def delete(ids):
+        raise RuntimeError("some other failure")
+
+    assert backend._delete_with_stranded(delete, "x", RuntimeError("some other failure")) == 0

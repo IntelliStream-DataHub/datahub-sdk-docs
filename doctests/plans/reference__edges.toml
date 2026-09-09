@@ -15,14 +15,15 @@ prologue = """
 import intellistream_datahub_sdk
 client = intellistream_datahub_sdk.DataHubClient.from_env()
 
-# The edge examples link resources that already exist; this is the pair they act on.
-# Anything a fixture creates must be owned below, or the sweep leaves it behind.
+# The edge examples link resources that already exist, and they name the two this
+# section uses throughout. Anything a fixture creates must be owned below, or the
+# sweep leaves it behind and the next block fails on a duplicate.
 client.resources.create(
-    [intellistream_datahub_sdk.Resource(external_id="ref_edge_a", name="Edge example A",
-                                        labels=["RefEdgeExample"]),
-     intellistream_datahub_sdk.Resource(external_id="ref_edge_b", name="Edge example B",
-                                        labels=["RefEdgeExample"])], [])
+    [intellistream_datahub_sdk.Resource(external_id="plant_oslo", name="Oslo Plant",
+                                        labels=["Plant"]),
+     intellistream_datahub_sdk.Resource(external_id="pump_1", name="Pump 1",
+                                        labels=["Pump"])], [])
 """
 
 [owns]
-resources = ["ref_edge_a", "ref_edge_b", "pump_1", "skid_1"]
+resources = ["plant_oslo", "pump_1", "skid_1"]

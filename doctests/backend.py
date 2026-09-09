@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import re
 import subprocess
 import time
 from pathlib import Path
@@ -212,6 +213,36 @@ def _expand(cli, kind: str, values: list[str]) -> list[str]:
     return literal + found
 
 
+_STRANDED = re.compile(r'"type"\s*:\s*"strandedResource"\s*,\s*"externalId"\s*:\s*"([^"]+)"')
+
+
+def _delete_with_stranded(delete, value: str, exc: Exception, depth: int = 4) -> int:
+    """Retry a refused resource delete, taking the API's advice about what else to include.
+
+    The backend will not delete a node if that would disconnect another from the graph
+    root; it answers 400 naming the resource that would be stranded and says to include
+    it. Pages share a graph, so the node blocking a delete often belongs to a different
+    page — which means no plan can name it in advance, and a sweep that gives up here
+    leaves the node behind. The next run's create is then a duplicate, which the backend
+    reports as a 500, which reads exactly like a broken tutorial.
+
+    So: read the id out of the refusal and try again with it included, a few times, since
+    freeing one node can reveal the next.
+    """
+    batch = [value]
+    for _ in range(depth):
+        stranded = _STRANDED.findall(str(exc))
+        if not stranded:
+            return 0
+        batch.extend(x for x in stranded if x not in batch)
+        try:
+            delete(batch)
+            return len(batch)
+        except Exception as retry:
+            exc = retry
+    return 0
+
+
 def sweep(cli, owns: dict[str, list[str]]) -> None:
     """Delete every entity a page declares it owns, before and after a run.
 
@@ -255,8 +286,9 @@ def sweep(cli, owns: dict[str, list[str]]) -> None:
                     try:
                         delete([value])
                         deleted += 1
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        if name == "resources":
+                            deleted += _delete_with_stranded(delete, value, exc)
             if deleted == 0 or deleted == remaining:
                 break
             remaining = deleted
