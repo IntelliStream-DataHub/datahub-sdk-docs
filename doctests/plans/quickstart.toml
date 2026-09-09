@@ -4,7 +4,7 @@ page = "docs/quickstart.mdx"
 #   java   #1 L58  · python #1 L74  · rust #1 L90   — 3. Create a client and write a datapoint
 #   java   #2 L114 · python #2 L130 · rust #2 L143  — 4. Read it back
 [blocks]
-python = 2
+python = 3
 java = 2
 rust = 2
 

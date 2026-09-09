@@ -18,9 +18,9 @@ page = "docs/reference/resources.md"
 #   rust   #5   L264   Traverse the graph
 
 [blocks]
-python = 5
-java = 5
-rust = 5
+python = 9
+java = 8
+rust = 8
 
 [python]
 timeout = 600
@@ -44,7 +44,7 @@ client = intellistream_datahub_sdk.DataHubClient.from_env()
 # answer rather than an error — so without this the page prints the wrong
 # conclusion and the test cannot tell that from a real one.
 [[python.inject]]
-before = 5
+before = 8
 code = """
 from tutorial_support import wait_for_related
 wait_for_related(client, "sensor_a")

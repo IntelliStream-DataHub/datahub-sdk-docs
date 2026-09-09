@@ -1,0 +1,28 @@
+page = "docs/reference/edges.md"
+
+[blocks]
+python = 4
+java = 4
+rust = 4
+
+[python]
+timeout = 600
+# An API reference, not a tutorial: each fence is a self-contained example, and one of
+# them deletes what another reads. Each block runs on its own, against a clean slate.
+independent = true
+
+prologue = """
+import intellistream_datahub_sdk
+client = intellistream_datahub_sdk.DataHubClient.from_env()
+
+# The edge examples link resources that already exist; this is the pair they act on.
+# Anything a fixture creates must be owned below, or the sweep leaves it behind.
+client.resources.create(
+    [intellistream_datahub_sdk.Resource(external_id="ref_edge_a", name="Edge example A",
+                                        labels=["RefEdgeExample"]),
+     intellistream_datahub_sdk.Resource(external_id="ref_edge_b", name="Edge example B",
+                                        labels=["RefEdgeExample"])], [])
+"""
+
+[owns]
+resources = ["ref_edge_a", "ref_edge_b", "pump_1", "skid_1"]

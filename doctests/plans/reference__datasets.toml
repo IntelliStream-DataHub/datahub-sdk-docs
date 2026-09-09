@@ -9,9 +9,9 @@ page = "docs/reference/datasets.md"
 #   rust   #2   L91    Look up & delete
 
 [blocks]
-python = 2
-java = 2
-rust = 2
+python = 3
+java = 3
+rust = 3
 
 [python]
 timeout = 600

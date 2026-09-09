@@ -1,0 +1,42 @@
+page = "docs/advanced/sustained-alarm-window.mdx"
+
+# python #1 The detector  #2 Replay the history  #3 Verify it landed  #4 Run it live
+[blocks]
+python = 4
+java = 4
+rust = 4
+
+[python]
+timeout = 600
+# The series it replays is one of the ones the sample-data page seeds.
+requires_once = ["advanced__generate-sample-data"]
+
+prologue = """
+import datetime as _dt
+from tutorial_support import feed, take
+
+# The page's own helper for pulling (timestamp, value) pairs out of a live message.
+# It returns a reading above the 4.5 limit so the detector's interesting branch runs;
+# returning nothing would exercise the loop and prove none of the logic.
+def datapoints(_payload):
+    return [(_dt.datetime.now(_dt.timezone.utc), 5.0)]
+"""
+
+# The live detector is the page's closing act, so it runs — bounded, and fed traffic
+# so messages actually arrive.
+[[python.replace]]
+find = """with client.subscriptions.listen(["pump_p101"]) as listener:"""
+repl = """with client.subscriptions.listen(["pump_p101"]) as listener:
+    feed(client, [SERIES], points=40, every=0.3)"""
+
+[[python.replace]]
+find = """    for msg in listener:"""
+repl = """    for msg in take(listener, 3, 45):"""
+
+[owns]
+subscriptions = ["pump_p101"]
+events = ["sustained_high_*"]
+
+# The page's whole point: a breach that persists long enough raises exactly one event.
+[expect]
+events = ["sustained_high_*"]

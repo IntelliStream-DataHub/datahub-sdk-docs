@@ -15,9 +15,9 @@ page = "docs/reference/events.md"
 #   rust   #4   L178   Delete
 
 [blocks]
-python = 4
-java = 4
-rust = 4
+python = 8
+java = 8
+rust = 8
 
 [python]
 timeout = 600

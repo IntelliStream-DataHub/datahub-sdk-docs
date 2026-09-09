@@ -26,9 +26,9 @@ page = "docs/reference/timeseries.md"
 #   java   #9   L412   IngestResult
 
 [blocks]
-python = 7
-java = 9
-rust = 7
+python = 9
+java = 12
+rust = 9
 
 [python]
 timeout = 600

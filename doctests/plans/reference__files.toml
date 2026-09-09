@@ -13,9 +13,9 @@ page = "docs/reference/files.md"
 #   rust   #3   L127   Delete
 
 [blocks]
-python = 3
-java = 4
-rust = 3
+python = 5
+java = 5
+rust = 5
 
 [python]
 timeout = 600

@@ -65,6 +65,20 @@ def cli(env):
 
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _backend_is_healthy(request):
+    """Refuse to report on the documentation when the backend is sick.
+
+    Session-scoped and checked once: if the round-trip fails, every live test skips
+    with the reason, rather than 200 pages each claiming a defect they do not have.
+    """
+    if "cli" not in request.fixturenames:
+        return
+    reason = backend.unhealthy(request.getfixturevalue("cli"))
+    if reason:
+        pytest.skip(f"backend unhealthy: {reason}", allow_module_level=True)
+
+
 @pytest.fixture(scope="session")
 def seed(env, cli, tmp_path_factory):
     """Run a data-generating page once per session, and remember that it ran.

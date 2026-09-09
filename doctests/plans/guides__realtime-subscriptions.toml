@@ -4,12 +4,13 @@ page = "docs/guides/realtime-subscriptions.mdx"
 # python #2 L107 — 2. Listen and ack                 (not covered — see below)
 # python #3 L151 — Change the interest set at runtime (not covered — see below)
 [blocks]
-python = 3
-java = 4
-rust = 3
+python = 4
+java = 5
+rust = 4
 
 [python]
-requires = ["quickstart"]
+# Per the sandbox page's own table: it subscribes to engine_temperature and engine_rpm, which the sandbox creates.
+requires = ["guides__seed-a-sandbox-data"]
 only = [1]
 timeout = 120
 

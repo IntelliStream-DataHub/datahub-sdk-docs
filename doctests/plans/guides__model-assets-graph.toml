@@ -3,9 +3,9 @@ page = "docs/guides/model-assets-graph.mdx"
 # python #1 L64  — Create the graph
 # python #2 L140 — Read the graph back
 [blocks]
-python = 2
-java = 2
-rust = 2
+python = 3
+java = 3
+rust = 3
 
 [python]
 requires = ["quickstart"]

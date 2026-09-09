@@ -4,9 +4,9 @@ page = "docs/guides/attach-files.mdx"
 # python #2 L98  — List a directory
 # python #3 L139 — Delete
 [blocks]
-python = 3
+python = 4
 java = 4
-rust = 3
+rust = 4
 
 [python]
 requires = ["quickstart"]

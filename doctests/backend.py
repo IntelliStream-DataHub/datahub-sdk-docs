@@ -135,6 +135,44 @@ def client(env: dict[str, str]):
         raise BackendUnavailable(f"Could not build a client for {env['BASE_URL']}: {exc}") from exc
 
 
+def unhealthy(cli) -> str | None:
+    """Why the backend cannot be trusted right now, or None if it is fine.
+
+    A create-and-delete round-trip on a throwaway series, before any tutorial runs.
+    It exists because of a specific way this suite can lie: when the backend is sick,
+    every page fails at once and each failure looks like a documentation bug. A stack
+    whose API had exhausted its heap once produced 67 "duplicate create" failures
+    across unrelated pages — the diagnosis was wrong for every one of them.
+
+    A tutorial suite that cannot tell "this page is broken" from "the backend is
+    broken" is worse than no suite, because it sends people to fix the wrong thing.
+    """
+    import uuid
+
+    import intellistream_datahub_sdk as sdk
+
+    probe = f"doctest_health_{uuid.uuid4().hex[:12]}"
+    try:
+        with quiet():
+            cli.timeseries.create([sdk.TimeSeries(
+                external_id=probe, name="doctest health probe",
+                unit="celsius", value_type="float")])
+    except Exception as exc:
+        return (
+            f"a create of a brand-new series failed ({str(exc)[:160]}). The backend is "
+            "not answering normal requests, so nothing here would be a statement about "
+            "the documentation. Check the API's health and logs — an out-of-memory API "
+            "presents exactly like this, as a 500 on everything."
+        )
+    finally:
+        try:
+            with quiet():
+                cli.timeseries.delete([probe])
+        except Exception:
+            pass
+    return None
+
+
 # ---------------------------------------------------------------- cleanup
 
 # Every service's delete/by_ids accepts a bare external id string; only some also

@@ -8,36 +8,16 @@ java = 2
 rust = 2
 
 [python]
-requires = ["quickstart"]
+# Per the sandbox page's own table: the cooling system, its two sensors and their alarms.
+requires = ["guides__seed-a-sandbox-data"]
 timeout = 180
 
-# Step 1 of the guide is prose: two alarming sensors that both sit under a shared
-# subsystem. The graph below *is* that premise, built with the API the sibling
-# guide teaches, so the page's own two blocks stay the code under test.
+# The sandbox above creates the graph this guide walks. The wait is still needed: the
+# graph read path trails writes, and an empty neighbourhood is a valid answer rather
+# than an error, so without it the guide prints the wrong conclusion.
 prologue = """
-import intellistream_datahub_sdk as _fixture_sdk
-client.resources.create(
-    [
-        _fixture_sdk.Resource(external_id="cooling_system", name="Cooling system", labels=["System"]),
-        _fixture_sdk.Resource(external_id="sensor_a", name="Sensor A", labels=["Sensor"]),
-        _fixture_sdk.Resource(external_id="sensor_b", name="Sensor B", labels=["Sensor"]),
-    ],
-    [
-        _fixture_sdk.RelForm.by_external_ids("sensor_a", "cooling_system", "PART_OF"),
-        _fixture_sdk.RelForm.by_external_ids("sensor_b", "cooling_system", "PART_OF"),
-    ],
-)
-
-# The guide's premise is an established graph, not one created a millisecond ago.
-# The graph read path lags writes by a second or two, so `fetch_related` returns
-# nothing until it catches up. Waiting here is fixture correctness: it puts the
-# reader's world in place before the page's own code starts.
-import time as _time
-for _attempt in range(30):
-    if client.resources.fetch_related(
-            external_id="sensor_a", depth=5, relationship_types=["PART_OF"]).nodes:
-        break
-    _time.sleep(0.5)
+from tutorial_support import wait_for_related
+wait_for_related(client, "sensor_a", relationship_types=["PART_OF"])
 """
 
 [owns]
