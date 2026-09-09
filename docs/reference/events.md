@@ -46,10 +46,12 @@ carries a weekend `eventTime` and a Monday `createdTime`. Filter on `eventTime` 
 did it happen*, on `createdTime` to ask *when did we learn about it*.
 
 :::note An epoch's size decides its unit
-On the way in, an epoch of **12 digits or fewer is seconds** and **13 or more is milliseconds**, so
+On the way in, an epoch of **9 to 12 digits is seconds** and **13 or more is milliseconds**, so
 `1767225600` and `1767225600000` are the same instant, `2026-01-01T00:00:00Z`. That covers
 `eventTime` and the `min` / `max` bounds of every time filter below, for a bare JSON number and a
-quoted string alike. An ISO-8601 string keeps its own offset.
+quoted string alike. An ISO-8601 string keeps its own offset and **has to carry one**:
+`2024-06-17T12:34:56` with no zone is rejected rather than read as UTC.
+[Timestamps in full →](./timeseries#write-datapoints)
 :::
 
 :::note Numeric ids cross the wire as JSON strings
