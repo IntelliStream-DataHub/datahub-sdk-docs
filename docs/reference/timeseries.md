@@ -672,7 +672,7 @@ if (!result.isComplete()) {
 | Look up by id / external id | `timeseries().byIds` | `timeseries.by_ids` | `time_series.by_ids` |
 | Filter | `timeseries().filter` | `timeseries.filter` | `time_series.filter` |
 | Search | `timeseries().search` | `timeseries.search` | `time_series.search` |
-| List | HTTP | `timeseries.list` | `time_series.list` / `list_with_limit` |
+| List | HTTP | `timeseries.list(limit=...)` | `time_series.list(Option<u64>)` |
 | Update | HTTP | `timeseries.update` | `time_series.update` |
 | Delete | `timeseries().delete` | `timeseries.delete` | `time_series.delete` |
 | Write datapoints | `insertDatapoints` / `ingest` | `insert_datapoints` / `insert_from_lists` | `insert_datapoint` / `insert_datapoints` |
