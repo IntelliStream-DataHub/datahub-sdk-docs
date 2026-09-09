@@ -365,7 +365,7 @@ A datapoint is a `(timestamp, value)` pair grouped under a series' external id. 
 capped at **64 characters** on the wire, which fits any number and any status code, and one
 collection holds at most **100 000** datapoints (10 000 for a `text` or `mixed` series).
 
-A `timestamp` is an epoch, and its size decides the unit: **10 digits or fewer is seconds, 11 or
+A `timestamp` is an epoch, and its size decides the unit: **12 digits or fewer is seconds, 13 or
 more is milliseconds**. `1767225600` and `1767225600000` are the same instant,
 `2026-01-01T00:00:00Z`. That holds everywhere the API takes an epoch, for a bare JSON number and a
 quoted string alike; an ISO-8601 string keeps its own offset instead.
