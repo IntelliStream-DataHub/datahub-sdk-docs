@@ -194,6 +194,7 @@ dropped, or reading a file's header without pulling the whole thing.
 | `Range: bytes=-1024` | The last 1024 bytes |
 | `Range: bytes=1024-` | Everything from that offset onwards |
 | `If-None-Match: "<etag>"` | `304` while the file is unchanged |
+| `If-None-Match: "<a>", "<b>"` | The same `304` if either tag is current; `*` matches any |
 | `If-Range: "<etag>"` | The range while the file is unchanged, otherwise the whole file |
 
 ```bash
@@ -203,7 +204,9 @@ curl -H "Authorization: Bearer $TOKEN" -H "Range: bytes=0-1023" \
 
 The `ETag` is the file's SHA-256, the same value `checksum` carries in its metadata. Send it back
 as `If-Range` when resuming: without it, a download that resumes against a file which changed in
-the meantime splices two different bodies together and reports success.
+the meantime splices two different bodies together and reports success. `If-None-Match` ignores a
+`W/` prefix, as the standard requires, but `If-Range` does not, so resume with the exact tag you
+were given.
 
 A range starting past the end of the file gets a `416`. Several ranges in one header are answered
 with the whole file, since `multipart/byteranges` is not supported.
