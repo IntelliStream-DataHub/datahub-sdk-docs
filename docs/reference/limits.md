@@ -16,6 +16,7 @@ second.
 | [Field caps](#field-caps) | `400` / `422` | the usual validation body | Shorten the field |
 | [Batch caps](#batch-caps) | `400` / `422` | the usual validation body | Split the batch |
 | [Request body size](#request-body-size) | `413` | `.../errors/request-too-large` | Split the batch |
+| [Binary frame caps](#binary-frames) | `400` / `413` | `.../errors/datapoint-block-rejected` | Split the frame or fix the producer |
 | [Rate limit](#rate-limits) | `429` + `Retry-After` | `.../errors/rate-limit-exceeded` | Wait the seconds it names |
 | [Daily ingest quota](#daily-ingest-quotas) | `429` + `Retry-After` | `.../errors/ingest-quota-exceeded` | Wait until 00:00 UTC |
 | [Lifetime ceiling](#lifetime-ceilings) | `403`, no `Retry-After` | `.../errors/tenant-limit-reached` | Ask for it to be raised |
@@ -31,8 +32,8 @@ bodies are [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) problem documents 
 Rate limits, quotas, ceilings and WebSocket caps are deployment policy: an operator sets
 them, and a tenant can be given its own. [Lifetime ceilings](#lifetime-ceilings) are off
 altogether unless a deployment turns them on. Read the `limit` field off the response rather
-than hard-coding the value. The field and batch caps below are the wire contract and do not
-vary.
+than hard-coding the value. The field, batch and binary frame caps below are the wire contract
+and do not vary.
 :::
 
 ## Field caps {#field-caps}
@@ -79,6 +80,7 @@ The `items` cap is enforced wherever the handler validates the body. `/events/up
 | Endpoint | Cap |
 | --- | --- |
 | `POST /timeseries/data` | 16 MiB |
+| `POST /timeseries/data/binary` | 64 MiB compressed, `datahub.limits.max-body-bytes-datapoints-binary` |
 | Everything else | 4 MiB |
 | `PUT /files` and `GET /files/download/**` | exempt, they stream |
 
@@ -99,6 +101,31 @@ so split the batch instead of retrying it.
 [graph file format](./resources#graph-transfer) itself allows up to 512 MB. A deployment that
 imports larger graphs raises `datahub.limits.max-body-bytes`, which is deployment-wide, and
 the ceiling on any reverse proxy in front of it.
+
+On `POST /timeseries/data/binary` an oversized body answers with the endpoint's own problem
+type, `.../errors/datapoint-block-rejected` with `reason: "request-too-large"`, still a `413`.
+
+## Binary frame caps {#binary-frames}
+
+[`POST /timeseries/data/binary`](./binary-datapoints) carries datapoints as frames, and the
+frame format fixes its own caps. Every refusal is a problem document of
+`type: ".../errors/datapoint-block-rejected"` with a stable `reason`, and nothing of the request
+was inserted:
+
+| Cap | Value | Answered with |
+| --- | --- | --- |
+| Rows per frame, numeric series | 100 000 | `400`, `row-count-mismatch` |
+| Rows per frame, `TEXT` or `MIXED` series | 10 000 | `400`, `row-count-mismatch` |
+| Series per frame | 10 000 | `400`, `directory-invalid` |
+| Text value | 64 characters and 256 bytes | `400`, `value-invalid` |
+| Decompressed payload per frame | 4 MiB | `413`, `frame-too-large` |
+| Frames per request | 32 | `413`, `too-many-frames` |
+| Decompressed total per request | 64 MiB | `413`, `request-too-large` |
+| Binary requests validated at once, per API instance | deployment policy | `429`, `too-many-in-flight`, `Retry-After: 1` |
+
+The `400`s mean the producer is wrong and the `413`s mean split; only the `429` clears by
+waiting. The full list of reasons, and the retry rules, are on
+[Binary datapoint frames](./binary-datapoints#responses).
 
 ## Graph transfer {#graph-transfer}
 
@@ -166,7 +193,10 @@ can be hours.
 | `ingested bytes` | 1 GiB of write-request body |
 
 `nodes` is the shared count of resources, time series, data sets, labels, policies and
-functions: they are one population, not five.
+functions: they are one population, not five. On the [binary datapoint path](./binary-datapoints)
+`ingested bytes` counts the **decompressed** size of the frames, so compressing harder does not
+stretch the allowance, and every quota is charged after validation, so a refused request costs
+nothing.
 
 ```json
 {
@@ -257,6 +287,7 @@ from you:
 | `401`, and `403` on a grant | No | Yes, until the credential is fixed |
 | `403` on a [lifetime ceiling](#lifetime-ceilings) | No | **No**, surfaced to you |
 | `400` / `422` (validation), `413` (body too large) | No | No, surfaced to you |
+| `404 unknown-timeseries` / `422 external-id-mismatch` on the [binary path](./timeseries#binary-ingest) | **Once**, after re-resolving the series | No, the binary path has no spool |
 
 So rate limits and daily quotas take care of themselves: the client backs off and replays.
 A `413` or a validation failure reaches your code, which is the right place for it, since
@@ -274,3 +305,5 @@ Two things to check in your own configuration:
 - **A `TEXT` or `MIXED` series batch must stay at or under 10 000 points per collection**,
   whatever `batchSize` says. A numeric batch of 10 000 points is roughly 500 KB of JSON,
   comfortably inside the 16 MiB datapoint body cap.
+- **`ingestBinary` has no size knob to get wrong**: it cuts frames and requests under the
+  [binary frame caps](#binary-frames) itself.
