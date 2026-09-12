@@ -83,6 +83,7 @@ The `items` cap is enforced wherever the handler validates the body. `/events/up
 | `POST /timeseries/data/binary` | 64 MiB compressed, `datahub.limits.max-body-bytes-datapoints-binary` |
 | Everything else | 4 MiB |
 | `PUT /files` and `GET /files/download/**` | exempt, they stream |
+| `POST /resources/import` and `GET /resources/export/{id}` | exempt, they stream; the [file format](#graph-transfer) has its own ceilings |
 
 ```json
 {
@@ -96,11 +97,6 @@ The `items` cap is enforced wherever the handler validates the body. `/events/up
 
 A `413` is **terminal**. The same request will never become acceptable by being sent again,
 so split the batch instead of retrying it.
-
-`POST /resources/import` is under the 4 MiB cap like everything else, even though the
-[graph file format](./resources#graph-transfer) itself allows up to 512 MB. A deployment that
-imports larger graphs raises `datahub.limits.max-body-bytes`, which is deployment-wide, and
-the ceiling on any reverse proxy in front of it.
 
 On `POST /timeseries/data/binary` an oversized body answers with the endpoint's own problem
 type, `.../errors/datapoint-block-rejected` with `reason: "request-too-large"`, still a `413`.
