@@ -352,7 +352,7 @@ combined with **AND**.
 | `labels` | Resources carrying **all** of these labels. |
 | `dataSetId` | Resources in any of these data sets. |
 | `metadata` | Every key/value given must be present on the resource. |
-| `createdTime`, `lastUpdatedTime` | `{ "min": …, "max": … }`, ISO-8601, both bounds inclusive. |
+| `createdTime`, `lastUpdatedTime` | `{ "min": …, "max": … }`, [ISO-8601 or epoch millis](./client#timestamps), both bounds inclusive. |
 
 Each field above except `isRoot`, `labels` and `metadata` takes **either a bare value or an
 array**, and the entries of an array are combined with **OR**. That is why they are named in the

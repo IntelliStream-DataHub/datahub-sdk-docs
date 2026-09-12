@@ -28,7 +28,7 @@ event even when a `snake_case` policy is rejecting it on resources.
 | --- | --- | --- |
 | `id` | UUID string | The event's identity. Time-ordered UUID v7, see the note under [Create](#create). |
 | `externalId` | string, 3–256 | **Required.** The subject's key in the source system. Shared across events on purpose. |
-| `eventTime` | epoch millis, or ISO-8601 on the way in | **Required.** When it happened at the source. Never defaulted, see [Create](#create). |
+| `eventTime` | [epoch millis, or ISO-8601 with an offset, on the way in](./client#timestamps) | **Required.** When it happened at the source. Never defaulted, see [Create](#create). |
 | `type` | string, 3–128 | Top-level categorization (`alarm`, `work_order`). |
 | `subType` | string, 3–128 | Refinement of `type` (`overpressure`). |
 | `status` | string, 3–128 | Free-form lifecycle marker (`OPEN`, `acknowledged`). No state machine is enforced. |
@@ -65,6 +65,10 @@ with a `400`, like any other [unknown field](./client#unknown-fields).
 Every event must carry an **event time**, the moment it occurred at the source (sensor,
 PLC, upstream system). The SDK deliberately does *not* default it to "now": an event
 without it is rejected rather than silently mis-timestamped.
+
+Send it as epoch milliseconds or ISO-8601 with an offset. Epoch seconds is refused with a
+`400` naming the mistake, where it used to be accepted and stored tens of thousands of years
+out. [Timestamps](./client#timestamps) has both forms and their bounds.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">

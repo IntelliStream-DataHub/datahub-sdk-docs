@@ -365,6 +365,9 @@ A datapoint is a `(timestamp, value)` pair grouped under a series' external id. 
 capped at **64 characters** on the wire, which fits any number and any status code, and one
 collection holds at most **100 000** datapoints (10 000 for a `text` or `mixed` series).
 
+A timestamp is epoch milliseconds or ISO-8601 with an offset; epoch seconds is a `400`, not a
+datapoint in 1970. See [Timestamps](./client#timestamps).
+
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
 
@@ -548,7 +551,7 @@ window:
 | Field | Meaning |
 | --- | --- |
 | `id` / `externalId` | The series. |
-| `start`, `end` | ISO-8601 or epoch millis. At least one is required. |
+| `start`, `end` | [ISO-8601 or epoch millis](./client#timestamps). At least one is required. |
 | `limit` | Datapoints per page, default 100, at most 100 000. |
 | `aggregates` | Any of `avg`, `sum`, `min`, `max`, lower-case. A name outside that set is dropped, not rejected. `avg` comes back as `average`. |
 | `granularity` | A number and a unit: `s`, `m`, `h`, `d`, `w`, `mo`, `y`, or the words `sec`, `min`, `hour`, `day`, `week`, `month`, `year` and their plurals (`15m`, `1h`, `30 min`). Bare `m` is a minute; a month is `mo`. Required when `aggregates` is set. |
@@ -635,9 +638,9 @@ Each item names one series by `externalId` or `id`, and both window bounds are o
 | `exclusiveEnd` only | Everything before that instant |
 | Neither | Every datapoint of the series, leaving its definition, edges and subscriptions |
 
-A bound is either ISO-8601 or epoch milliseconds; anything else is a 400 naming the field, as is
-a series that does not exist. Python, Rust and Java's `Instant` overload take real datetimes, so
-those always send the ISO form.
+A bound is either [ISO-8601 or epoch milliseconds](./client#timestamps); anything else is a 400
+naming the field, as is a series that does not exist. Python, Rust and Java's `Instant` overload
+take real datetimes, so those always send the ISO form.
 
 Like a series delete, this is handed off and completes shortly after the call returns, and it
 cannot be undone.
