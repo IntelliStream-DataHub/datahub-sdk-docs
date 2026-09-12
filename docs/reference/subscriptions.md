@@ -21,14 +21,10 @@ sub.setName("Engine temps");
 sub.setTimeseries(List.of(IdCollection.createFromExternalId("engine_temperature")));
 client.subscriptions().create(List.of(sub));
 
-DataWrapper<Subscription> all = client.subscriptions().list(new SubscriptionRetriever());
+DataWrapper<Subscription> all = client.subscriptions().filter(new SubscriptionRetriever());
 
 client.subscriptions().delete(List.of(IdCollection.createFromExternalId("engine_temps")));
 ```
-
-`SubscriptionRetriever` takes a `filter` whose one criterion is `timeseries` (only
-subscriptions bound to these series, by id or external id), a `limit` (default 100, at most
-10 000), a `sort`, and `includeSystemManaged` (default `false`).
 
 </TabItem>
 <TabItem value="python" label="Python">
@@ -42,7 +38,7 @@ sub = intellistream_datahub_sdk.Subscription(
     timeseries=["engine_temperature"])
 client.subscriptions.create([sub])
 
-all_subs = client.subscriptions.list()
+all_subs = client.subscriptions.filter()
 
 client.subscriptions.delete(["engine_temps"])
 ```
@@ -51,7 +47,7 @@ client.subscriptions.delete(["engine_temps"])
 <TabItem value="rust" label="Rust">
 
 ```rust
-use intellistream_datahub_sdk::subscriptions::{Subscription, SubscriptionRetriever};
+use intellistream_datahub_sdk::subscriptions::{Subscription, SubscriptionFilterForm};
 use intellistream_datahub_sdk::generic::IdAndExtId;
 
 let sub = Subscription::new(
@@ -59,13 +55,30 @@ let sub = Subscription::new(
     vec![IdAndExtId::from_external_id("engine_temperature")]);
 api.subscriptions.create(&sub).await?;
 
-let all = api.subscriptions.list(&SubscriptionRetriever::default()).await?;
+let all = api.subscriptions.filter(&SubscriptionFilterForm::default()).await?;
 
 api.subscriptions.delete(&vec![IdAndExtId::from_external_id("engine_temps")]).await?;
 ```
 
 </TabItem>
 </Tabs>
+
+`filter` posts `POST /subscriptions/filter`, the request body every other collection uses: a
+`filter` holding the criteria, a `limit`, a `sort`, and a keyset `cursor`. The criteria are
+`id`, `externalId`, `name`, `timeseries` (only subscriptions bound to these series, by id or
+external id), `createdTime` and `lastUpdatedTime`.
+
+The clients do not all send the whole body yet:
+
+| | Java | Python and Rust |
+| --- | --- | --- |
+| Criteria | all of them, on `SubscriptionRetriever` | `timeseries` only |
+| `cursor` | sent | not sent yet |
+| `limit` you did not set | the server's default, 1000 | 100 |
+
+`limit` is capped at 10 000 everywhere. To narrow by series in Python, pass keywords,
+`client.subscriptions.filter(timeseries=["engine_temperature"], limit=100)`, or a prepared
+`SubscriptionFilterForm`, which is the only form Rust takes.
 
 :::note Data set access control
 Creating a subscription requires **read access to every bound series' data set**. If you
@@ -202,6 +215,6 @@ the server redelivers it, so make your handler idempotent.
 | Operation | Java | Python | Rust |
 | --- | --- | --- | --- |
 | Create | `subscriptions().create` | `subscriptions.create` | `subscriptions.create` |
-| List | `subscriptions().list` | `subscriptions.list` | `subscriptions.list` |
+| Filter | `subscriptions().filter` | `subscriptions.filter` | `subscriptions.filter` |
 | Delete | `subscriptions().delete` | `subscriptions.delete` | `subscriptions.delete` |
 | Live delivery | `subscriptions().listen` | `subscriptions.listen` | `subscriptions.listen` |
