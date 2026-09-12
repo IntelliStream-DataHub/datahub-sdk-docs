@@ -9,27 +9,27 @@ import TabItem from '@theme/TabItem';
 # Tutorial: stream system metrics
 
 Build a small **metrics agent**, end to end: a program that samples this machine's
-memory every three seconds and streams it into DataHub as time-series data — and keeps
+memory every three seconds and streams it into DataHub as time-series data, and keeps
 working when the API doesn't. It runs on Linux, macOS, and Windows. The same program is
 shown in Java, Python and Rust; pick your language once and every code block on the
 page follows.
 
 The whole flow is five steps, and each is a section below:
 
-1. **Build the client** — authenticate with a bearer token and turn on a durable,
+1. **Build the client**: authenticate with a bearer token and turn on a durable,
    spool-to-disk ingest buffer.
-2. **Ensure the time series exist** — look up three series by external id and create
+2. **Ensure the time series exist**: look up three series by external id and create
    only the ones that are missing, so the program is safe to re-run.
-3. **Sample the data** — read memory usage via a small OS-info library (this is just
-   the tutorial's data source — swap in your own).
-4. **Ingest datapoints** — every three seconds, send one datapoint per series.
-5. **Survive outages** — when the API is unreachable, datapoints spool to disk and
+3. **Sample the data**: read memory usage via a small OS-info library (this is just
+   the tutorial's data source, swap in your own).
+4. **Ingest datapoints**: every three seconds, send one datapoint per series.
+5. **Survive outages**: when the API is unreachable, datapoints spool to disk and
    flush automatically once it recovers.
 
 ## Before you start
 
 You need a reachable DataHub API and credentials. This tutorial uses **OAuth2
-client-credentials** — the SDK fetches the bearer token and refreshes it when it
+client-credentials**, the SDK fetches the bearer token and refreshes it when it
 expires, so a long-running agent never works with a stale token. The client reads the
 configuration from the environment (or a `.env` file in the working directory):
 
@@ -123,17 +123,17 @@ hostname = "0.4"
 ```
 
 The code below lives in `src/main.rs`. The `blocking` feature enables the SDK's
-synchronous client (`intellistream_datahub_sdk::blocking`) — same services and methods as
+synchronous client (`intellistream_datahub_sdk::blocking`), same services and methods as
 the async API, but no async runtime and no `async`/`.await` in your code.
 
 </TabItem>
 </Tabs>
 
-## Step 1 — Build the client
+## Step 1: Build the client
 
 Everything starts from one client object. Two things happen here: authentication
-(client-credentials from the environment — the SDK exchanges them for a bearer token
-and refreshes it as needed) and — the part that makes this program resilient — turning
+(client-credentials from the environment, the SDK exchanges them for a bearer token
+and refreshes it as needed) and, the part that makes this program resilient, turning
 on the **durable ingest buffer**. With it enabled, an ingest that can't reach the API
 is written to compressed segments on disk and replayed automatically later. Without
 it, ingestion is best-effort and an outage loses data.
@@ -221,11 +221,11 @@ Buffering is optional and off by default, bounded by a time window and a size ca
 story.
 :::
 
-## Step 2 — Ensure the time series exist
+## Step 2: Ensure the time series exist
 
-Before you can ingest, the target series have to exist. The create endpoint rejects
-duplicates, so rather than blindly creating them the program **looks up first, then
-creates only the gap** — which makes it safe to re-run and safe to start on a machine
+Before you can ingest, the target series have to exist. The create endpoint rejects a
+duplicate external id with `409`, so rather than blindly creating them the program **looks up first, then
+creates only the gap**, which makes it safe to re-run and safe to start on a machine
 where the series already exist.
 
 Each external id is **namespaced by hostname** (`system_memory_used_web01`, …), so the
@@ -241,9 +241,9 @@ overwriting one another. The three series, all integer-valued in `bytes`:
 :::note Numbers aren't identical across languages
 `used`/`available` come from a different OS API per language, and those APIs don't all
 mean quite the same thing. Java's `available` is raw OS free memory; Python's and
-Rust's `available` is closer to Linux's cache-aware `MemAvailable` estimate — so on the
+Rust's `available` is closer to Linux's cache-aware `MemAvailable` estimate, so on the
 same machine, Java tends to read a lower `available` (and higher `used`) than Python or
-Rust. `used + available == total` holds for Java but generally not for Python/Rust —
+Rust. `used + available == total` holds for Java but generally not for Python/Rust,
 that's expected, not a bug.
 :::
 
@@ -343,12 +343,12 @@ for (base, name) in METRICS {
 </Tabs>
 
 The lookup is **best effort**: if the API is down at startup, the program just retries
-on the next tick — and thanks to the buffer from step 1, datapoints ingested in the
+on the next tick, and thanks to the buffer from step 1, datapoints ingested in the
 meantime aren't lost.
 
-## Step 3 — Sample the data
+## Step 3: Sample the data
 
-This step has nothing to do with the SDK — it's just where the numbers come from. Each
+This step has nothing to do with the SDK. It is just where the numbers come from. Each
 language uses a small OS-info library to read memory and swap in one call, in bytes, so
 the same code works on Linux, macOS and Windows. Replace this function with any data
 source of your own and the DataHub steps (1, 2, 4, 5) don't change.
@@ -356,7 +356,7 @@ source of your own and the DataHub steps (1, 2, 4, 5) don't change.
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
 
-`com.sun.management.OperatingSystemMXBean` is built into the JDK — no dependency
+`com.sun.management.OperatingSystemMXBean` is built into the JDK, no dependency
 needed. There's no direct "used" getter, so it's derived as total minus free:
 
 ```java
@@ -392,7 +392,7 @@ def sample():
 </TabItem>
 <TabItem value="rust" label="Rust (async)">
 
-The sampler is plain synchronous code — identical in both Rust flavors. `sysinfo`
+The sampler is plain synchronous code, identical in both Rust flavors. `sysinfo`
 exposes `used_memory()`/`available_memory()`/`used_swap()` directly:
 
 ```rust
@@ -410,7 +410,7 @@ fn sample() -> HashMap<&'static str, i64> {
 </TabItem>
 <TabItem value="rust-blocking" label="Rust (blocking)">
 
-The sampler is plain synchronous code — identical in both Rust flavors. `sysinfo`
+The sampler is plain synchronous code, identical in both Rust flavors. `sysinfo`
 exposes `used_memory()`/`available_memory()`/`used_swap()` directly:
 
 ```rust
@@ -428,10 +428,10 @@ fn sample() -> HashMap<&'static str, i64> {
 </TabItem>
 </Tabs>
 
-## Step 4 — Ingest on a tick
+## Step 4: Ingest on a tick
 
 A timer fires every three seconds. Each tick samples memory and sends one datapoint per
-series — three datapoints, stamped with the same timestamp.
+series, three datapoints, stamped with the same timestamp.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -453,7 +453,7 @@ IngestResult result = client.timeseries().ingest(byExternalId);
 </TabItem>
 <TabItem value="python" label="Python">
 
-One `insert_from_lists` call per series — here each carries a single datapoint, but the
+One `insert_from_lists` call per series, here each carries a single datapoint, but the
 same call takes whole arrays when you have them. Any timezone-aware timestamps work
 (plain `datetime` here; pandas if you already have it):
 
@@ -497,23 +497,23 @@ for (base, _) in METRICS {
 </TabItem>
 </Tabs>
 
-Whatever a single tick does — a sampling error, a rejected request — it must never kill
+Whatever a single tick does, a sampling error, a rejected request, it must never kill
 the loop: catch, log, and let the next tick try again. The complete programs below wrap
 each tick that way.
 
-## Step 5 — Survive an outage
+## Step 5: Survive an outage
 
 This is what the buffer from step 1 buys you. Stop the DataHub API while the program is
 running: instead of raising, each ingest spools its datapoints to compressed segments
 under `datahub-spool/`. Start the API again and the backlog flushes automatically on
-the next call — no data lost within the retention window. The same happens when the
+the next call, no data lost within the retention window. The same happens when the
 token is rejected (HTTP 401/403, e.g. expired): datapoints keep spooling until you
 restore a valid token.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
 
-The Java client reports buffering explicitly — `IngestResult.buffered()` is the number
+The Java client reports buffering explicitly, `IngestResult.buffered()` is the number
 of datapoints that were spooled instead of sent:
 
 ```java
@@ -533,7 +533,7 @@ if (result.buffered() > 0) {
 </TabItem>
 <TabItem value="python" label="Python">
 
-With buffering enabled the calls simply don't raise on an outage — the datapoints are
+With buffering enabled the calls simply don't raise on an outage, the datapoints are
 spooled and the program keeps ticking. Watch the spool itself to see it happen:
 
 ```bash
@@ -546,7 +546,7 @@ the tick wrapped in `try`/`except`.
 </TabItem>
 <TabItem value="rust" label="Rust (async)">
 
-With buffering enabled the calls return `Ok` on an outage — the datapoints are spooled
+With buffering enabled the calls return `Ok` on an outage, the datapoints are spooled
 and the program keeps ticking. Watch the spool itself to see it happen:
 
 ```bash
@@ -559,7 +559,7 @@ handling the `Result`.
 </TabItem>
 <TabItem value="rust-blocking" label="Rust (blocking)">
 
-With buffering enabled the calls return `Ok` on an outage — the datapoints are spooled
+With buffering enabled the calls return `Ok` on an outage, the datapoints are spooled
 and the program keeps ticking. Watch the spool itself to see it happen:
 
 ```bash
@@ -1077,10 +1077,10 @@ fn hostname() -> String {
 ## Try this next
 
 - **Add a metric.** Add one entry to the metric table (e.g. total memory) and extend
-  the sampler — series creation and ingestion both pick it up with no other changes.
+  the sampler, series creation and ingestion both pick it up with no other changes.
 - **Namespace by host.** Run the program on two machines (or set `HOST_ID` to two
   different values) and watch each get its own set of series.
-- **Swap the data source.** Replace the sampler with your own readings — the DataHub
+- **Swap the data source.** Replace the sampler with your own readings, the DataHub
   steps don't change.
 - **Read it back.** Chart the trend with
   [Query & aggregate time-series](/guides/query-and-aggregate), or tail it live with

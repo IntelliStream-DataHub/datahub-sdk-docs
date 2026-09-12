@@ -1,13 +1,13 @@
 ---
 sidebar_position: 4
-title: Time-series
+title: Time series
 ---
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-# Time-series
+# Time series
 
-Time-series metadata, datapoint retrieval, and datapoint ingestion (single-request or
+Time series metadata, datapoint retrieval, and datapoint ingestion (single-request or
 high-throughput).
 
 A series' `externalId` identifies it: unique per tenant, compared without case, and stored
@@ -58,20 +58,25 @@ api.time_series.create_one(&ts).await?;
 ## Value types
 
 Every series has a **value type** that decides how its datapoints are stored. Leave it
-unset and the series is floating-point (`float32`) — right for most sensor readings, so
+unset and the series is floating-point (`float32`), right for most sensor readings, so
 the create above accepts decimal values as-is. Set it explicitly when you need something
 else:
 
 | Value type | Use it for |
 | --- | --- |
-| `float32` *(default)* | Sensor readings — 32-bit precision is plenty. |
+| `float32` *(default)* | Sensor readings, 32-bit precision is plenty. |
 | `float` | Double-precision floating point. |
-| `numeric` / `decimal32` | **Exact decimals** — money, lab values — stored without floating-point rounding. Pass the values as strings. |
+| `numeric` / `decimal32` | **Exact decimals**, money, lab values, stored without floating-point rounding. Send the value's string form, see below. |
 | `bigint` | Whole numbers (counts, integer statuses). |
 | `text` | Non-numeric string values. |
 | `mixed` | Heterogeneous values in one series. |
 
 A float written to a `bigint` series is rejected, so pick the type that matches the data.
+
+Every value crosses the wire as a string, whatever the type. For an exact decimal, send the
+string form rather than a float: `Datapoint.of(ts, "12.34")` in Java, `DatapointString(ts,
+"12.34")` with `insert_datapoints` in Python (`insert_from_lists` takes floats and converts
+them), and `DatapointString` in Rust.
 
 `text` and `mixed` also carry a tighter write cap than the numeric types: **10 000 datapoints
 per collection** rather than 100 000, and a lifetime ceiling of their own. The check runs once
@@ -118,7 +123,7 @@ api.time_series.create_one(&price).await?;
 ## Filter series
 
 `POST /timeseries/filter` finds series by structured criteria. Everything you supply is
-combined with AND — a series must match every criterion to be included.
+combined with AND, a series must match every criterion to be included.
 
 | Criterion | Matching |
 | --- | --- |
@@ -137,17 +142,11 @@ entries of an array are combined with **OR**. That is why they are named in the 
 `labels` and `metadata` require **all** entries to match and keep their plural names for that
 reason.
 
-Results come newest first unless you ask for another order — see
-[sorting and paging](#sorting-and-paging) — capped by `limit` (default 1000, max 10000; a value
+Results come newest first unless you ask for another order, see
+[sorting and paging](#sorting-and-paging): capped by `limit` (default 1000, max 10000; a value
 `<= 0` falls back to the default, and above the ceiling is a 400). Series in data sets you lack
-read access to are silently omitted — the result is what your token may see, not an error. For
+read access to are silently omitted, the result is what your token may see, not an error. For
 free-text lookups use `POST /timeseries/search` instead.
-
-:::note The `metadataKey` / `metadataValue` pair is gone
-It existed only because `metadata` could not express "has this key, whatever its value". A null
-value in the map says that now, and `{"health": "good", "tier": null}` asks for both conditions at
-once.
-:::
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -222,28 +221,18 @@ search query itself, everything else is applied to the hits afterwards.
 }
 ```
 
-:::warning `search.name` and `search.description` are gone
-The phrase block is now a single `query`, the same shape the other three searches take. The two
-alternatives it used to carry were removed rather than kept: `name` matched by **exact equality**
-under an endpoint documented as full-text, and `description` ran a differently configured query
-over one column.
-
-Both have a better replacement. `filter.name` matches names as a case-insensitive pattern list
-(`["pump_*", "PMP-1"]`), which is more than `search.name` could do, and `query` already covers the
-description column.
-
-Clients exposing these as separate calls (`search_by_name`, `search_by_description`) need updating
-to match.
+:::caution `search.name` and `search.description` are rejected
+They are unknown fields, refused with a `400`; use `filter.name` and `query`.
 :::
 
 ## Sorting and paging {#sorting-and-paging}
 
-The three node filters — `/timeseries/filter`, `/resources/filter` and `/datasets/filter` —
+The three node filters, `/timeseries/filter`, `/resources/filter` and `/datasets/filter`,
 share this contract. (`/events/filter` works the same way over its own columns; see
 [events](./events#paging).)
 
 Order a page with `sort`, over `id`, `externalId`, `name`, `source`, `description`,
-`createdTime`, `lastUpdatedTime` or `dataSetId`. The default is `createdTime` descending —
+`createdTime`, `lastUpdatedTime` or `dataSetId`. The default is `createdTime` descending,
 newest created first.
 
 ```json
@@ -256,7 +245,7 @@ Only the **first** `property` is used, and `id` is appended behind it: a sort co
 a position unless it is unique, and a page boundary inside a run of equal values repeats or drops
 exactly those rows. An unrecognised property falls back to the default rather than being
 rejected, and any `order` that is not exactly `desc` sorts ascending. Nulls sort last ascending,
-first descending — most of these columns are nullable, since every node type shares one table.
+first descending, most of these columns are nullable, since every node type shares one table.
 
 A page that has a successor carries a `nextCursor`. Echo it back as `cursor` to continue:
 
@@ -267,10 +256,10 @@ A page that has a successor carries a `nextCursor`. Echo it back as `cursor` to 
   "limit": 100 }
 ```
 
-The cursor is **opaque** — base64 of a versioned encoding carrying the sort, the boundary value
-and the id — so do not build or parse one. Send it with the **same** sort that produced it; a
+The cursor is **opaque**, base64 of a versioned encoding carrying the sort, the boundary value
+and the id, so do not build or parse one. Send it with the **same** sort that produced it; a
 cursor is a position in one particular order, and continuing it under another is refused. One
-that does not decode restarts the walk from the first page rather than failing.
+that does not decode is refused with a `400` of `type: ".../errors/malformed-cursor"`.
 
 `nextCursor` is absent on a short page, so "keep going while it is present" is the whole loop. A
 full page may still be the last, so a complete walk ends with one empty request.
@@ -305,7 +294,8 @@ while True:
         break
 ```
 
-`filter()` returns a `Page` — a list, so existing code is unaffected, carrying `.next_cursor`.
+`filter()` returns a `Page`: iterable, indexable and sized like a list, carrying `.next_cursor`
+and `.items` (a real `list`). It is not a `list` subclass, so `isinstance(page, list)` is `False`.
 
 </TabItem>
 <TabItem value="rust" label="Rust">
@@ -375,6 +365,9 @@ A datapoint is a `(timestamp, value)` pair grouped under a series' external id. 
 capped at **64 characters** on the wire, which fits any number and any status code, and one
 collection holds at most **100 000** datapoints (10 000 for a `text` or `mixed` series).
 
+A timestamp is epoch milliseconds or ISO-8601 with an offset; epoch seconds is a `400`, not a
+datapoint in 1970. See [Timestamps](./client#timestamps).
+
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
 
@@ -420,12 +413,14 @@ api.time_series
 ## High-throughput ingestion
 
 For large or unbounded volumes the SDK chunks and sends in bulk. See the
-[ingestion guide](/guides/ingest-timeseries) for the full story.
+[ingestion guide](/guides/ingest-timeseries) for the full story. Java also has a
+[binary path](#binary-ingest) for sustained volume.
 
 :::tip Survive outages with durable buffering
 Enable [durable buffering](/reference/client#durable-ingest-buffering) on the client and datapoint
 ingestion that can't reach the API spools to disk and flushes on the next call, bounded by a time
-and/or size window. Retries are idempotent (datapoints dedup on `(series, timestamp)`).
+and/or size window. Retries are idempotent (datapoints dedup on `(series, timestamp)`). The spool
+covers the JSON path only, not [binary ingest](#binary-ingest).
 :::
 
 <Tabs groupId="lang">
@@ -462,7 +457,7 @@ client.timeseries.insert_from_lists(
 </TabItem>
 <TabItem value="rust" label="Rust">
 
-`insert_datapoints` auto-batches large inputs (chunks above ~100k points):
+`insert_datapoints` auto-batches large inputs (chunks at the 100 000-point collection cap):
 
 ```rust
 use intellistream_datahub_sdk::generic::{DataWrapper, DatapointsCollection, DatapointString};
@@ -479,9 +474,93 @@ api.time_series.insert_datapoints(&mut dw).await?;
 </TabItem>
 </Tabs>
 
+## Binary ingest (Java) {#binary-ingest}
+
+`ingestBinary` sends the same datapoints as zstd-compressed Arrow frames to
+[`POST /timeseries/data/binary`](./binary-datapoints) instead of JSON. Values are parsed, sorted
+and de-duplicated on the client, and one request carries up to a million points, so it is the
+path for sustained volume from Java. `ingest` stays right for modest volume and for the
+[durable spool](./client#durable-ingest-buffering), which does not apply here. Python and Rust
+do not have the binary path yet.
+
+| | `ingest` (JSON) | `ingestBinary` |
+| --- | --- | --- |
+| Points per request | 10 000 | up to 1 000 000, in frames of at most 100 000 |
+| Series named by | external id | internal id, resolved once through `/timeseries/byids` and cached for the life of the client |
+| Access needed on the data set | write | write, and **read** for the lookup ([access control](./datasets#access-control)) |
+| Durable spool | yes | no |
+| A request the server refuses | that batch fails | nothing was inserted; the whole request is retried |
+
+```java
+import ai.intellistream.datahub.sdk.ingest.BinaryIngestOptions;
+
+Map<String, List<Datapoint>> byExternalId = Map.of(
+        "engine_temperature", List.of(Datapoint.of(Instant.now(), 92.4)),
+        "engine_rpm",         List.of(Datapoint.of(Instant.now(), 1500L)));
+
+IngestResult result = client.timeseries().ingestBinary(byExternalId);
+
+// or tuned: zstd level 1, 3 or 9 (default 9; the client pays for it)
+client.timeseries().ingestBinary(byExternalId,
+        BinaryIngestOptions.builder().zstdLevel(3).build());
+```
+
+`ingestBinary` also takes a `List<DatapointsCollection>`, with or without options. Two things
+are caught before any request is sent and land in the [`IngestResult`](#ingestresult) as a
+`BatchError`: a series that does not exist or is not readable (`statusCode` 404) and a value
+that does not fit the series' type (422). A request the server refuses as `unknown-timeseries`
+or `external-id-mismatch`, a series removed or renamed since it was cached, is rebuilt once
+after re-resolving; `429`, `5xx` and network failures are retried as for `ingest`.
+
+For many small inserts, a buffer batches them into frames and sends once **10 000 points** have
+accumulated or the oldest is **200 ms** old, whichever comes first. `add` never blocks on the
+network; flushes run on a thread of their own:
+
+```java
+import ai.intellistream.datahub.sdk.ingest.BinaryIngestBuffer;
+
+try (BinaryIngestBuffer buffer = client.timeseries().binaryBuffer()) {   // 10 000 points or 200 ms
+    buffer.add("engine_temperature", Instant.now(), 92.4);
+    buffer.add("engine_rpm", Instant.now(), 1500L);
+}   // close flushes what is left
+```
+
+`binaryBuffer(options, maxPoints, maxAge, onFlush)` sets the thresholds and a
+`Consumer<IngestResult>` that receives each flush's result. `flush()` sends what is pending on the
+calling thread, `pending()` counts what is waiting, and `lastResult()` is the most recent
+outcome. `add` takes a `double`, `long` or `String` value, or a `Datapoint`.
+
+### BinaryIngestOptions
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `zstdLevel` | `9` | `1`, `3` or `9`. Compression is never off; the level trades client CPU against bytes on the wire. |
+| `compressInParallel` | `true` | Compress frames on several threads. `false` compresses one at a time, for a small device: a level-9 context needs about 30 MB. |
+| `parallelism` | `8` | Concurrent in-flight requests. |
+| `maxRetries` | `3` | Retries for transient failures (HTTP 429/5xx, network). |
+| `failFast` | `false` | If `true`, abort on the first failed request instead of collecting errors. |
+
+`BinaryIngestOptions.defaults()` returns the defaults. The wire format, caps and every
+`reason` the endpoint answers with are on [Binary datapoint frames](./binary-datapoints).
+
 ## Retrieve datapoints
 
-Identify a series (external id or id) and a time window.
+`POST /timeseries/data/list` takes a list of `RetrieveFilter` items, one per series and
+window:
+
+| Field | Meaning |
+| --- | --- |
+| `id` / `externalId` | The series. |
+| `start`, `end` | [ISO-8601 or epoch millis](./client#timestamps). At least one is required. |
+| `limit` | Datapoints per page, default 100, at most 100 000. |
+| `aggregates` | Any of `avg`, `sum`, `min`, `max`, lower-case. A name outside that set is dropped, not rejected. `avg` comes back as `average`. |
+| `granularity` | A number and a unit: `s`, `m`, `h`, `d`, `w`, `mo`, `y`, or the words `sec`, `min`, `hour`, `day`, `week`, `month`, `year` and their plurals (`15m`, `1h`, `30 min`). Bare `m` is a minute; a month is `mo`. Required when `aggregates` is set. |
+| `includeOutsidePoints`, `mergeDuplicates` | Booleans, default `false`. |
+| `cursor` | The previous page's `nextCursor`, carried on each returned collection. |
+
+A datapoint comes back with an ISO-8601 UTC `timestamp` and a `value`. Python reads the
+timestamp as a timezone-aware `datetime.datetime` and the value as `float | None`; Rust as
+`chrono::DateTime<Utc>` and `Option<f64>`; Java keeps both as strings on `DatapointString`.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -559,9 +638,9 @@ Each item names one series by `externalId` or `id`, and both window bounds are o
 | `exclusiveEnd` only | Everything before that instant |
 | Neither | Every datapoint of the series, leaving its definition, edges and subscriptions |
 
-A bound is either ISO-8601 or epoch milliseconds; anything else is a 400 naming the field, as is
-a series that does not exist. Python, Rust and Java's `Instant` overload take real datetimes, so
-those always send the ISO form.
+A bound is either [ISO-8601 or epoch milliseconds](./client#timestamps); anything else is a 400
+naming the field, as is a series that does not exist. Python, Rust and Java's `Instant` overload
+take real datetimes, so those always send the ISO form.
 
 Like a series delete, this is handed off and completes shortly after the call returns, and it
 cannot be undone.
@@ -670,10 +749,10 @@ if (!result.isComplete()) {
 | List | HTTP | `timeseries.list` | `time_series.list` / `list_with_limit` |
 | Update | HTTP | `timeseries.update` | `time_series.update` |
 | Delete | `timeseries().delete` | `timeseries.delete` | `time_series.delete` |
-| Write datapoints | `insertDatapoints` / `ingest` | `insert_datapoints` / `insert_from_lists` | `insert_datapoint` / `insert_datapoints` |
-| Read datapoints | `retrieve` / `retrieveAggregated` | `retrieve_datapoints` / `retrieve_latest_datapoints` | `retrieve_datapoints` / `retrieve_latest_datapoint` |
+| Write datapoints | `insertDatapoints` / `ingest` / `ingestBinary` | `insert_datapoints` / `insert_from_lists` | `insert_datapoint` / `insert_datapoints` |
+| Read datapoints (raw and [aggregated](#retrieve-datapoints)) | `retrieve` / `retrieveAggregated` | `retrieve_datapoints` / `retrieve_latest_datapoints` | `retrieve_datapoints` / `retrieve_latest_datapoint` |
 | Delete datapoints | `deleteDatapoints` | `timeseries.delete_datapoints` | `time_series.delete_datapoints` |
 
-Java is the one with `ingest`, the chunking, parallelising, retrying path described above.
-It is missing `list` and `update`, so reach for the endpoint there. It gained `search` alongside
-the resource, data set and event searches it already had.
+Java is the one with `ingest`, the chunking, parallelising, retrying path described above, and
+with [`ingestBinary` and `binaryBuffer`](#binary-ingest), the binary path. It is missing `list`
+and `update`, so reach for the endpoint there.
