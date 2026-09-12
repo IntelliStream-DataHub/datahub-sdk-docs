@@ -410,12 +410,14 @@ api.time_series
 ## High-throughput ingestion
 
 For large or unbounded volumes the SDK chunks and sends in bulk. See the
-[ingestion guide](/guides/ingest-timeseries) for the full story.
+[ingestion guide](/guides/ingest-timeseries) for the full story. Java also has a
+[binary path](#binary-ingest) for sustained volume.
 
 :::tip Survive outages with durable buffering
 Enable [durable buffering](/reference/client#durable-ingest-buffering) on the client and datapoint
 ingestion that can't reach the API spools to disk and flushes on the next call, bounded by a time
-and/or size window. Retries are idempotent (datapoints dedup on `(series, timestamp)`).
+and/or size window. Retries are idempotent (datapoints dedup on `(series, timestamp)`). The spool
+covers the JSON path only, not [binary ingest](#binary-ingest).
 :::
 
 <Tabs groupId="lang">
@@ -468,6 +470,75 @@ api.time_series.insert_datapoints(&mut dw).await?;
 
 </TabItem>
 </Tabs>
+
+## Binary ingest (Java) {#binary-ingest}
+
+`ingestBinary` sends the same datapoints as zstd-compressed Arrow frames to
+[`POST /timeseries/data/binary`](./binary-datapoints) instead of JSON. Values are parsed, sorted
+and de-duplicated on the client, and one request carries up to a million points, so it is the
+path for sustained volume from Java. `ingest` stays right for modest volume and for the
+[durable spool](./client#durable-ingest-buffering), which does not apply here. Python and Rust
+do not have the binary path yet.
+
+| | `ingest` (JSON) | `ingestBinary` |
+| --- | --- | --- |
+| Points per request | 10 000 | up to 1 000 000, in frames of at most 100 000 |
+| Series named by | external id | internal id, resolved once through `/timeseries/byids` and cached for the life of the client |
+| Access needed on the data set | write | write, and **read** for the lookup ([access control](./datasets#access-control)) |
+| Durable spool | yes | no |
+| A request the server refuses | that batch fails | nothing was inserted; the whole request is retried |
+
+```java
+import ai.intellistream.datahub.sdk.ingest.BinaryIngestOptions;
+
+Map<String, List<Datapoint>> byExternalId = Map.of(
+        "engine_temperature", List.of(Datapoint.of(Instant.now(), 92.4)),
+        "engine_rpm",         List.of(Datapoint.of(Instant.now(), 1500L)));
+
+IngestResult result = client.timeseries().ingestBinary(byExternalId);
+
+// or tuned: zstd level 1, 3 or 9 (default 9; the client pays for it)
+client.timeseries().ingestBinary(byExternalId,
+        BinaryIngestOptions.builder().zstdLevel(3).build());
+```
+
+`ingestBinary` also takes a `List<DatapointsCollection>`, with or without options. Two things
+are caught before any request is sent and land in the [`IngestResult`](#ingestresult) as a
+`BatchError`: a series that does not exist or is not readable (`statusCode` 404) and a value
+that does not fit the series' type (422). A request the server refuses as `unknown-timeseries`
+or `external-id-mismatch`, a series removed or renamed since it was cached, is rebuilt once
+after re-resolving; `429`, `5xx` and network failures are retried as for `ingest`.
+
+For many small inserts, a buffer batches them into frames and sends once **10 000 points** have
+accumulated or the oldest is **200 ms** old, whichever comes first. `add` never blocks on the
+network; flushes run on a thread of their own:
+
+```java
+import ai.intellistream.datahub.sdk.ingest.BinaryIngestBuffer;
+
+try (BinaryIngestBuffer buffer = client.timeseries().binaryBuffer()) {   // 10 000 points or 200 ms
+    buffer.add("engine_temperature", Instant.now(), 92.4);
+    buffer.add("engine_rpm", Instant.now(), 1500L);
+}   // close flushes what is left
+```
+
+`binaryBuffer(options, maxPoints, maxAge, onFlush)` sets the thresholds and a
+`Consumer<IngestResult>` that receives each flush's result. `flush()` sends what is pending on the
+calling thread, `pending()` counts what is waiting, and `lastResult()` is the most recent
+outcome. `add` takes a `double`, `long` or `String` value, or a `Datapoint`.
+
+### BinaryIngestOptions
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `zstdLevel` | `9` | `1`, `3` or `9`. Compression is never off; the level trades client CPU against bytes on the wire. |
+| `compressInParallel` | `true` | Compress frames on several threads. `false` compresses one at a time, for a small device: a level-9 context needs about 30 MB. |
+| `parallelism` | `8` | Concurrent in-flight requests. |
+| `maxRetries` | `3` | Retries for transient failures (HTTP 429/5xx, network). |
+| `failFast` | `false` | If `true`, abort on the first failed request instead of collecting errors. |
+
+`BinaryIngestOptions.defaults()` returns the defaults. The wire format, caps and every
+`reason` the endpoint answers with are on [Binary datapoint frames](./binary-datapoints).
 
 ## Retrieve datapoints
 
@@ -675,9 +746,10 @@ if (!result.isComplete()) {
 | List | HTTP | `timeseries.list` | `time_series.list` / `list_with_limit` |
 | Update | HTTP | `timeseries.update` | `time_series.update` |
 | Delete | `timeseries().delete` | `timeseries.delete` | `time_series.delete` |
-| Write datapoints | `insertDatapoints` / `ingest` | `insert_datapoints` / `insert_from_lists` | `insert_datapoint` / `insert_datapoints` |
+| Write datapoints | `insertDatapoints` / `ingest` / `ingestBinary` | `insert_datapoints` / `insert_from_lists` | `insert_datapoint` / `insert_datapoints` |
 | Read datapoints (raw and [aggregated](#retrieve-datapoints)) | `retrieve` / `retrieveAggregated` | `retrieve_datapoints` / `retrieve_latest_datapoints` | `retrieve_datapoints` / `retrieve_latest_datapoint` |
 | Delete datapoints | `deleteDatapoints` | `timeseries.delete_datapoints` | `time_series.delete_datapoints` |
 
-Java is the one with `ingest`, the chunking, parallelising, retrying path described above.
-It is missing `list` and `update`, so reach for the endpoint there.
+Java is the one with `ingest`, the chunking, parallelising, retrying path described above, and
+with [`ingestBinary` and `binaryBuffer`](#binary-ingest), the binary path. It is missing `list`
+and `update`, so reach for the endpoint there.

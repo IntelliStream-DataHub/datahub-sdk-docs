@@ -424,6 +424,7 @@ them apart from the status alone:
 | `413` | The [request body](./limits#request-body-size) is too large | Split the batch, never retry as-is |
 | `403` with `type: ".../errors/tenant-limit-reached"` | A [lifetime ceiling](./limits#lifetime-ceilings) | Nothing to wait for: it is raised by asking |
 | `400` / `422` | Validation, including the [field and batch caps](./limits#field-caps) | Fix the request |
+| `404` or `422` with `type: ".../errors/datapoint-block-rejected"` and `reason` `unknown-timeseries` or `external-id-mismatch` | A [binary datapoint request](./binary-datapoints#responses) naming a series that was removed or renamed since you cached it | Re-resolve the ids in `timeseriesIds`, rebuild, send once more; the Java SDK does |
 
 The ingest paths act on that split for you: `429`, `5xx` and network failures are retried with
 backoff, and everything else is surfaced. [Limits & quotas](./limits) has the numbers.
@@ -432,7 +433,8 @@ backoff, and everything else is surfaced. [Limits & quotas](./limits) has the nu
 
 Every call that takes a list is validated in full before anything is written, so one bad item
 in 500 creates nothing and the error names every offending item rather than the first. Retry
-the whole batch once you have fixed them.
+the whole batch once you have fixed them. A [binary datapoint request](./binary-datapoints) is
+the same: every frame is validated before any is published.
 
 Two responses are worth recognising by shape:
 
