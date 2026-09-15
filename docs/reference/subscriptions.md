@@ -218,3 +218,10 @@ the server redelivers it, so make your handler idempotent.
 | Filter | `subscriptions().filter` | `subscriptions.filter` | `subscriptions.filter` |
 | Delete | `subscriptions().delete` | `subscriptions.delete` | `subscriptions.delete` |
 | Live delivery | `subscriptions().listen` | `subscriptions.listen` | `subscriptions.listen` |
+
+Java also has `subscriptions().list(limit)`, the uncriteria'd `GET /subscriptions`: the first
+`limit` subscriptions, no body, no paging. Anything narrower is `filter`.
+
+```java
+DataWrapper<Subscription> all = client.subscriptions().list(100);
+```

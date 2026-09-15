@@ -853,7 +853,25 @@ The nodes and relationships it creates count against their own daily quotas thro
 ordinary create path. A reverse proxy in front of the API has to pass the upload through
 unbuffered and uncapped, as the shipped nginx examples do for `/resources/import`.
 
-No client wraps the pair. Call them over HTTP with the bearer token the client already holds:
+The Java client wraps the pair. `export` hands back the file as bytes and `importGraph` takes
+the same bytes, so moving a sub-graph between two tenants is two calls and no temporary file
+unless you want one:
+
+```java
+import ai.intellistream.datahub.api.graphtransfer.GraphImportResult;
+
+byte[] graph = source.resources().export(5677892L);
+
+GraphImportResult result = target.resources().importGraph(graph);
+System.out.println(result.nodesCreated() + " created, "
+        + result.nodesSkippedExisting() + " already there, "
+        + result.nodesSkippedTimeseries() + " to create as series first");
+```
+
+`GraphImportResult` is a record, so its fields read as `result.nodesCreated()` and so on, one
+per key of the JSON above.
+
+Python and Rust call the endpoints over HTTP with the bearer token the client already holds:
 
 ```bash
 curl -fsS -H "Authorization: Bearer $TOKEN" \
@@ -880,6 +898,7 @@ several node types.
 | `POST /assets/create` | [create](#create-resources-and-relations) | Nodes only, no `relations` array. `201`, and the echo is asset-shaped. `labels` may be omitted: `ASSET` is added for you. |
 | `GET /assets/{id}` | [look up](#look-up) | One asset, wrapped in `items` like every other read. |
 | `POST /assets/byids` | [look up](#look-up) | Ids that are missing, are not assets, or are not readable are omitted rather than failing the call. |
+| `GET /assets?limit=` | [filter](#filter) | The first `limit` assets, newest first, no criteria. Never returns a `nextCursor`: it is the first page and nothing more. `limit` defaults to 1000 and caps at 10 000. |
 | `POST /assets/filter` | [filter](#filter) | The same criteria, the same paging. A `nodeType` in the body is replaced, see below. |
 | `POST /assets/search` | [search](#search) | Same replacement, and the `filter` block is applied exactly as on [`/resources/search`](#search-filter). |
 | `POST /assets/update` | [update](#update) | Takes `nodes` and `relations` exactly as `/resources/update` does. |
@@ -913,19 +932,51 @@ of some other type, and an asset in a data set you may not read. That is deliber
 distinguishable `403` would confirm that an id exists.
 :::
 
+The Java client has `assets()`, whose reads come back as `Asset` rather than the polymorphic
+`NodeModel` that `/resources` returns, so `isRoot` and `geoLocation` are there without a cast:
+
+```java
+import ai.intellistream.datahub.models.Asset;
+
+Asset plant = new Asset();
+plant.setExternalId("plant_oslo");
+plant.setName("Oslo Plant");
+plant.setIsRoot(true);
+client.assets().create(List.of(plant));
+
+DataWrapper<Asset> newest = client.assets().list(100);
+DataWrapper<Asset> one = client.assets().getById(5677892L);
+DataWrapper<Asset> some = client.assets().byIds(List.of(
+        IdCollection.createFromExternalId("plant_oslo")));
+```
+
+`filter`, `search`, `update` and `delete` take the same forms as their `resources()`
+counterparts. The update echo is a `GraphDataWrapper<NodeModel, EdgeProxy>`, not an asset one,
+because an update may touch a relation whose other end is not an asset.
+
 ## The `/functions` endpoints {#functions}
 
 A **function** is a plain node distinguished by its `FUNCTION` label, with the same shape as a
-resource. Its family is `POST /functions/create`, `GET /functions/list`, `GET /functions/{id}`,
+resource. Its family is `POST /functions/create`, `GET /functions?limit=`, `GET /functions/{id}`,
 `POST /functions/update` and `POST` or `DELETE /functions/delete`, on the same shared pipeline.
-`GET /functions/list` takes no filter: the inventory is expected to be small.
+The listing takes no filter, only `limit`, which defaults to 1000 and caps at 10 000. It used to
+be spelled `GET /functions/list` and returned every function with no cap.
 
 `GET /functions/{id}` returns the one function wrapped in `items`, and reports a function
 you may not read as missing (`404`) rather than forbidden, exactly as `GET /assets/{id}` does.
 
-The Java client has no `assets()` or `functions()` service, so reach for the endpoints there.
-Creating an asset through `resources().create` with an `ASSET` label is the same pipeline and
-gives you the same asset back.
+The Java client has `functions()`, typed as `Function`:
+
+```java
+import ai.intellistream.datahub.function.Function;
+
+DataWrapper<Function> all = client.functions().list(1000);
+DataWrapper<Function> one = client.functions().getById(5677893L);
+```
+
+It is narrower than the other node services because the endpoint family is: there is no
+`/functions/byids`, `/filter` or `/search`, so a structured question about functions goes
+through `resources().filter` with `FUNCTION` in its labels.
 
 ## What each client covers {#client-coverage}
 
@@ -940,7 +991,15 @@ gives you the same asset back.
 | Filter | `resources().filter` | `resources.filter` | `resources.filter` |
 | Traverse (`fetch-related`) | `resources().fetchRelated` | `resources.fetch_related` | `resources.fetch_related` |
 | Nearest N (`fetch-nearest`) | `resources().fetchNearest` | `resources.fetch_nearest` | `resources.fetch_nearest` |
-| [Export / import a graph](#graph-transfer) | HTTP only | HTTP only | HTTP only |
+| [Export / import a graph](#graph-transfer) | `resources().export` / `importGraph` | HTTP only | HTTP only |
+
+Java also has the two typed node services. Asking `/resources` with the matching label is the
+same pipeline and gives back the same nodes, untyped:
+
+| Operation | Java |
+| --- | --- |
+| [Assets](#assets) | `assets().create` / `getById` / `byIds` / `list` / `filter` / `search` / `update` / `delete` |
+| [Functions](#functions) | `functions().create` / `list` / `getById` / `update` / `delete` |
 
 Relations have their own client surface in all three clients, `edges()` in Java, `edges` in
 Python and Rust. [Edges → client coverage](./edges#client-coverage)

@@ -211,6 +211,43 @@ were given.
 A range starting past the end of the file gets a `416`. Several ranges in one header are answered
 with the whole file, since `multipart/byteranges` is not supported.
 
+## Find, update and restore (Java) {#find-update-restore}
+
+Five more `/files` endpoints that the Java client wraps. They are all node operations on the
+file index, so none of them moves bytes.
+
+| Java | Endpoint | What it does |
+| --- | --- | --- |
+| `files().getById(id)` | `GET /files?id=` | One file or folder by numeric id. `404` when there is none. |
+| `files().getByExternalId(extId)` | `GET /files?externalId=` | The same by external id. |
+| `files().search(q, limit)` | `GET /files/search` | Full-text over names, paths and metadata. Crosses folders, so it finds a file whose location you do not know. Pass `null` for `limit` to take the server default. |
+| `files().trash()` | `GET /files/trash` | The soft-deleted files you can read. |
+| `files().restore(ids)` | `POST /files/restore` | Puts them back at the path they were deleted from. |
+| `files().update(fileUpdate)` | `POST /files/update` | Rename, move, or edit metadata on one node. |
+
+```java
+import ai.intellistream.datahub.models.files.FileUpdate;
+
+DataWrapper<IndexNode> hits = client.files().search("inspection report", 20);
+
+FileUpdate move = new FileUpdate();
+move.setExternalId("report_2026_q2");
+move.setPath("/reports/2026/archive");        // the target folder is created if missing
+client.files().update(move);
+
+DataWrapper<IndexNode> deleted = client.files().trash();
+client.files().restore(List.of(IdCollection.createFromExternalId("report_2026_q1")));
+```
+
+`update` takes a bare `FileUpdate`, not a wrapper: the endpoint updates one node per call.
+Identify the node by `externalId` or `id`; every other field is optional and null means "leave
+unchanged". `metadata` and `relatedResources` **replace** rather than merge.
+
+A restore is not a force-overwrite. If something else already occupies the path, you get a
+`409`, so move or rename the occupant first. Names and paths in the trash listing are the
+pre-deletion values, and the deletion time is encoded in the external id as
+`DELETED_..._<epochMillis>`.
+
 ## Delete
 
 <Tabs groupId="lang">
@@ -251,3 +288,6 @@ api.files.delete(&DataWrapper::from(vec![IdAndExtId::from_external_id("report_20
 
 Python and Rust add `download_to_path`, which streams to disk instead of holding the whole
 file in memory, see [Download](#download).
+
+Java adds six index operations: `getById`, `getByExternalId`, `search`, `trash`, `restore`
+and `update`. [Find, update and restore →](#find-update-restore)
