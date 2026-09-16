@@ -32,7 +32,8 @@ you have tuned something:
 
 Over a cap is a `400`; an oversized body is a `413`, which no retry will fix. Sustained
 volume is bounded separately by a per-minute rate limit and a daily ingest quota, both `429`
-and both retried for you. See [Limits & quotas](/reference/limits).
+and both retried for you. See [Limits & quotas](/reference/limits). Java's
+[binary path](#binary-ingest) has caps of its own, and the SDK stays under them by itself.
 :::
 
 ## Ingest a million readings
@@ -155,6 +156,66 @@ The `ingest` knobs let you trade throughput against load on the server:
 
 When `failFast` is off, inspect `result.errors()` for the per-batch failures. See the
 [Time series reference](/reference/timeseries#ingestresult) for the full result shape.
+
+## Binary ingest (Java) {#binary-ingest}
+
+Past a few thousand points a second, JSON is the bottleneck: every value is text the API has
+to parse. `ingestBinary` sends the same map as zstd-compressed Arrow frames to
+[`POST /timeseries/data/binary`](/reference/binary-datapoints), up to a million points per
+request, parsed and sorted on the client. Pick it when the volume is sustained; keep `ingest`
+when you want the [durable spool](/reference/client#durable-ingest-buffering), which the binary
+path does not have. It resolves each series through `/timeseries/byids` once and caches it, so
+the token needs **read** access to the data set as well as write.
+
+```java
+import ai.intellistream.datahub.sdk.ingest.BinaryIngestOptions;
+import java.time.ZoneOffset;
+
+IngestResult result = client.timeseries().ingestBinary(readings,     // the same map as above
+    BinaryIngestOptions.builder()
+        .zstdLevel(3)          // 1, 3 or 9 (default 9): client CPU against bytes on the wire
+        .parallelism(16)       // concurrent in-flight requests
+        .build());
+
+System.out.printf("ingested %,d, failed %,d%n", result.succeeded(), result.failed());
+if (!result.isComplete()) {
+    result.errors().forEach(e -> System.err.println(e.statusCode() + ": " + e.message()));
+    throw new IllegalStateException("ingest incomplete");
+}
+
+// read the first hour back: 3 600 readings
+RetrieveFilter firstHour = new RetrieveFilter();
+firstHour.setExternalId("engine_temperature");
+firstHour.setStart(start.atZone(ZoneOffset.UTC));
+firstHour.setEnd(start.plusSeconds(3600).atZone(ZoneOffset.UTC));
+firstHour.setLimit(10_000);
+DataRetriever<RetrieveFilter> request = new DataRetriever<>();
+request.setItems(List.of(firstHour));
+
+int n = client.timeseries().retrieve(request).getItems().get(0).getDatapoints().size();
+System.out.printf("%d readings in the first hour%n", n);
+if (n < 3600) throw new IllegalStateException("expected 3600 readings, got " + n);
+```
+
+A series that does not exist, or a value that does not fit its type, is reported in
+`result.errors()` without a request (status 404 and 422). A request the server refuses because a
+series was renamed or removed since it was cached is rebuilt once after re-resolving.
+
+For readings that arrive one at a time, a buffer batches them into frames and sends once 10 000
+points have accumulated or the oldest is 200 ms old. `add` never blocks on the network, and
+closing the buffer flushes what is left:
+
+```java
+import ai.intellistream.datahub.sdk.ingest.BinaryIngestBuffer;
+
+try (BinaryIngestBuffer buffer = client.timeseries().binaryBuffer()) {
+    buffer.add("engine_temperature", Instant.now(), 92.4);
+    buffer.add("engine_rpm", Instant.now(), 1500L);
+}
+```
+
+The options and the buffer's other methods are in the
+[Time series reference](/reference/timeseries#binary-ingest).
 
 ## Then chart the trend
 
