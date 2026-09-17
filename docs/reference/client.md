@@ -357,7 +357,8 @@ UUID v7 before the first send, so a retried event keeps the same id (see [Events
 ## Results & errors
 
 Most calls return the entity (or a thin wrapper around a list of them); a non-2xx
-response surfaces as an exception/error carrying the HTTP status and the raw body.
+response surfaces as an exception/error carrying the HTTP status, the raw body, and the
+[problem document](#problem-documents) the API explained itself with, when it sent one.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -413,6 +414,114 @@ limit. Each client reads them back into a native integer, so this only matters i
 inspect raw responses.
 :::
 
+### Reading the problem document {#problem-documents}
+
+A refusal the API explains comes back as an
+[RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) `application/problem+json` document:
+`type`, `title`, `status`, `detail` and `instance`, plus extension members. Every `type` this
+API mints sits under `https://intellistream.ai/errors/`, and the **`type` is the contract**.
+Branch on it, or on its kebab-case tail (the *slug*), never on `title` or `detail`: those are
+prose and may be reworded at any time (RFC 9457 §3.1.1).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+The Java client exposes the raw body only. `DatahubApiException.body()` is the problem document
+as it arrived, and there is no typed accessor for its members yet, so read it with your own JSON
+parser and match on `type`.
+
+```java
+try {
+    client.timeseries().create(List.of(series));
+} catch (DatahubApiException e) {
+    System.err.println(e.statusCode() + ": " + e.body());
+}
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+`DataHubException` carries the whole document as `problem` (a `dict`), its `type` as
+`problem_type`, and the slug as `problem_slug`:
+
+```python
+from intellistream_datahub_sdk import DataHubException
+
+try:
+    client.timeseries.create([ts])
+except DataHubException as e:
+    if e.problem is None:                       # not a problem document, see the caution below
+        print(e.status_code, e.message)
+    elif e.problem_slug == "validation-failed":
+        for field in e.problem.get("fields", []):
+            print(field["field"], field["message"])
+    elif e.problem_slug == "unreadable-request-body":
+        for offender in e.problem.get("errors", []):
+            print(offender["pointer"], "accepts", offender["allowedFields"])
+    else:
+        print(e.problem_type, e.problem.get("detail"))
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+`ResponseError::problem()` returns `Option<ProblemDetail>`, `problem_slug()` the slug on its own,
+and `content_type()` the response media type. `ProblemDetail` holds the standard members as public
+fields and reads the extensions through `fields()`, `unknown_fields()`, `duplicated()`,
+`blocked_by()`, `retry()`, `request_id()`, `docs()`, `location()` and `pointer()`:
+
+```rust
+if let Err(e) = api.time_series.create_one(&series).await {
+    match e.problem() {
+        // Not a problem document, see the caution below.
+        None => eprintln!("{}: {}", e.get_status(), e.get_message()),
+        Some(problem) => match problem.slug() {
+            Some("validation-failed") => for f in problem.fields() {
+                eprintln!("{:?}: {:?}", f.field, f.message);
+            }
+            Some("unreadable-request-body") => for o in problem.unknown_fields() {
+                eprintln!("{:?} accepts {:?}", o.pointer, o.allowed_fields);
+            }
+            // A document with no `type` still carries a status and prose.
+            _ => eprintln!("{:?}: {:?}", problem.status, problem.detail),
+        },
+    }
+}
+```
+
+</TabItem>
+</Tabs>
+
+Beside the standard members, a problem carries whichever of these the failure has something to
+say with. Members a client does not recognise are **kept, not dropped** (RFC 9457 §3.2), so one
+the API adds later is readable without a client upgrade.
+
+| Member | Sent with | Holds |
+| --- | --- | --- |
+| `fields` | Validation failures | One entry per rejected field: `field`, `message`, `code` (the i18n key behind the message, so you can localise rather than parse English) and `rejected` (an argument such as an offending length, never the value you sent) |
+| `errors` | [Unknown fields](#unknown-fields) | One entry per unrecognised property: `pointer` to it, and `allowedFields`, the names accepted at that position |
+| `duplicated` | A `409` on an identifier already taken | Each collision, as field to value |
+| `blockedBy` | A refused delete | What stands in the way, each named by its own ids so you can go and clear it |
+| `retry` | Most refusals | `same-request`, `change-request` or `needs-operator` |
+| `requestId` | Most refusals | Quote it when you ask an operator about the failure |
+| `docs` | Types with a page that explains them | A link to that page. Absent when nothing is written yet |
+
+`retry` is **advisory**. It says whether repeating the request unchanged could ever work, which is
+not the same question as what a client should do, and the two part company in one place on
+purpose: a `403` is marked `needs-operator`, yet [durable buffering](#durable-ingest-buffering)
+still spools `401`/`403`, so a rotated credential does not cost the batch.
+[Which failures are worth retrying](#retryable-failures) is the split the ingest paths act on.
+
+:::caution Not every failure is a problem document
+Some endpoints still answer in a shape the API has not converged yet: plain text, a Spring
+whitelabel body carrying a stack trace, the legacy `{"error": {...}}` wrapper, or a
+success-shaped `{"items": [...]}` envelope. Those all arrive labelled `application/json`, so the
+`Content-Type` does not separate them and the clients read the body's structure instead.
+`problem` is absent for every one of them, and a real problem document may still carry no `type`
+(some `404`s), which leaves the slug absent. Write that branch first and keep the status and raw
+message as the fallback: it stays load-bearing until the API is done converging.
+:::
+
 ### Which failures are worth retrying {#retryable-failures}
 
 The API answers a limit it will forgive differently from one it will not, so a client can tell
@@ -434,7 +543,8 @@ backoff, and everything else is surfaced. [Limits & quotas](./limits) has the nu
 Every call that takes a list is validated in full before anything is written, so one bad item
 in 500 creates nothing and the error names every offending item rather than the first. Retry
 the whole batch once you have fixed them. A [binary datapoint request](./binary-datapoints) is
-the same: every frame is validated before any is published.
+the same: every frame is validated before any is published. A `validation-failed` problem names
+each offender in its `fields` member ([reading it](#problem-documents)).
 
 Two responses are worth recognising by shape:
 
@@ -479,7 +589,8 @@ malformed JSON or a value of the wrong shape, answers with the same `type` and a
 naming the problem, plus `line` and `column` where the parser can say.
 
 The clients only ever send fields they declare, so this reaches you when you build a body by
-hand, or keep an old field name in one.
+hand, or keep an old field name in one. How each client hands you the `errors` entries:
+[Reading the problem document](#problem-documents).
 
 ## Timestamps {#timestamps}
 
