@@ -12,13 +12,13 @@ against a sandbox rather than read.
 :::info What needs seeding, and what does not
 | Guide | Needs |
 | --- | --- |
-| [High-throughput ingestion](/guides/ingest-timeseries) | Nothing. It writes its own data |
+| [High-throughput ingestion](/guides/ingest-timeseries) | **A** (the series must exist) |
 | [Query & aggregate](/guides/query-and-aggregate) | **A** the engine series |
 | [Model assets as a graph](/guides/model-assets-graph) | Nothing. It creates the graph it reads |
 | [Consume live data](/guides/realtime-subscriptions) | **A** the engine series |
 | [Turn readings into events](/guides/detect-events) | **A** the engine series, which include a hot stretch so the rule actually fires |
 | [Attach files to assets](/guides/attach-files) | Nothing. It uploads what it then reads |
-| [Work with units](/guides/work-with-units) | Nothing. It creates the series it converts |
+| [Work with units](/guides/work-with-units) | Nothing. It creates the series it tags |
 | [Correlate alarms](/guides/correlate-alarms) | **B** the cooling system, its two sensors and their alarms |
 :::
 
@@ -32,13 +32,20 @@ import intellistream_datahub_sdk, numpy as np, pandas as pd
 client = intellistream_datahub_sdk.DataHubClient.from_env()
 
 def ingest(external_id, index, values, unit=None, name=None):
-    client.timeseries.create([intellistream_datahub_sdk.TimeSeries(
-        external_id=external_id, name=name or external_id,
-        unit=unit or "value", value_type="float")])
+    try:
+        client.timeseries.create([intellistream_datahub_sdk.TimeSeries(
+            external_id=external_id, name=name or external_id,
+            unit=unit or "value", value_type="float")])
+    except intellistream_datahub_sdk.DataHubException as e:
+        if e.status_code != 409:          # a second run finds the series already there
+            raise
     client.timeseries.insert_from_lists(
         timestamps=index, values=np.asarray(values), ts=external_id)
     print(f"ingested {len(values):,} points → {external_id}")
 ```
+
+A second run of any block below answers `409` on the duplicate external id; the helper
+catches that and goes on to write the datapoints, which dedup on `(series, timestamp)`.
 
 ## A. An engine, with the last twenty minutes running hot
 
@@ -134,6 +141,6 @@ If both numbers are non-zero, every guide on this site has something to run agai
 
 ## See also
 
-- [Generate sample data](/advanced/generate-sample-data) — the equivalent for the advanced scenarios.
-- [Sustained-condition alarms](/advanced/sustained-alarm-window) — a full example that seeds, runs and then verifies itself.
-- [High-throughput ingestion](/guides/ingest-timeseries) — doing this at production volume.
+- [Generate sample data](/advanced/generate-sample-data): the equivalent for the advanced scenarios.
+- [Sustained-condition alarms](/advanced/sustained-alarm-window): a full example that seeds, runs and then verifies itself.
+- [High-throughput ingestion](/guides/ingest-timeseries): doing this at production volume.
