@@ -71,7 +71,8 @@ else:
 | `text` | Non-numeric string values. |
 | `mixed` | Heterogeneous values in one series. |
 
-A float written to a `bigint` series is rejected, so pick the type that matches the data.
+A float written to a `bigint` series is [rejected](#write-datapoints), so pick the type that
+matches the data.
 
 Every value crosses the wire as a string, whatever the type. For an exact decimal, send the
 string form rather than a float: `Datapoint.of(ts, "12.34")` in Java, `DatapointString(ts,
@@ -369,6 +370,17 @@ A `timestamp` is a millisecond epoch or an ISO-8601 string.  It carries
 no zone of its own, so it is UTC, and the accepted range is 12 to 14 digits. This is to stop people from accidentally sending epoch seconds.
 
 An ISO-8601 string keeps whatever offset or zone it carries, the offset is not optional.
+
+`POST /timeseries/data` refuses a write it cannot store:
+
+| Refused | Answered with |
+| --- | --- |
+| A malformed body: no `datapoints`, a datapoint with no `timestamp`, a blank `value` | `400`, `fields` naming each offender |
+| A `timestamp` in neither [accepted form](./client#timestamps) | `422` of `type: ".../errors/invalid-timestamp"`, `fields` naming `timestamp` and the series' `externalId` |
+| A `value` that does not parse as the series' [value type](#value-types): a float or text to a `bigint` series, `NaN`, `Infinity` or a hex literal to a `numeric` one | `422` of `type: ".../errors/invalid-datapoint"` |
+
+Both `422`s carry `retry: change-request` and used to be a `500`, which the ingest paths retried. A
+`422` is [surfaced to you](./limits#sdk-behaviour) instead.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">

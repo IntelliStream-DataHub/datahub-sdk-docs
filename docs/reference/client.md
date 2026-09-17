@@ -533,6 +533,7 @@ them apart from the status alone:
 | `413` | The [request body](./limits#request-body-size) is too large | Split the batch, never retry as-is |
 | `403` with `type: ".../errors/tenant-limit-reached"` | A [lifetime ceiling](./limits#lifetime-ceilings) | Nothing to wait for: it is raised by asking |
 | `400` / `422` | Validation, including the [field and batch caps](./limits#field-caps) | Fix the request |
+| `422` with `type: ".../errors/invalid-timestamp"` or `".../errors/invalid-datapoint"` | A [timestamp](#timestamps) in neither accepted form, or a [datapoint value](./timeseries#write-datapoints) its series' value type cannot parse | Fix the value; `retry` is `change-request` |
 | `404` or `422` with `type: ".../errors/datapoint-block-rejected"` and `reason` `unknown-timeseries` or `external-id-mismatch` | A [binary datapoint request](./binary-datapoints#responses) naming a series that was removed or renamed since you cached it | Re-resolve the ids in `timeseriesIds`, rebuild, send once more; the Java SDK does |
 
 The ingest paths act on that split for you: `429`, `5xx` and network failures are retried with
@@ -604,12 +605,12 @@ accepted.
 | Epoch milliseconds, UTC | `1767225600000` | A bare number is always milliseconds, never seconds. 12 to 14 digits, which spans 1973-03-03 to the year 5138. |
 | ISO-8601 with an offset | `2026-01-01T00:00:00Z` | `Z`, `+02:00`, `-04:00` and a bracketed region id all work. Fractional seconds and minute precision both parse. |
 
-Two mistakes are answered with a `400` rather than accepted and misread:
+Two mistakes are refused rather than accepted and misread:
 
 - **Epoch seconds.** Ten digits is exactly the shape of a seconds value, so it falls outside
   the accepted width and is refused, with an error that names the mistake and tells you to
   multiply by 1000. Nothing is scaled for you. A caller that has been sending seconds to
-  `POST /events/create` now sees a `400` where the write used to succeed and store a time tens
+  `POST /events/create` now sees a `422` where the write used to succeed and store a time tens
   of thousands of years out.
 - **ISO-8601 without an offset.** `2026-01-01T00:00:00` and a bare date `2026-01-01` are
   refused rather than assumed to be UTC.
@@ -617,6 +618,13 @@ Two mistakes are answered with a `400` rather than accepted and misread:
 For an instant **before 1973-03-03**, use the ISO-8601 form. The numeric form does not reach
 back that far.
 
-A bad timestamp in a JSON body comes back as the same problem document as an
-[unknown field](#unknown-fields), carrying a JSON Pointer to the offending field in `pointer`
-(`#/eventTime`) alongside the `line` and `column` the parser reports.
+In the places below, a refused timestamp is answered with a `422` of
+`type: ".../errors/invalid-timestamp"` and `retry: change-request`. `detail` is the parser's own
+message, naming both accepted forms and the factor of 1000 for seconds. Where it was sent decides
+how the offender is located:
+
+| Sent in | Located by | Was |
+| --- | --- | --- |
+| A JSON body: an event's `eventTime`, a `createdTime` / `lastUpdatedTime` / `eventTime` filter bound, or the `start` / `end` of a [datapoint retrieve](./timeseries#retrieve-datapoints) | `pointer`, a JSON Pointer to the field (`#/eventTime`); no `line` or `column` | `400` of `type: ".../errors/unreadable-request-body"`, with `pointer`, `line` and `column` |
+| A bound of the [datapoint delete window](./timeseries#delete-datapoints) | `fields`, naming the bound and the series' `externalId` | `400` with `fields` |
+| A datapoint's `timestamp` on `POST /timeseries/data` | `fields`, naming `timestamp` and the series' `externalId` | `500` |
