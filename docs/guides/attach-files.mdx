@@ -8,13 +8,15 @@ import TabItem from '@theme/TabItem';
 # Attach files to assets
 
 Not everything is a number. A pump has a calibration certificate, a plant has a
-piping diagram, a daily run produces a CSV export. Store these as **files** —
-organized in folders, tagged with metadata, and linked to the dataset they belong to.
+piping diagram, a daily run produces a CSV export. Store these as **files**,
+organized in folders, tagged with metadata, and linked to the data set they belong to.
 
 ## Upload a file
 
-Give the file a destination path and some metadata. The Java client uploads raw
-bytes; the Python and Rust clients upload a local file to a destination folder.
+Give the file a destination path and some metadata. The server stores one full path, name
+included; the Java client sends the `path` you give it as-is, and the Python and Rust
+clients join `destination_path` and `name` into the same thing. The Java client uploads raw
+bytes; the Python and Rust clients read a local file.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -27,7 +29,7 @@ byte[] content = Files.readAllBytes(Path.of("calibration_a12.pdf"));
 
 var uploaded = client.files().upload(
     FileUploadRequest.builder()
-        .path("certificates/2026/calibration_a12.pdf")  // destination
+        .path("/certificates/2026/calibration_a12.pdf")  // destination, name included
         .content(content)
         .contentType("application/pdf")
         .externalId("calibration_pump_esp_a12")
@@ -72,10 +74,11 @@ let uploaded = api.files.upload_file(upload).await?;
 </TabItem>
 </Tabs>
 
-:::tip Link a file to its asset
-Set `dataSetId` (or the `external_id`/metadata) so a file is discoverable from the
-dataset and asset it documents — the calibration certificate next to the pump it
-certifies.
+:::tip Link a file to what it documents
+Set `dataSetId` so a file is discoverable from the data set it documents. To point it at the
+resource it documents, the calibration certificate at the pump it certifies, the Python and
+Rust clients take `related_resources`, a list of numeric resource ids; the Java client has no
+field for it.
 :::
 
 ## List a directory
@@ -90,14 +93,23 @@ path and size.
 var listing = client.files().list("/certificates/2026");
 listing.getItems().forEach(node ->
     System.out.println(node.getType() + "  " + node.getName() + "  " + node.getSize() + " bytes"));
+
+boolean present = listing.getItems().stream()
+    .anyMatch(node -> "calibration_a12.pdf".equals(node.getName()));
+if (!present) {
+    throw new AssertionError("upload not found in /certificates/2026");
+}
 ```
 
 </TabItem>
 <TabItem value="python" label="Python">
 
 ```python
-for node in client.files.list_directory_by_path("/certificates/2026"):
+listing = client.files.list_directory_by_path("/certificates/2026")
+for node in listing:
     print(node.type, node.name, node.size)
+
+assert "calibration_a12.pdf" in [node.name for node in listing], "upload not found"
 
 roots = client.files.list_root_directory()   # top of the tree
 ```
@@ -110,6 +122,9 @@ let listing = api.files.list_directory_by_path("/certificates/2026").await?;
 for node in listing.get_items() {
     println!("{}  {}  {} bytes", node.r#type.as_deref().unwrap_or(""), node.name, node.size);
 }
+
+assert!(listing.get_items().iter().any(|node| node.name == "calibration_a12.pdf"),
+        "upload not found in /certificates/2026");
 ```
 
 </TabItem>
@@ -117,12 +132,39 @@ for node in listing.get_items() {
 
 ## Download
 
-The Java client downloads a file's raw bytes by id:
+Download by the id the upload echoed. Python and Rust take it as an integer, Java as a
+string (the endpoint also accepts an external id in that position).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
 
 ```java
-byte[] bytes = client.files().download("99");
+long id = uploaded.getItems().iterator().next().getId();
+byte[] bytes = client.files().download(String.valueOf(id));
 Files.write(Path.of("calibration_a12.pdf"), bytes);
 ```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+from pathlib import Path
+
+download = client.files.download(uploaded[0].id)
+Path("calibration_a12.pdf").write_bytes(download.content)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+let id = uploaded.get_items()[0].id.expect("the upload echo carries the id");
+let download = api.files.download(id).await?;
+std::fs::write("calibration_a12.pdf", &download.bytes)?;
+```
+
+</TabItem>
+</Tabs>
 
 ## Delete
 
