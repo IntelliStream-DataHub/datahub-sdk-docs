@@ -248,6 +248,14 @@ api.files.delete(&DataWrapper::from(vec![IdAndExtId::from_external_id("report_20
 | Upload | `files().upload` | `files.upload_file` | `files.upload_file` |
 | Download | `files().download` | `files.download` / `files.download_to_path` | `files.download` / `files.download_to_path` |
 | Delete | `files().delete` | `files.delete` | `files.delete` |
+| Get by id (`GET /files?id=`) | HTTP | `files.get_by_id` | `files.get_by_id` |
+| Get by external id (`GET /files?externalId=`) | HTTP | `files.get_by_external_id` | `files.get_by_external_id` |
+| Search names and descriptions (`GET /files/search?q=`) | HTTP | `files.search(query)` | `files.search(query)` |
+| List the trash (`GET /files/trash`) | HTTP | `files.list_trash` | `files.list_trash` |
+| Restore from the trash (`POST /files/restore`) | HTTP | `files.restore` | `files.restore` |
+| Rename, move or edit (`POST /files/update`) | HTTP | `files.update(FileUpdate)` | `files.update(FileUpdate)` |
 
 Python and Rust add `download_to_path`, which streams to disk instead of holding the whole
-file in memory, see [Download](#download).
+file in memory, see [Download](#download). Restore files by numeric `id`: a trashed file's
+external id is rewritten to `DELETED_<checksum>_<externalId>_<epochMillis>`, and restoring by
+that external id currently answers `404`.
