@@ -583,9 +583,10 @@ them apart from the status alone:
 | `404` or `422` with `type: ".../errors/datapoint-block-rejected"` and `reason` `unknown-timeseries` or `external-id-mismatch` | A [binary datapoint request](./binary-datapoints#responses) naming a series that was removed or renamed since you cached it | Re-resolve the ids in `timeseriesIds`, rebuild, send once more; the Java SDK does |
 
 The ingest paths act on that split for you, differently per client. Java's `ingest` retries
-`429`, `5xx` and network failures with backoff and surfaces everything else. Rust and Python do
-not retry JSON ingest in process: with [buffering](#durable-ingest-buffering) on, those failures
-spool along with `401` and `403`; with it off, they reach you. Their binary path,
+`429`, `5xx` and network failures with backoff and surfaces everything else. Rust and Python
+retry JSON ingest through the [durable spool](#durable-ingest-buffering): with buffering on,
+those failures and a `401` or `403` are written to disk and sent again, oldest first, by the next
+ingest call; with it off, they reach you. Their binary path,
 `insert_datapoints_binary`, retries `429`, `5xx` and network failures up to three times by
 default, 1, 2 and 3 seconds apart, and rebuilds a request refused for a removed or renamed
 series once. No client waits the `Retry-After`. [Limits & quotas](./limits#sdk-behaviour) has

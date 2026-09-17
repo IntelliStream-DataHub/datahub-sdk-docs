@@ -279,15 +279,16 @@ from you:
 
 | Response | Retried in process | Spooled when [buffering](./client#durable-ingest-buffering) is on |
 | --- | --- | --- |
-| `429` (rate limit, daily quota), `5xx`, network failure | Java: **yes**, with backoff. Rust and Python: only on the binary path, see below | Yes |
+| `429` (rate limit, daily quota), `5xx`, network failure | Java: **yes**, with backoff. Rust and Python: on the binary path, see below | Yes, and Rust and Python send it again on the next ingest call |
 | `401`, and `403` on a grant | No | Yes, until the credential is fixed |
 | `403` on a [lifetime ceiling](#lifetime-ceilings) | No | Java: **no**, surfaced to you. Rust and Python: **yes**, like any `403` |
 | `400` / `422` (validation), `413` (body too large) | No | No, surfaced to you |
 | `404 unknown-timeseries` / `422 external-id-mismatch` on the [binary path](./timeseries#binary-ingest) | **Once**, after re-resolving the series | No, the binary path has no spool |
 
 Java's `ingest` backs off and replays a `429`, `5xx` or network failure up to `maxRetries`
-times. Rust and Python do not retry JSON ingest in process: with buffering on the failure spools
-and flushes on a later ingest call, and with it off the error reaches your code. Their binary
+times. Rust and Python retry JSON ingest through the spool instead: with buffering on, the
+failure is written to disk and the next ingest call sends it again, oldest first, before its own
+data; with it off, the error reaches your code. Their binary
 path, `insert_datapoints_binary`, retries `429`, `5xx` and network failures up to three times
 by default, 1, 2 and 3 seconds apart. No client waits the `Retry-After`, so a rate limit that
 outlasts those retries, or a daily quota, ends in the spool or in your code the same way.
