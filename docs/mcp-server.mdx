@@ -181,7 +181,7 @@ neighbour ("the time series measuring this pump").
 | `timeseries_update` | Update common fields by id |
 | `timeseries_delete` | Delete the definition. Existing datapoints are not removed |
 | `timeseries_get_latest` | Most recent datapoint, for "what is it reading now?" |
-| `timeseries_fetch_datapoints` | History between two ISO-8601 timestamps |
+| `timeseries_fetch_datapoints` | History between two timestamps, ISO-8601 or epoch millis |
 | `timeseries_send_datapoint` | Append a single datapoint |
 
 ### Events
@@ -218,7 +218,7 @@ candidates, then tests each pair statistically and returns the candidates ranked
 | Parameter | |
 | --- | --- |
 | `focusExternalId` | The series to explain. Required |
-| `start`, `end` | ISO-8601 window. Required |
+| `start`, `end` | Window, ISO-8601 or epoch millis. Required |
 | `limit` | Candidates to test. Default 10, max 200 |
 | `relationshipTypes` | Optional comma-separated list; restricts the graph walk to these edge types |
 | `analyses` | Optional comma-separated subset of the tests below; default all |
@@ -291,8 +291,9 @@ the REST wire contract has to care about.
 - **List and search return lean projections.** `LeanResource`, `LeanTimeseries` and friends
   drop audit timestamps, empty metadata and embedded edge lists. Call the matching `*_get`
   when the agent actually needs the full record, or `resource_fetch_related` for edges.
-- **Timestamps are ISO-8601 strings**, matching the REST API, so a value reads the same
-  whichever way the agent reached it.
+- **Timestamps match the REST API**, so a value reads the same whichever way the agent reached
+  it. They come back as ISO-8601 strings, and a timestamp argument takes ISO-8601 or epoch
+  milliseconds, on the same [rules](/reference/timeseries#write-datapoints).
 
 The pattern to encourage in your prompts: search or list to find candidates, then fetch
 detail for the few that matter. An agent that opens with a full listing burns its context on

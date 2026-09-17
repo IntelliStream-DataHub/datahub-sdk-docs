@@ -365,8 +365,10 @@ A datapoint is a `(timestamp, value)` pair grouped under a series' external id. 
 capped at **64 characters** on the wire, which fits any number and any status code, and one
 collection holds at most **100 000** datapoints (10 000 for a `text` or `mixed` series).
 
-A timestamp is epoch milliseconds or ISO-8601 with an offset; epoch seconds is a `400`, not a
-datapoint in 1970. See [Timestamps](./client#timestamps).
+A `timestamp` is a millisecond epoch or an ISO-8601 string.  It carries
+no zone of its own, so it is UTC, and the accepted range is 12 to 14 digits. This is to stop people from accidentally sending epoch seconds.
+
+An ISO-8601 string keeps whatever offset or zone it carries, the offset is not optional.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -638,9 +640,7 @@ Each item names one series by `externalId` or `id`, and both window bounds are o
 | `exclusiveEnd` only | Everything before that instant |
 | Neither | Every datapoint of the series, leaving its definition, edges and subscriptions |
 
-A bound is either [ISO-8601 or epoch milliseconds](./client#timestamps); anything else is a 400
-naming the field, as is a series that does not exist. Python, Rust and Java's `Instant` overload
-take real datetimes, so those always send the ISO form.
+A bound is either ISO-8601 or epoch milliseconds, on the [timestamp rules](#write-datapoints).
 
 Like a series delete, this is handed off and completes shortly after the call returns, and it
 cannot be undone.
@@ -665,7 +665,7 @@ For several series at once, or to name one by id, pass `DeleteDatapoint` items i
 ```java
 DeleteDatapoint window = new DeleteDatapoint();
 window.setId(7L);
-window.setInclusiveBegin("1767225600000");     // epoch millis is the other accepted form
+window.setInclusiveBegin("1767225600000");     // epoch millis is the other form, never seconds
 
 client.timeseries().deleteDatapoints(List.of(window));
 ```
