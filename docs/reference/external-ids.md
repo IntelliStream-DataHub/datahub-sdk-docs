@@ -30,6 +30,9 @@ Making event external ids unique, `PO-4500171-1`, `PO-4500171-2`, throws away th
 cheap way to ask for a subject's history, and pushes you toward updating events in place,
 which destroys the append-only record. If you need to de-duplicate a redelivered snapshot,
 set the event `id` yourself; retries then collapse to one row.
+
+The Python client cannot do that yet: `Event(...)` takes no `id` and its `id` is read-only, so
+each `create` gets a fresh one. In Rust, `Event.id` is a public field.
 :::
 
 ## The two layers
@@ -182,7 +185,10 @@ that nothing was created, because that is the first thing you need to know befor
 
 The body reaches you through the ordinary error path in each client: `DatahubApiException`
 in Java (`statusCode()` and `body()`), `DataHubException` in Python, `ResponseError` in Rust.
-See [Results & errors](./client#results--errors).
+No client has a typed accessor for `violations`, so read it as JSON: from `body()` in Java,
+`(e.problem or {}).get("violations", [])` in Python, and
+`e.problem().and_then(|p| p.extensions.get("violations").cloned())` in Rust. See
+[Results & errors](./client#results--errors).
 
 | Status | Means |
 | --- | --- |
