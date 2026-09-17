@@ -16,7 +16,7 @@ second.
 | [Field caps](#field-caps) | `400` / `422` | the usual validation body | Shorten the field |
 | [Batch caps](#batch-caps) | `400` / `422` | the usual validation body | Split the batch |
 | [Request body size](#request-body-size) | `413` | `.../errors/request-too-large` | Split the batch |
-| [Binary frame caps](#binary-frames) | `400` / `413` | `.../errors/datapoint-block-rejected` | Split the frame or fix the producer |
+| [Binary frame caps](#binary-frames) | `400` / `413` | `.../errors/invalid-frame` / `.../errors/request-too-large` | Split the frame or fix the producer |
 | [Rate limit](#rate-limits) | `429` + `Retry-After` | `.../errors/rate-limit-exceeded` | Wait the seconds it names |
 | [Daily ingest quota](#daily-ingest-quotas) | `429` + `Retry-After` | `.../errors/ingest-quota-exceeded` | Wait until 00:00 UTC |
 | [Lifetime ceiling](#lifetime-ceilings) | `403`, no `Retry-After` | `.../errors/tenant-limit-reached` | Ask for it to be raised |
@@ -98,15 +98,17 @@ The `items` cap is enforced wherever the handler validates the body. `/events/up
 A `413` is **terminal**. The same request will never become acceptable by being sent again,
 so split the batch instead of retrying it.
 
-On `POST /timeseries/data/binary` an oversized body answers with the endpoint's own problem
-type, `.../errors/datapoint-block-rejected` with `reason: "request-too-large"`, still a `413`.
+`POST /timeseries/data/binary` answers a body over its cap the same way, `request-too-large`
+with `limitBytes` and no `reason`, before any frame is read. A body under the cap can still
+break a [frame cap](#binary-frames): the same `413` and `type`, plus a `reason`.
 
 ## Binary frame caps {#binary-frames}
 
 [`POST /timeseries/data/binary`](./binary-datapoints) carries datapoints as frames, and the
-frame format fixes its own caps. Every refusal is a problem document of
-`type: ".../errors/datapoint-block-rejected"` with a stable `reason`, and nothing of the request
-was inserted:
+frame format fixes its own caps. Every refusal is a problem document with a stable `reason`,
+and nothing of the request was inserted. Its `type` follows the status: `.../errors/invalid-frame`
+for a `400`, `.../errors/request-too-large` for a `413`, `.../errors/too-many-in-flight` for the
+`429`:
 
 | Cap | Value | Answered with |
 | --- | --- | --- |

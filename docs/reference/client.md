@@ -580,7 +580,7 @@ them apart from the status alone:
 | `413` | The [request body](./limits#request-body-size) is too large | Split the batch, never retry as-is |
 | `403` with `type: ".../errors/tenant-limit-reached"` | A [lifetime ceiling](./limits#lifetime-ceilings) | Nothing to wait for: it is raised by asking |
 | `400` / `422` | Validation, including the [field and batch caps](./limits#field-caps) | Fix the request |
-| `404` or `422` with `type: ".../errors/datapoint-block-rejected"` and `reason` `unknown-timeseries` or `external-id-mismatch` | A [binary datapoint request](./binary-datapoints#responses) naming a series that was removed or renamed since you cached it | Re-resolve the ids in `timeseriesIds`, rebuild, send once more; the Java SDK does |
+| `404` with `type: ".../errors/unknown-timeseries"` or `422` with `type: ".../errors/external-id-mismatch"` | A [binary datapoint request](./binary-datapoints#responses) naming a series that was removed or renamed since you cached it | Re-resolve the ids in `timeseriesIds`, rebuild, send once more; the Java SDK does |
 
 The ingest paths act on that split for you, differently per client. Java's `ingest` retries
 `429`, `5xx` and network failures with backoff and surfaces everything else. Rust and Python
