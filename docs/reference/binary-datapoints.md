@@ -1,7 +1,7 @@
 ---
 sidebar_position: 4.5
 title: Binary datapoint frames
-description: The wire format of POST /timeseries/data/binary, the high-throughput datapoint insert, for anyone producing frames outside the Java SDK.
+description: The wire format of POST /timeseries/data/binary, the high-throughput datapoint insert, for anyone producing frames outside the SDKs.
 ---
 
 # Binary datapoint frames
@@ -13,10 +13,10 @@ zstd-compressed Arrow IPC stream in one canonical schema per value type, rows so
 and timestamp. Nothing is parsed as text, so a request carries up to a million points in a few
 megabytes.
 
-The Java SDK builds frames for you, see [binary ingest](./timeseries#binary-ingest). This page
-is the byte-level contract for everyone else: a Python or Rust producer with pyarrow or arrow-rs,
-or a gateway forwarding frames it did not build. The Python and Rust SDKs do not have a binary
-method yet.
+The SDKs build frames for you, see [binary ingest](./timeseries#binary-ingest): `ingestBinary` in
+Java, `insert_datapoints_binary` in Rust and in Python's synchronous client. This page is the
+byte-level contract for everyone else: a producer with pyarrow or arrow-rs, or a gateway
+forwarding frames it did not build.
 
 | | |
 | --- | --- |
@@ -181,7 +181,10 @@ that did reach the store, say after a lost response, is harmless.
 - `404 unknown-timeseries` and `422 external-id-mismatch`: forget the named ids, look them up
   again by external id, rebuild the frames and resend once. If it fails the same way, the series
   really is gone.
-- Everything else: fix the request. The Java SDK handles all three for you.
+- Everything else: fix the request.
+
+The Java and Rust SDKs handle the first two for you, and Python's binary methods do through
+Rust. Rust waits a second longer before each retry rather than reading `Retry-After`.
 
 Quotas are charged after validation, so a refused request costs nothing. The
 [`ingested bytes`](./limits#daily-ingest-quotas) quota counts **decompressed** bytes on this
@@ -261,7 +264,21 @@ Several series go in one frame by concatenating their sorted rows in ascending i
 adding one directory entry each; several frames go in one body back to back, one value type per
 frame. Cut a new frame at the [row cap](#caps) for the type.
 
-The same shape in Rust is `arrow_ipc::writer::StreamWriter` over a `RecordBatch` with that schema
-(`DataType::Timestamp(TimeUnit::Millisecond, Some("UTC".into()))`, `Decimal128(18, 6)` for a
-`numeric` series), the `zstd` crate around its bytes, and the envelope written with
-`to_le_bytes`.
+In Rust you need not write any of this by hand. The SDK exports the pieces its own
+`insert_datapoints_binary` uses: `DatapointValueType::schema()` returns the canon for a type,
+`ResolvedSeries` is a series' id, external id and value type, and `FrameWriter` sorts,
+de-duplicates, compresses and wraps one frame:
+
+```rust
+use intellistream_datahub_sdk::timeseries::{DatapointValueType, FrameWriter};
+
+let mut writer = FrameWriter::new(DatapointValueType::Float);
+writer.series(id, "engine_temperature")?;          // the id /timeseries/byids returned
+for (timestamp_ms, value) in rows {
+    writer.add_float(id, timestamp_ms, value)?;
+}
+let body: Vec<u8> = writer.build(9)?.bytes;        // zstd level; one frame, ready to POST
+```
+
+`build` refuses a frame over the [caps](#caps). Check `is_full_for(id)` before each `add` and
+start a new writer when it says so; frames go in one body back to back.

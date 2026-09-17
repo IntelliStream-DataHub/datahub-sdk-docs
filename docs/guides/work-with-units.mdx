@@ -47,8 +47,8 @@ for u in api.units.list().await?.get_items() {
 A series carries two unit fields. `unit` is required free text of at most 64 characters, the
 label a chart shows (`bar`, `°C`); it is never checked against the catalogue. `unitExternalId`
 is optional and is the catalogue key (`pressure_bar`); set it when a consumer should be able to
-resolve the unit's symbol, quantity and conversion. The value type stays numeric; the unit
-describes what the numbers mean.
+resolve the unit's symbol, quantity and conversion. The unit leaves the value type alone (the Python
+and Rust examples set `float`); it describes what the numbers mean.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -70,7 +70,8 @@ client.timeseries.create([intellistream_datahub_sdk.TimeSeries(
     external_id="wellhead_pressure_bar",
     name="Wellhead pressure",
     unit="bar",
-    unit_external_id="pressure_bar")])
+    unit_external_id="pressure_bar",
+    value_type="float")])        # Python's default is bigint
 ```
 
 </TabItem>
@@ -82,6 +83,7 @@ use intellistream_datahub_sdk::timeseries::TimeSeries;
 let mut ts = TimeSeries::new("wellhead_pressure_bar", "Wellhead pressure");
 ts.unit = Some("bar".into());
 ts.unit_external_id = Some("pressure_bar".into());
+ts.set_value_type("float");
 api.time_series.create_one(&ts).await?;
 ```
 
