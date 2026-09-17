@@ -500,12 +500,14 @@ api.time_series.insert_datapoints(&mut dw).await?;
 Python runs on the Rust implementation, so the two behave alike. A call is split into requests
 of at most 100 000 datapoints, and up to four are in flight at once. Change that with
 `DATAPOINT_INSERT_PARALLELISM` in the environment, which `create_api_service()` and Python's
-`from_env()` read, or with `set_datapoint_insert_parallelism` on a Rust `DataHubConfig`. Nothing
-is retried: the first request to fail ends the call with its error and the requests not yet sent
-are dropped, so part of the input may have landed. Sending all of it again is safe. With durable
-buffering on, the requests go one at a time and a transient failure spools the input instead.
-The split counts datapoints and ignores the value type, so keep a `text` or `mixed` series to
-10 000 points per call.
+`from_env()` read, or with `set_datapoint_insert_parallelism` on a Rust `DataHubConfig`. Retries
+go through the [durable spool](./client#durable-ingest-buffering): with buffering on, the requests
+go one at a time, a transient failure (429, 5xx, network, or a `401`/`403`) writes the input to
+disk, and the next insert sends the spool again, oldest first, before its own data. With buffering
+off, the first request to fail ends the call with its error and the requests not yet sent are
+dropped, so part of the input may have landed. Sending all of it again is safe either way, since
+datapoints dedup on `(series, timestamp)`. The split counts datapoints and ignores the value type,
+so keep a `text` or `mixed` series to 10 000 points per call.
 
 ## Binary ingest {#binary-ingest}
 
@@ -864,7 +866,7 @@ if (!result.isComplete()) {
 | Delete datapoints | `deleteDatapoints` | `timeseries.delete_datapoints` | `time_series.delete_datapoints` |
 
 Java is the one with `ingest`, the chunking, parallelising, retrying path described above, and
-with `binaryBuffer`. Python and Rust chunk and send concurrently too, but do not retry: the first
-failed request is the call's error. All three have the [binary path](#binary-ingest), Python on
+with `binaryBuffer`. Python and Rust chunk and send concurrently too, and retry through the
+durable spool when buffering is on; with it off, the first failed request is the call's error. All three have the [binary path](#binary-ingest), Python on
 its synchronous client only. Python can create a series of only three
 [value types](#value-types). Java is missing `list` and `update`, so reach for the endpoint there.
