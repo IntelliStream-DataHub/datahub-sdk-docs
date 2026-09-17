@@ -71,7 +71,7 @@ repositories {
 }
 
 dependencies {
-    implementation("ai.intellistream:datahub-sdk:0.1.0-SNAPSHOT")
+    implementation("ai.intellistream:datahub-sdk:0.3.0-SNAPSHOT")
 }
 
 application {
@@ -101,7 +101,7 @@ portably:
 ```toml
 # Cargo.toml
 [dependencies]
-intellistream-datahub-sdk = "0.1"
+intellistream-datahub-sdk = "0.2"
 tokio = { version = "1", features = ["full"] }
 chrono = "0.4"
 sysinfo = "0.37"
@@ -116,7 +116,7 @@ The code below lives in `src/main.rs`, with `#[tokio::main]` driving the async c
 ```toml
 # Cargo.toml
 [dependencies]
-intellistream-datahub-sdk = { version = "0.1", features = ["blocking"] }
+intellistream-datahub-sdk = { version = "0.2", features = ["blocking"] }
 chrono = "0.4"
 sysinfo = "0.37"
 hostname = "0.4"

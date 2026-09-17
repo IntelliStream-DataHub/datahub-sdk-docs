@@ -11,6 +11,18 @@ From zero to a stored datapoint in about five minutes.
 
 ## 1. Install
 
+:::note Which version these pages describe
+These pages follow the SDKs as they are being developed, which can be ahead of the latest
+release. The SDKs are pre-1.0, so a release can still rename or remove a call. If an example
+calls something your installed SDK does not have, it may be newer than your release.
+
+| SDK | Latest release |
+| --- | --- |
+| Python | 0.2.0, on PyPI |
+| Rust | 0.2.0, on crates.io |
+| Java | Not released yet, so it is built from the platform repository below |
+:::
+
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
 
@@ -23,7 +35,8 @@ cd datahub-platform
 ./gradlew :datahub-api-model:publishToMavenLocal :datahub-java-sdk:publishToMavenLocal
 ```
 
-Then depend on it:
+Then depend on it. The version is `javaSdkVersion` in the platform's `gradle.properties`,
+`0.3.0-SNAPSHOT` on its default branch:
 
 ```kotlin
 // build.gradle.kts
@@ -33,7 +46,7 @@ repositories {
 }
 
 dependencies {
-    implementation("ai.intellistream:datahub-sdk:0.1.0-SNAPSHOT")
+    implementation("ai.intellistream:datahub-sdk:0.3.0-SNAPSHOT")
 }
 ```
 
@@ -50,7 +63,7 @@ pip install intellistream-datahub-sdk
 ```toml
 # Cargo.toml
 [dependencies]
-intellistream-datahub-sdk = "0.1"
+intellistream-datahub-sdk = "0.2"
 ```
 
 </TabItem>
@@ -67,7 +80,7 @@ import intellistream_datahub_sdk as dh
 
 ```toml
 # Cargo.toml — a crate-wide rename
-dh = { package = "intellistream-datahub-sdk", version = "0.1" }
+dh = { package = "intellistream-datahub-sdk", version = "0.2" }
 ```
 :::
 

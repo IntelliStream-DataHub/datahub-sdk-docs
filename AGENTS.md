@@ -73,6 +73,56 @@ nvm install 22 && nvm use 22       # or fnm, or a NodeSource apt package
 ```
 
 
+## Versions: which SDK these pages describe
+
+The SDKs are pre-1.0 and still change their interfaces between versions (the platform's
+`FAQ.md` says so), so one page cannot be right for every release. These are the rules for
+that. Nothing like them was written down before 2026-09-17, and by then the examples matched no
+SDK version at all: some calls only the released 0.2.0 had, some only `main`.
+
+**`master` describes the development versions, not the latest release.**
+
+| SDK | What `master` describes | How it is released |
+| --- | --- | --- |
+| Python and Rust | `main` of [dataplatform-rust-sdk](https://github.com/IntelliStream-DataHub/dataplatform-rust-sdk) | `intellistream-datahub-sdk` on PyPI and crates.io, from a `vX.Y.Z` tag |
+| Java | the default branch of [datahub-platform](https://github.com/IntelliStream-DataHub/datahub-platform) | not released; its version is `javaSdkVersion` in that repo's `gradle.properties` |
+
+The platform already works this way: its `docs-check` skill sends a user-visible change here,
+"changed API or SDK contracts" included, when the change merges, not when it is released. The
+SDK repository's `AGENTS.md` asks the same of SDK changes.
+
+**Every example works in all three languages.** The intro promises it: "every example on the
+site gives you a working guide in your language of choice". Where a client lacks a feature, the
+reference page says so in its "What each client covers" table. A tab is never left out without
+a word.
+
+**Install lines name the latest release, and the quick start says what that means.** A page can
+use a call newer than the latest release, so the `:::note` under "1. Install" in
+`quickstart.mdx` names the latest release per language. When an SDK is released, update in the
+same change: that note's table, and the versions in the install lines of `quickstart.mdx` and
+`tutorial.mdx` (the `Cargo.toml` snippets and the Java `implementation(...)` line).
+
+**A release gets a frozen snapshot of the docs**, one per minor version, since in 0.x the minor
+version is where breaking changes go. When the SDK tags `vX.Y.0`:
+
+1. `npm run docusaurus docs:version X.Y`. It copies `docs/` into `versioned_docs/version-X.Y/`
+   and writes `versioned_sidebars/` and `versions.json`.
+2. In the docs preset in `docusaurus.config.js`, set `lastVersion: 'X.Y'` so readers land on the
+   release, and label `versions.current` as `Next (unreleased)`. With `routeBasePath: '/'` the
+   release is served at `/` and `master` at `/next/`.
+3. Replace the hardcoded `v1.0` navbar badge with `{ type: 'docsVersionDropdown', position: 'right' }`.
+4. Rewrite the quick start note in `docs/`: from the first snapshot on, `master` is the "Next"
+   version and the note says so.
+5. Build, and check that search and the `/next/` pages both work before `sync-docs` publishes it.
+
+A snapshot is changed only where it was wrong for its own release, a patch release that changes
+behaviour included. A new feature goes into `docs/`, never back into a snapshot.
+
+**Where this stands.** No snapshot exists yet, so the published site describes `main`, and a
+reader on 0.2.0 can meet calls their version lacks; the quick start note warns them. Nothing
+checks these rules automatically yet. The doc tests being added under `doctests/` are meant to,
+by building against pinned SDK and platform commits.
+
 ## Every example has to be runnable
 
 An example that reads `engine_temperature` is not documentation until something creates
