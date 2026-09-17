@@ -148,12 +148,13 @@ under it, not one event.
 <TabItem value="java" label="Java">
 
 ```java
-DataWrapper<EventModel> events = client.events().byIds(List.of(
-        IdCollection.createFromExternalId("PO-4500171")));   // every event about this order
-```
+UUIDAndExternalIdCollection byUuid = new UUIDAndExternalIdCollection();
+byUuid.setId(UUID.fromString("0195f3a2-4c1b-7f9e-9c3a-1b2d4e6f8a90"));
 
-`IdCollection` carries a numeric id, so the Java client can only look events up by external
-id, an event's id is a UUID. Call `POST /events/byids` directly to fetch by UUID.
+DataWrapper<EventModel> events = client.events().byIds(List.of(
+        byUuid,
+        UUIDAndExternalIdCollection.createFromExternalId("PO-4500171")));   // every event about this order
+```
 
 </TabItem>
 <TabItem value="python" label="Python">
@@ -874,7 +875,7 @@ by id stops resolving.
 <TabItem value="java" label="Java">
 
 ```java
-client.events().delete(List.of(IdCollection.createFromExternalId("door_open")));
+client.events().delete(List.of(UUIDAndExternalIdCollection.createFromExternalId("door_open")));
 ```
 
 </TabItem>
