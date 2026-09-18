@@ -251,3 +251,127 @@ def test_a_refusal_naming_nothing_is_given_up_on():
         raise RuntimeError("some other failure")
 
     assert backend._delete_with_stranded(delete, "x", RuntimeError("some other failure")) == 0
+
+
+# ------------------------------------------------------------------ compile tier
+
+
+def _code(lang: str, body: str, index: int = 1, start_line: int = 10, tab: str | None = None) -> docblocks.Block:
+    return docblocks.Block(index=index, lang_index=index, lang=lang, meta="", body=body,
+                           start_line=start_line, heading="Step", tab=tab or lang)
+
+
+def _page_of(*blocks: docblocks.Block) -> docblocks.Page:
+    from pathlib import Path
+    return docblocks.Page(path=Path("docs/x.mdx"), rel="docs/x.mdx", slug="x", blocks=list(blocks))
+
+
+def test_a_missing_type_is_never_taken_for_a_reader_placeholder():
+    """The line the compile tier stands on. A page asks its reader for `shiftStart`; it
+    never asks them to invent `EventModel`. If types counted as placeholders, the SDK
+    removing a class would pass silently on every page that uses it."""
+    import compile_check as cc
+
+    assert cc.java_placeholder("cannot find symbol", "variable shiftStart", "class P_x", "P_x") == "shiftStart"
+    assert cc.java_placeholder("cannot find symbol", "method latest(String)", "class P_x", "P_x") == "latest"
+    assert cc.java_placeholder("cannot find symbol", "class EventModel", "class P_x", "P_x") is None
+    # Looked up on an SDK type rather than in the wrapper: the SDK lost a method.
+    assert cc.java_placeholder("cannot find symbol", "method of(String)", "class Timeseries", "P_x") is None
+    # `FileUploadRequest.builder()` with the class gone reaches javac as a *variable*. A
+    # constant is the reader's; a type-shaped name is not.
+    assert cc.java_placeholder("cannot find symbol", "variable FileUploadRequest", "class P_x", "P_x") is None
+    assert cc.java_placeholder("cannot find symbol", "variable METRICS", "class P_x", "P_x") == "METRICS"
+
+    assert cc.rust_placeholder("E0425", "cannot find value `shift_start` in this scope") == "shift_start"
+    assert cc.rust_placeholder("E0425", "cannot find function `latest` in this scope") == "latest"
+    assert cc.rust_placeholder("E0412", "cannot find type `ApiService` in this scope") is None
+    assert cc.rust_placeholder("E0425", "cannot find function `retrieve` in module `timeseries`") is None
+    assert cc.rust_placeholder("E0432", "unresolved import `intellistream_datahub_sdk::filters::BasicEventFilter`") is None
+
+
+def test_regrouped_rust_imports_do_not_collide():
+    """`use generic::DataWrapper` then `use generic::{DataWrapper, IdAndExtId}` is two
+    blocks to a reader and an E0252 in one file, unless compared name by name."""
+    import compile_check as cc
+
+    assert cc.flatten_use("use a::b::{C, d::{E, F as G}, self};") == [
+        "use a::b::C;", "use a::b::d::E;", "use a::b::d::F as G;", "use a::b;"]
+    page = _page_of(_code("rust", "use x::DataWrapper;\nlet a = 1;"),
+                    _code("rust", "use x::{DataWrapper, IdAndExtId};\nlet b = 2;", index=2, start_line=30))
+    source = cc.units_for(page, "rust", None)[0].source
+    assert source.count("use x::DataWrapper;") == 1
+    assert "use x::IdAndExtId;" in source
+
+
+def test_a_compile_error_is_reported_at_the_doc_line():
+    """Hoisting imports and wrapping in `main` must not cost the reader their line number."""
+    import compile_check as cc
+
+    block = _code("rust", "use x::Y;\nlet a = 1;\nlet b = broken();", start_line=40)
+    unit = cc.units_for(_page_of(block), "rust", None)[0]
+    generated = unit.source.split("\n")
+    broken_at = next(i for i, ln in enumerate(generated, start=1) if "broken()" in ln)
+    use_at = next(i for i, ln in enumerate(generated, start=1) if ln == "use x::Y;")
+    # The fence is on line 40, so the body's third line is doc line 43.
+    assert unit.locate(broken_at) == "docs/x.mdx:43 (rust #1)"
+    assert unit.locate(use_at) == "docs/x.mdx:41 (rust #1)"
+
+
+def test_async_and_blocking_tabs_compile_as_separate_programs():
+    import compile_check as cc
+
+    page = _page_of(_code("rust", "let api = a();", tab="rust"),
+                    _code("rust", "let api = b();", index=2, tab="rust-blocking"))
+    assert len(cc.units_for(page, "rust", None)) == 2
+
+
+def test_a_java_helper_method_moves_beside_main_and_keeps_its_line():
+    import compile_check as cc
+
+    block = _code("java", "static int twice(int x) {\n    return 2 * x;\n}\n\nint y = twice(2);", start_line=5)
+    unit = cc.units_for(_page_of(block), "java", None)[0]
+    generated = unit.source.split("\n")
+    helper = next(i for i, ln in enumerate(generated, start=1) if "static int twice" in ln)
+    main = next(i for i, ln in enumerate(generated, start=1) if "static void main" in ln)
+    assert helper < main
+    assert unit.locate(helper) == "docs/x.mdx:6 (java #1)"
+    assert unit.locate(helper + 1) == "docs/x.mdx:7 (java #1)"
+
+
+def test_java_fragments_get_the_client_unless_they_build_one():
+    import compile_check as cc
+
+    assumed = cc.units_for(_page_of(_code("java", "client.timeseries();")), "java", None)[0]
+    built = cc.units_for(_page_of(_code("java", "var client = DatahubClient.fromEnv();")), "java", None)[0]
+    assert "var client = DatahubClient.fromEnv();" in assumed.source
+    assert built.source.count("var client =") == 1
+
+
+def test_the_plan_decides_which_blocks_compile_together():
+    """The live tier's knobs, reused: a plan's [java] section selects even when disabled."""
+    import compile_check as cc
+
+    page = _page_of(_code("java", "var r = 1;"), _code("java", "var r = 2;", index=2),
+                    _code("java", "long x();", index=3))
+    plan = plans_mod.Plan(slug="x", page="docs/x.mdx", path=None, disabled=None, blocks={},
+                          langs={"java": plans_mod.LangPlan(lang="java", disabled="not run",
+                                                            independent=True, exclude=[3])},
+                          owns={}, expect_exists={}, expect_datapoints={}, expect_stdout=[],
+                          settle_secs=0)
+    units = cc.units_for(page, "java", plan)
+    assert len(units) == 2
+    assert all("long x();" not in u.source for u in units)
+
+
+def test_an_async_example_is_run_with_an_event_loop():
+    """The docs now show `AsyncDataHubClient`, whose examples await at the top level.
+
+    `python tutorial.py` refuses those outright, so before this the page could only be
+    excluded from the suite. The check has to be the compiler's: "await" appears in prose and
+    in strings on pages that are entirely synchronous.
+    """
+    assert runners.needs_event_loop('x = await client.units.by_external_id("deg_c")\n')
+    assert not runners.needs_event_loop('print("await is a word in this string")\n')
+    assert not runners.needs_event_loop('async def main():\n    await go()\n')
+    # A program broken some other way is run as written, so the reader sees the real error.
+    assert not runners.needs_event_loop("def (:\n")

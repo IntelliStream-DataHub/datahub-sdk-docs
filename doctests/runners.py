@@ -12,6 +12,8 @@ page, so a traceback points at the doc rather than at a temp file.
 
 from __future__ import annotations
 
+import ast
+import functools
 import os
 import re
 import shutil
@@ -183,9 +185,44 @@ def _child_env(env: dict[str, str], extra: dict[str, str]) -> dict[str, str]:
     return out
 
 
+# A program the reader would put inside an `async def`, because the page's example awaits
+# something. Deciding by compiling is exact, where a regex for "await" would be fooled by the
+# word in a string or a comment.
+_ASYNC_LAUNCHER = """import ast, asyncio, pathlib, sys
+source = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+code = compile(source, sys.argv[1], "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)
+namespace = {"__name__": "__main__", "__file__": sys.argv[1]}
+result = eval(code, namespace)
+if result is not None:
+    asyncio.run(result)
+"""
+
+
+def needs_event_loop(source: str) -> bool:
+    """Whether the composed program awaits at the top level, as an async example does."""
+    try:
+        compile(source, "tutorial.py", "exec")
+    except SyntaxError:
+        try:
+            compile(source, "tutorial.py", "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)
+        except SyntaxError:
+            return False  # broken another way; let the run report it as the reader sees it
+        return True
+    return False
+
+
 def run_python(source: str, line_map, workdir: Path, env: dict[str, str], lp: LangPlan) -> RunResult:
     path = workdir / "tutorial.py"
     path.write_text(source, encoding="utf-8")
+    # The pages now show async clients (`AsyncDataHubClient`), whose examples await at the top
+    # level, which a plain `python tutorial.py` refuses. The launcher compiles the same file with
+    # top-level await allowed and runs the coroutine, so the file, and every line number in a
+    # traceback, stays exactly what the page shows.
+    argv = [sys.executable, str(path)]
+    if needs_event_loop(source):
+        launcher = workdir / "run_with_event_loop.py"
+        launcher.write_text(_ASYNC_LAUNCHER, encoding="utf-8")
+        argv = [sys.executable, str(launcher), str(path)]
     extra = {
         # Thirteen pages end by plotting what they just computed. On a headless runner
         # `plt.show()` either blocks or dies; Agg makes it a no-op, so the page keeps
@@ -196,19 +233,23 @@ def run_python(source: str, line_map, workdir: Path, env: dict[str, str], lp: La
         "PYTHONPATH": os.pathsep.join(filter(None, [str(HERE), os.environ.get("PYTHONPATH", "")])),
         **lp.env,
     }
-    return _exec([sys.executable, str(path)], workdir, _child_env(env, extra), lp.timeout, source, line_map)
+    return _exec(argv, workdir, _child_env(env, extra), lp.timeout, source, line_map)
 
 
 # --- Java ---------------------------------------------------------
 
 _JAVA_IMPORT = re.compile(r"^\s*import\s+[\w.*]+;\s*$", re.MULTILINE)
-_CP_CACHE = HERE / ".java-classpath"
 
 
+@functools.cache
 def java_classpath() -> str:
-    """Resolve (once) the datahub-java-sdk classpath from the platform repo."""
-    if _CP_CACHE.exists() and _CP_CACHE.read_text().strip():
-        return _CP_CACHE.read_text().strip()
+    """Resolve the datahub-java-sdk classpath from the platform repo, once per session.
+
+    Asked of Gradle every session rather than cached in a file: a file cache outlived the
+    jars it named (0.1.0 builds, long after the SDK moved to 0.3.0), and a stale classpath
+    compiles every snippet against the wrong SDK, which reads as every page being broken.
+    Gradle's own up-to-date check makes asking cheap.
+    """
     platform = Path(os.environ.get("DOCTEST_JAVA_REPO", REPO.parent / "datahub-platform"))
     init = HERE / "java-classpath.gradle"
     if not (platform / "gradlew").exists() or not init.exists():
@@ -217,7 +258,9 @@ def java_classpath() -> str:
             "datahub-platform checkout, or leave Java out of DOCTEST_LANGS."
         )
     try:
-        subprocess.run([str(platform / "gradlew"), "-q", ":datahub-java-sdk:jar"],
+        # Both jars: the SDK's runtime classpath names the api-model *jar*, and `:datahub-java-sdk:jar`
+        # alone compiles against api-model's classes directory without ever writing it.
+        subprocess.run([str(platform / "gradlew"), "-q", ":datahub-api-model:jar", ":datahub-java-sdk:jar"],
                        cwd=platform, capture_output=True, text=True, timeout=900, check=True)
         proc = subprocess.run([str(platform / "gradlew"), "-q", "-I", str(init), ":datahub-java-sdk:printSdkCp"],
                               cwd=platform, capture_output=True, text=True, timeout=900, check=True)
@@ -226,7 +269,6 @@ def java_classpath() -> str:
     cp = next((ln[len("SDKCP="):] for ln in proc.stdout.splitlines() if ln.startswith("SDKCP=")), "")
     if not cp:
         raise ToolchainMissing("Gradle produced no classpath line.")
-    _CP_CACHE.write_text(cp)
     return cp
 
 
@@ -238,19 +280,12 @@ def run_java(source: str, line_map, workdir: Path, env: dict[str, str], lp: Lang
     # the body. Everything else becomes the body of main.
     imports = "\n".join(m.group(0).strip() for m in _JAVA_IMPORT.finditer(source))
     body = _JAVA_IMPORT.sub("", source)
+    # The same imports the compile tier gives a fragment, read off the jars: a hand-kept
+    # list here went stale when the model types moved to models.forms and friends.
+    import compile_check
+    sdk_imports = "\n".join(compile_check.sdk_imports(cp))
     wrapped = (
-        "import ai.intellistream.datahub.sdk.client.*;\n"
-        "import ai.intellistream.datahub.sdk.services.*;\n"
-        "import ai.intellistream.datahub.sdk.ingest.*;\n"
-        "import ai.intellistream.datahub.sdk.timeseries.*;\n"
-        "import ai.intellistream.datahub.api.responses.*;\n"
-        # The model types live in a sibling package to the SDK's own, and both are
-        # imported on demand — so Datapoint is named explicitly to keep it unambiguous.
-        "import ai.intellistream.datahub.timeseries.*;\n"
-        "import ai.intellistream.datahub.sdk.timeseries.Datapoint;\n"
-        "import ai.intellistream.datahub.models.*;\n"
-        "import ai.intellistream.datahub.resource.*;\n"
-        "import java.util.*;\nimport java.time.*;\n"
+        f"{sdk_imports}\n"
         f"{imports}\n\npublic class Tutorial {{\n"
         "  public static void main(String[] args) throws Exception {\n"
         f"{body}\n  }}\n}}\n"

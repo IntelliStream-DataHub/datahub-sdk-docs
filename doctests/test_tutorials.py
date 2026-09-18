@@ -19,6 +19,7 @@ import pytest
 
 import backend
 import docblocks
+import entities
 import plans as plans_mod
 import runners
 import scenario
@@ -199,6 +200,18 @@ def test_tutorial_runs_end_to_end(slug, lang, langs, cli, env, seed, pytestconfi
             )
 
         missing = backend.missing_entities(cli, plan.expect_exists, plan.settle_secs)
+        # A lookup that errored is not an entity that is missing. The page ran and exited 0;
+        # what failed is the harness asking the backend about it — typically an SDK newer
+        # than the stack it talks to. Still a failure, because nothing was verified, but
+        # one that must not send anyone to edit the page.
+        unverifiable = [m for m in missing if "(lookup failed:" in m]
+        assert not unverifiable, (
+            f"{plan.page} [{lang}] exited 0, but the harness could not check what it left behind: "
+            f"{', '.join(unverifiable)}.\n"
+            "This says nothing about the page. The harness's own lookup failed, which usually means "
+            "the SDK and the stack disagree about an endpoint: compare the API image's date with "
+            "the SDK's."
+        )
         assert not missing, (
             f"{plan.page} [{lang}] exited 0, but the backend does not hold what the page "
             f"promises it creates: {', '.join(missing)}.\n"
@@ -244,3 +257,75 @@ def test_plan_still_matches_the_page(slug):
                 "Re-read the page: block numbering has shifted, so the plan's `only`/`exclude` "
                 "selections may now point at different code. Update the plan and the count together."
             )
+
+
+@pytest.mark.parametrize("slug", sorted(ALL_PLANS), ids=sorted(ALL_PLANS))
+def test_plan_still_composes(slug):
+    """Build every program a plan describes, without running it. No backend needed.
+
+    The checks that a bounded-run `replace` still matches, that an `inject` still has a
+    block to land on, and that `only`/`exclude` still name blocks the page has all live in
+    `scenario.build` — which, before this test, only ran inside the live tutorial test. With
+    no stack configured that test skips first, so a rewritten `while True:` sailed through
+    the structure tier and was discovered as a hang the next time someone had a backend.
+    Composing here makes those guards hold everywhere, CI included.
+
+    Sections that do not run (`disabled`) are still checked for their block selection:
+    the compile tier reads it.
+    """
+    plan = ALL_PLANS[slug]
+    page = _page(plan)
+    problems = []
+    for lang in docblocks.EXECUTABLE:
+        lp = plan.langs.get(lang)
+        if lp is None:
+            continue
+        try:
+            if lp.disabled or plan.disabled:
+                lp.select(page.of_lang(lang))
+            else:
+                scenario.build(slug, lang, ALL_PLANS, REPO).programs()
+        except (plans_mod.PlanError, scenario.MissingBlocks) as exc:
+            problems.append(f"[{lang}] {exc}")
+    assert not problems, (
+        f"{plan.path.name} no longer lines up with {plan.page}:\n  " + "\n  ".join(problems)
+        + "\nThe page changed under the plan. Re-read it and update the plan; do not delete a "
+        "`replace` just to get green, it exists to bound a run."
+    )
+
+
+@pytest.mark.parametrize("slug", sorted(ALL_PLANS), ids=sorted(ALL_PLANS))
+def test_plan_owns_what_its_page_creates(slug):
+    """Every entity a scenario creates must be in some `owns`, or the sweep leaves it behind.
+
+    A leftover does not fail the run that made it. It fails the *next* run, on a duplicate
+    create that reads exactly like a broken page — which is how `press_07_oil_temp`,
+    `pump_p101_discharge_bar` and the production page's cooling graph each sent a
+    reader to fix documentation that was fine. Checked statically, from the same entity
+    reader the sweep's assertions use, so it needs no backend.
+    """
+    plan = ALL_PLANS[slug]
+    missing: dict[str, set[str]] = {}
+    for lang in ("python",):
+        lp = plan.langs.get(lang)
+        if lp is None or lp.disabled or plan.disabled:
+            continue
+        run = scenario.build(slug, lang, ALL_PLANS, REPO)
+        owns = run.owns()
+        seeded = [p for dep in lp.requires_once
+                  for ids in plans_mod.merged_owns(plans_mod.chain(dep, lang, ALL_PLANS)).values() for p in ids]
+        for link_lp, blocks, _ in run.sections:
+            source = "\n".join([link_lp.prologue, *(i.code for i in link_lp.inject),
+                                *(b.body for b in link_lp.select(blocks))])
+            for kind, ids in entities.owned(source, include_edge_refs=False).items():
+                for external_id in ids:
+                    covered = any(external_id == p or fnmatch.fnmatch(external_id, p) or fnmatch.fnmatch(p, external_id)
+                                  for p in [*owns.get(kind, []), *seeded])
+                    if not covered:
+                        missing.setdefault(kind, set()).add(external_id)
+    assert not missing, (
+        f"{plan.page} creates entities {plan.path.name} does not own, so the sweep leaves them behind "
+        f"and the next run fails on a duplicate create:\n  "
+        + "\n  ".join(f"{kind}: {', '.join(sorted(ids))}" for kind, ids in sorted(missing.items()))
+        + "\nAdd them under [owns] (a `prefix_*` pattern for ids minted at run time)."
+    )

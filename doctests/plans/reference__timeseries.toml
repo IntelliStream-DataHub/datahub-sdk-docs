@@ -4,30 +4,39 @@ page = "docs/reference/timeseries.md"
 #   java   #1   L21    Create a series
 #   python #1   L33    Create a series
 #   rust   #1   L47    Create a series
-#   java   #2   L80    Value types
-#   python #2   L93    Value types
-#   rust   #2   L102   Value types
-#   java   #3   L131   Filter series
-#   python #3   L146   Filter series
-#   rust   #3   L158   Filter series
-#   java   #4   L184   Delete a series
-#   python #4   L193   Delete a series
-#   rust   #4   L200   Delete a series
-#   java   #5   L220   Write datapoints
-#   python #5   L234   Write datapoints
-#   rust   #5   L246   Write datapoints
-#   java   #6   L274   High-throughput ingestion
-#   python #6   L290   High-throughput ingestion
-#   rust   #6   L304   High-throughput ingestion
-#   java   #7   L326   Retrieve datapoints
-#   python #7   L346   Retrieve datapoints
-#   rust   #7   L363   Retrieve datapoints
-#   java   #8   L401   IngestResult
-#   java   #9   L412   IngestResult
+#   java   #2   L91    Value types
+#   python #2   L104   Value types
+#   rust   #2   L113   Value types
+#   java   #3   L154   Filter series
+#   python #3   L169   Filter series
+#   rust   #3   L181   Filter series
+#   java   #4   L270   Sorting and paging
+#   python #4   L285   Sorting and paging
+#   rust   #4   L303   Sorting and paging
+#   java   #5   L335   Delete a series
+#   python #5   L344   Delete a series
+#   rust   #5   L351   Delete a series
+#   java   #6   L376   Write datapoints
+#   python #6   L390   Write datapoints
+#   rust   #6   L402   Write datapoints
+#   java   #7   L432   High-throughput ingestion
+#   python #7   L448   High-throughput ingestion
+#   rust   #7   L462   High-throughput ingestion
+#   java   #8   L494   Binary ingest (Java)
+#   java   #9   L519   Binary ingest (Java)
+#   java   #10  L568   Retrieve datapoints
+#   python #8   L588   Retrieve datapoints
+#   rust   #8   L605   Retrieve datapoints
+#   java   #11  L651   Delete datapoints
+#   java   #12  L665   Delete datapoints
+#   python #9   L676   Delete datapoints
+#   rust   #9   L689   Delete datapoints
+#   java   #13  L720   IngestResult
+#   java   #14  L734   IngestResult
 
 [blocks]
 python = 9
-java = 12
+java = 14
 rust = 9
 
 [python]
@@ -46,6 +55,13 @@ prologue = """
 import intellistream_datahub_sdk
 client = intellistream_datahub_sdk.DataHubClient.from_env()
 """
+
+[java]
+disabled = "Java scenario not written yet."
+# Independent examples, as for Python. #13 is a list of IngestResult's method signatures,
+# not code.
+independent = true
+exclude = [13]
 
 [owns]
 timeseries = ["book_value_usd", "engine_temperature"]

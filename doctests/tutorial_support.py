@@ -190,3 +190,34 @@ def wait_for_related(client, external_id: str, *, minimum: int = 1, timeout: flo
         return len(client.resources.fetch_related(**kwargs).nodes)
 
     return _wait_until(visible, minimum, timeout)
+
+
+def bearer_token() -> str:
+    """A bearer token for the pages that call the REST API directly, without the SDK.
+
+    Those pages put `{"Authorization": "Bearer ..."}` where the reader pastes their own
+    token. The harness has one of two things instead: a ready `TOKEN`, or the OAuth2
+    client-credentials set the SDK itself would use. Minting here, the way the SDK
+    does (`openid` plus the configured `SCOPE`), keeps a raw-HTTP page runnable on the
+    same stack configuration as every other page, CI included.
+    """
+    import json
+    import os
+    import urllib.parse
+    import urllib.request
+
+    if os.environ.get("TOKEN"):
+        return os.environ["TOKEN"]
+    form = {
+        "grant_type": "client_credentials",
+        "client_id": os.environ["CLIENT_ID"],
+        "client_secret": os.environ["CLIENT_SECRET"],
+        "scope": " ".join(filter(None, ["openid", os.environ.get("SCOPE", "")])),
+    }
+    if os.environ.get("AUDIENCE"):
+        form["audience"] = os.environ["AUDIENCE"]
+    request = urllib.request.Request(
+        os.environ["TOKEN_URI"], data=urllib.parse.urlencode(form).encode(), method="POST",
+        headers={"Content-Type": "application/x-www-form-urlencoded"})
+    with urllib.request.urlopen(request, timeout=30) as response:
+        return json.load(response)["access_token"]

@@ -1,12 +1,20 @@
 # Run the documentation tutorials against a real backend.
 #
-# Two tiers, because they need very different things:
+# The same suite also runs from datahub-platform's e2e workflow, against a stack booted
+# from each platform pull request — that is the run that says whether an application
+# change broke the docs. This one says whether a docs change did.
+#
+# Tiers, because they need very different things:
 #
 #   structure  — no backend, no SDK, under a second. Catches the failures that come
 #                from editing a page: a fence added or removed under a plan that
 #                selects by index, a new page with no plan, a bounded-run
 #                substitution that has stopped matching, a malformed plan. This
 #                runs everywhere, always.
+#
+#   compile    — no backend. Every Java and Rust example, composed page by page and
+#                compiled against the SDKs (Java from datahub-platform, Rust from the
+#                SDK repo). Seconds once the dependencies are cached.
 #
 #   tutorials  — needs a live stack, and builds the SDK from source so the docs are
 #                tested against the code under review rather than a release. Skips
@@ -85,6 +93,43 @@ jobs:
       - name: Every symbol and method the docs use still exists
         run: ./doctests/run.sh -q --tb=short doctests/test_api_surface.py
 
+  compile:
+    name: Java and Rust examples compile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Check out the Rust SDK
+        uses: actions/checkout@v6
+        with:
+          repository: IntelliStream-DataHub/dataplatform-rust-sdk
+          ref: ${{ github.event.client_payload.sdk_ref || inputs.sdk_ref || 'main' }}
+          token: ${{ secrets.SDK_REPO_TOKEN || github.token }}
+          path: .sdk
+      # The Java SDK lives in the platform repo, which the harness builds with Gradle.
+      - name: Check out the platform (for the Java SDK)
+        uses: actions/checkout@v6
+        with:
+          repository: IntelliStream-DataHub/datahub-platform
+          path: .platform
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+      - uses: gradle/actions/setup-gradle@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: doctests/.compile/rust
+      - run: pip install --quiet pytest
+      - name: Compile every Java and Rust example against the SDKs
+        env:
+          DOCTEST_RUST_SDK_PATH: ${{ github.workspace }}/.sdk
+          DOCTEST_JAVA_REPO: ${{ github.workspace }}/.platform
+        run: pytest doctests/test_compile.py -q -rf --tb=short
+
   tutorials:
     name: Tutorials run end to end
     runs-on: ubuntu-latest
@@ -143,6 +188,7 @@ jobs:
           CLIENT_ID: ${{ secrets.DOCTEST_CLIENT_ID }}
           CLIENT_SECRET: ${{ secrets.DOCTEST_CLIENT_SECRET }}
           TOKEN_URI: ${{ secrets.DOCTEST_TOKEN_URI }}
+          SCOPE: ${{ secrets.DOCTEST_SCOPE }}
           DOCTEST_RUST_SDK_PATH: ${{ github.workspace }}/.sdk
         # Never point this at production: the suite creates and deletes entities
         # under the docs' own external ids.

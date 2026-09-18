@@ -35,9 +35,11 @@ repl = "        time.sleep(0.1)"
 # backend and checks the datapoints actually landed.
 [java]
 disabled = "see tutorial.toml — the Java scenario for this page is not written yet."
+only = [6]
 
 [rust]
 disabled = "see tutorial.toml — the Rust scenario for this page is not written yet."
+only = [9, 10]
 
 [owns]
 timeseries = [

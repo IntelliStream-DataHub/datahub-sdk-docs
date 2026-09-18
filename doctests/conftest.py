@@ -30,6 +30,12 @@ def pytest_addoption(parser):
               "assume, so it is the one CI can hold green."),
     )
     parser.addoption(
+        "--compile-langs",
+        default=os.environ.get("DOCTEST_COMPILE_LANGS", "java,rust"),
+        help=("Languages whose examples test_compile.py type-checks against the SDK "
+              "(java,rust), or 'none'. Needs no backend; a missing toolchain or SDK skips."),
+    )
+    parser.addoption(
         "--keep",
         action="store_true",
         help="Leave the entities a tutorial created on the backend, for inspection.",
@@ -46,6 +52,15 @@ def langs(pytestconfig) -> set[str]:
     if unknown:
         raise pytest.UsageError(f"--langs: unknown language(s) {sorted(unknown)}; pick from {EXECUTABLE}")
     return chosen
+
+
+def pytest_configure(config):
+    raw = config.getoption("--compile-langs").strip().lower()
+    chosen = set() if raw in ("", "none") else {p.strip() for p in raw.split(",") if p.strip()}
+    unknown = chosen - {"java", "rust"}
+    if unknown:
+        raise pytest.UsageError(f"--compile-langs: unknown language(s) {sorted(unknown)}; pick from java, rust")
+    config.option.compile_langs = chosen
 
 
 @pytest.fixture(scope="session")

@@ -25,5 +25,9 @@ client.resources.create(
                                         labels=["Pump"])], [])
 """
 
+# ONCE PER STACK for block #4. It creates the `FLOWS_TO` relationship type, and the SDK has no
+# call that deletes a type (edges: create_types and types only), so a second run on the same
+# stack fails with "Relationship type with same name already exists". That is the stack's
+# memory, not the page: CI boots a fresh stack every run, where it passes or fails on its merits.
 [owns]
 resources = ["plant_oslo", "pump_1", "skid_1"]

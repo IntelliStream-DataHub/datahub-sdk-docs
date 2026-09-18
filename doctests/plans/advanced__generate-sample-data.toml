@@ -33,6 +33,8 @@ timeout = 600
 resources = ["account_*"]
 events = ["esp_failure_a12_*"]
 timeseries = [
+  # generator L, for the sustained-alarm page
+  "pump_p101_discharge_bar",
   "account_*",
   "cdu_1_*",
   "rig_dw1_*",

@@ -53,9 +53,18 @@ HOST_ID = "doctest"
 
 [java]
 disabled = "Java scenario not written yet — the page's six blocks include a Gradle file and a partial class body that need a scaffold decision."
+# The step path only; the complete program is tutorial-complete.toml's, as for Python.
+# These selections are what the compile tier (test_compile.py) checks.
+only = [1, 2, 3, 4, 5]
+# Step 3 says "`com.sun.management.OperatingSystemMXBean` is built into the JDK" — the
+# prose names the class, so the reader has the import. The JDK has a second
+# OperatingSystemMXBean in java.lang.management, without the memory getters.
+imports = "import com.sun.management.OperatingSystemMXBean;"
 
 [rust]
 disabled = "Rust scenario not written yet — the page carries both sync and async variants (10 blocks) and the plan must choose one path."
+# The async and blocking step paths (the compile tier keeps the two tabs apart).
+only = [1, 2, 3, 4, 5, 6, 7, 8]
 
 [owns]
 timeseries = [

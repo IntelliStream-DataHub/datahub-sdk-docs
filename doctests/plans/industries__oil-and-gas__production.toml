@@ -74,7 +74,8 @@ wait_for_related(client, "wellhead_temp_a12")
 
 [owns]
 events = ["esp_anomaly_a12_*"]
-resources = ["field_north_sea", "pump_esp_a12", "well_a12"]
+# The demo data also builds the cooling-system graph step 4 walks.
+resources = ["cooling_system", "field_north_sea", "pump_esp_a12", "pump_temp_a12", "well_a12", "wellhead_temp_a12"]
 timeseries = ["casing_temperature_c", "flow_rate_bpd", "pump_intake_pressure_bar", "wellhead_pressure_bar"]
 
 [expect]

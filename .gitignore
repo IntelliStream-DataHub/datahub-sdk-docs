@@ -32,7 +32,7 @@ yarn-error.log*
 /doctests/.venv/
 /doctests/.env
 /doctests/.token
-/doctests/.java-classpath
 /doctests/.rust-runner/
+/doctests/.compile/
 /doctests/**/__pycache__/
 /doctests/.pytest_cache/

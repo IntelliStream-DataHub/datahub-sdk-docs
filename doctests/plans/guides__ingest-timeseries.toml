@@ -1,9 +1,10 @@
 page = "docs/guides/ingest-timeseries.mdx"
 
-# python #1 L47 — Ingest a million readings
+# java   #1 L46  · python #1 L79 · rust #1 L106 — Ingest a million readings
+# java   #2 L170 · java   #3 L208               — Binary ingest (Java)
 [blocks]
 python = 1
-java = 1
+java = 3
 rust = 1
 
 # The page opens on a reader who already has a series. Rather than conjuring one,
@@ -16,6 +17,9 @@ timeout = 900   # a million datapoints is the point of the page, not a detail to
 
 [java]
 disabled = "the Java block is a fragment over an undefined `readings` map; needs a prologue decision."
+# JSON ingest, binary ingest and the binary buffer are three ways to send the same map, and
+# each declares its own `result`. They compile as separate programs.
+independent = true
 
 [rust]
 disabled = "the Rust block is a fragment over an undefined `readings` vec; needs a prologue decision."

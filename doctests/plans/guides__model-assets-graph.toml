@@ -15,7 +15,9 @@ timeout = 180
 # before datasets and retries, so naming the three nodes is enough.
 
 [owns]
-timeseries = ["engine_temperature"]
+# press_07_oil_temp is the series "Link a series to an asset" creates. Unowned, it outlived
+# every run and made the next one fail on a duplicate create.
+timeseries = ["engine_temperature", "press_07_oil_temp"]
 resources = ["plant_oslo", "line_a", "press_07"]
 
 [expect]

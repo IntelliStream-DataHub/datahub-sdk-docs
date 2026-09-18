@@ -4,12 +4,13 @@ page = "docs/reference/units.md"
 #   java   #1   L17    List all units
 #   python #1   L27    List all units
 #   rust   #1   L35    List all units
-#   java   #2   L51    Look up
-#   python #2   L61    Look up
-#   rust   #2   L71    Look up
+#   java   #2   L67    Look up
+#   python #2   L76    Look up
+#   python #3   L86    Look up, with the async client
+#   rust   #2   L93    Look up
 
 [blocks]
-python = 2
+python = 3
 java = 2
 rust = 2
 
@@ -29,6 +30,14 @@ prologue = """
 import intellistream_datahub_sdk
 client = intellistream_datahub_sdk.DataHubClient.from_env()
 """
+
+# Block 3 is the same lookup on the async client. The prose above it establishes which client
+# it is spelled on ("The `AsyncDataHubClient` spells the same call in the singular"), so the
+# harness supplies that and nothing else; the await itself runs because the runner gives a
+# program that awaits at the top level an event loop.
+[[python.inject]]
+before = 3
+code = "client = intellistream_datahub_sdk.AsyncDataHubClient.from_env()"
 
 # The catalogue listing must actually name a unit the platform ships.
 [expect]

@@ -41,6 +41,8 @@ configured the suite skips rather than fails.
 | `test_tutorials.py` | One test per (page, language), plus the block-count drift guard. |
 | `test_coverage.py` | Refuses to let a page with runnable code go unaccounted for. |
 | `test_api_surface.py` | Checks every SDK name and service method the docs use against the built SDK. Needs the SDK, not a backend. |
+| `compile_check.py` | Composes each page's Java and Rust blocks into one file per page and compiles them all in one `javac` and one `cargo check`. |
+| `test_compile.py` | One test per (language, page): the examples compile against the SDK, errors reported at the doc line. Plus controls: synthetic pages with a known result, compiled beside the docs, that fail if a compiler upgrade changes what the tier can see. Needs the SDKs and toolchains, not a backend. |
 | `test_harness.py` | Tests the guards themselves. Needs neither. |
 | `entities.py` | Reads which entities a page creates, so a plan can own and assert them. |
 | `tutorial_support.py` | Helpers a test program may import: bounded listen, traffic feed, placeholder stubs. |
@@ -65,6 +67,28 @@ writes the scaffold. The knobs, in rough order of how often they are needed:
 | `owns` | Every external id the page creates, so the run is repeatable. `prefix_*` for ids minted at run time. |
 | `expect` | What must be true on the backend afterwards. |
 
+## How the tests themselves were checked
+
+A suite that blames the wrong thing is worse than none, so each tier was checked against
+known answers on 2026-09-16, and the checks that can run unattended now do:
+
+- **Compile tier.** A hand-fixed page compiles clean; a missing method, type or import
+  fails at exactly its line; a reader-supplied name passes and does not hide an error on
+  the next line. Every passing page was then broken on purpose (a method renamed, a type
+  renamed): all 66 caught, after two blind spots in the Java classifier were found this way
+  and fixed. The controls in `test_compile.py` keep those answers pinned.
+- **Structure tier.** A fence added, a page added, a `replace` gone stale and an `only`
+  pointing past the page each fail. The last two did not until `test_plan_still_composes`
+  moved those guards out of the live test, which skips without a stack.
+- **API surface.** A missing name, a missing service method and a missing module each fail;
+  a page fixed to the current SDK passes.
+- **Live tier.** On the quickstart: removing the insert, raising in block 2, writing a
+  different series than promised and promising unprinted output each fail with the right
+  message; running twice passes. Every live failure was then traced to its cause. The
+  harness faults found (plans not owning what their page creates, a lookup failure
+  reported as a missing entity) are fixed, and `test_plan_owns_what_its_page_creates`
+  keeps the first from coming back.
+
 ## Three design choices worth knowing
 
 **Code is never copied into a test.** Every program is assembled from the page at run
@@ -82,25 +106,51 @@ whether data landed. `[expect]` goes to the backend and checks.
 
 ## Languages
 
-Python runs by default: its toolchain is the one this repo can assume, so it is the one
-that can be held green. Java and Rust runners are implemented and wired — `--langs all`,
-or `DOCTEST_LANGS=rust` — but need `DOCTEST_JAVA_REPO` (a `datahub-platform` checkout,
-for the SDK jar) and a Rust toolchain respectively, and their per-page scenarios are
-mostly still to be written. A missing toolchain skips with the reason.
+Every Java and Rust example is **compiled** against the SDK on every run, by
+`test_compile.py`: seventy pages carry each, and a compiler catches most of what goes
+wrong with them (a removed method, a field that became an `Option`, a constructor that
+grew arguments) without a stack. Unresolved *values and functions* are allowed, because
+pages leave `shiftStart` or `latest(...)` to the reader; an unresolved *type*, a missing
+method or a wrong argument is a failure. `compile_check.py` explains why the line is
+there. It needs:
+
+| | Toolchain | SDK |
+| --- | --- | --- |
+| Rust | `cargo` | `DOCTEST_RUST_SDK_PATH`, default `../dataplatform-rust-sdk` |
+| Java | `javac` (JDK 25) | `DOCTEST_JAVA_CLASSPATH`, or built from `DOCTEST_JAVA_REPO`, default `../datahub-platform` |
+
+A missing one skips with the reason. `--compile-langs none` turns the tier off. Which
+blocks compile together comes from the plan: `only`, `exclude`, `independent` and
+`imports` under `[java]` or `[rust]` apply to compiling even when that section is
+`disabled` for running.
+
+**Running** is a different matter. Python runs by default: its toolchain is the one this
+repo can assume, so it is the one that can be held green. Java and Rust runners are wired
+(`--langs all`, or `DOCTEST_LANGS=rust`), but only the quickstart has a live scenario in
+those languages so far.
 
 ## What runs where
 
-The suite is in three tiers, because they need very different things:
+The suite is in four tiers, because they need very different things:
 
 | Tier | Needs | Catches |
 | --- | --- | --- |
-| Structure (165 checks, <1s) | nothing | a fence added or removed under a plan, a new page with no plan, a stale bounded-run substitution, a malformed plan, a regression in the harness itself |
-| API surface | the SDK built | a renamed or removed SDK symbol, a service method the docs call that no longer exists, a page importing a package that is not installed |
+| Structure (under 1s) | nothing | a fence added or removed under a plan, a new page with no plan, a stale bounded-run substitution, a malformed plan, a regression in the harness itself |
+| API surface (Python) | the SDK built | a renamed or removed SDK symbol, a service method the docs call that no longer exists, a page importing a package that is not installed |
+| Compile (Java, Rust, ~15s warm) | the SDKs and a JDK and cargo | every Java and Rust example that no longer compiles against the SDK, at the doc line |
 | Tutorials | a live stack | everything else — whether the page actually works |
 
-`.github/workflows/doc-tutorials.yml` runs all three. The first two need no
-infrastructure and run on every pull request; the third runs when a `DOCTEST_BASE_URL`
-secret points at a stack, and posts a notice instead of failing when it does not.
+Two workflows run them:
+
+- `.github/workflows/doc-tutorials.yml`, here, on every docs pull request. The first
+  three tiers need no infrastructure. The fourth runs when a `DOCTEST_BASE_URL` secret
+  points at a stack, and posts a notice instead of failing when it does not.
+- `.github/workflows/e2e.yml` in **datahub-platform**, on every platform pull request. It
+  boots the stack from that pull request's code, compiles the Java examples against that
+  pull request's Java SDK, and runs every Python tutorial against the stack, so a change to
+  the application that breaks a tutorial shows up in the pull request that made it. This
+  is the run that answers "do the docs still work after this update". Both steps are
+  non-blocking until the docs are green; the job summary lists the failing pages.
 
 **Never point it at production.** Each run creates and deletes entities under the docs'
 own external ids.

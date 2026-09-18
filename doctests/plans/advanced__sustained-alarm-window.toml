@@ -33,6 +33,13 @@ repl = """with client.subscriptions.listen(["pump_p101"]) as listener:
 find = """    for msg in listener:"""
 repl = """    for msg in take(listener, 3, 45):"""
 
+# Replay (#2, #3) and the live detector (#4) are two uses of the detector class in #1, and
+# each declares its own `detector`. They compile as two programs: this one, and
+# advanced__sustained-alarm-window-live.toml.
+[java]
+disabled = "Java scenario not written yet."
+only = [1, 2, 3]
+
 [owns]
 subscriptions = ["pump_p101"]
 events = ["sustained_high_*"]

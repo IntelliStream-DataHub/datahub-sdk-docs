@@ -24,6 +24,12 @@ def handle(dp):
     _seen.append(dp)
 """
 
+[java]
+disabled = "Java scenario not written yet."
+# Raw points, hourly averages and paging are three separate reads, each declaring its own
+# `filter` and `request`; Java cannot hold them in one method, so they compile one at a time.
+independent = true
+
 [owns]
 timeseries = ["engine_temperature"]
 

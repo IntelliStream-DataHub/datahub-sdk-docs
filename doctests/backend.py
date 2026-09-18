@@ -112,6 +112,12 @@ _PASSTHROUGH = (
     "CLIENT_ID",
     "CLIENT_SECRET",
     "TOKEN_URI",
+    # Against a realm that uses Keycloak Organizations the token carries no tenant
+    # without a scope naming one, and every call answers 401 invalid_token — which
+    # reads as bad credentials, not as a missing variable. The platform's CI stack is
+    # exactly that realm, so a harness that drops these cannot run there.
+    "SCOPE",
+    "AUDIENCE",
     "PROJECT_NAME",
     "DOCTEST_TOKEN_CMD",
 )

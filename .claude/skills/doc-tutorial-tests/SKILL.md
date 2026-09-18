@@ -33,6 +33,7 @@ failing test except the documentation.** That is deliberate.
 ./doctests/run.sh -k quickstart            # one page
 ./doctests/run.sh --langs all              # Java and Rust too
 ./doctests/run.sh --keep -s -k tutorial    # leave the data behind and watch it run
+./doctests/run.sh doctests/test_compile.py # every Java and Rust example, compiled; no stack
 ```
 
 Needs a reachable stack in `doctests/.env` (see `.env.example`). **Never point it at
@@ -54,9 +55,37 @@ fits is almost always right.
 | A blamed line inside `doctests/plans (prologue …)` | The plan's fixture broke, not the tutorial. | The plan. |
 | `replacement '…' no longer matches` | A bounded-run substitution went stale because the page changed. | Re-read the page, then the plan. |
 | `now has N blocks; plan was written against M` | Someone added or removed a fence. Block numbering has shifted, so the plan may now select different code. | Re-read, update plan and count together. |
+| `test_plan_still_composes`: `no longer lines up with` | A `replace`, `inject`, `only` or `exclude` stopped fitting the page. Checked without a stack, so it fails in CI rather than as a hang the next time someone has a backend. | Re-read the page, then the plan. |
+| `test_plan_owns_what_its_page_creates` | The page creates an id no `owns` covers; the sweep would leave it and the *next* run would fail on a duplicate that looks like a doc bug. | The plan's `[owns]`. |
+| `test_the_compiler_still_reports_what_the_tier_relies_on` | A JDK or Rust upgrade reworded a compiler message. Until fixed, every compile result is suspect, in both directions. | `compile_check.py`'s classifiers. |
 | HTTP 500 or 409 on a `create` | Almost always the entity is still there — the plan's `owns` is missing an id, so the sweep left it behind. Check `owns` before believing the server is broken. | The plan's `owns`. |
 | `PanicException` | An SDK bug: the bindings panicked instead of raising. | File it. Leave the test red; it is telling the truth. |
+| HTTP 404 on a path the SDK calls (`/subscriptions/filter`, `/timeseries/data/binary`), or "the harness could not check what it left behind" | The stack is older than the SDK. The page may be fine. | Nothing, on that stack. Compare the API image's date (`podman inspect`) with the SDK's; CI's fresh stack is the verdict. |
+| `Could not parse value: 35.02 to long` on a series created without `value_type` | A stack from before the platform defaulted untyped series to `float32` (2026-09-11). | Nothing, on a current stack. |
+| HTTP 500 / 409 on a create the plan owns, in a page whose "Set up demo data" block creates the same id as a later step | The page creates it twice, so it cannot be run top to bottom. | The page (or a plan `exclude`, if the two blocks are meant as alternatives). |
+| A read-back straight after a write comes back empty (`IndexError` on `[-1]`, "expected 48, got 0") | Ingestion is asynchronous: 0.1 to 0.5 s on the dev stack. The page reads before its write lands; with a 3 s wait, seven such pages pass (checked 2026-09-16). | Undecided: either the page polls before its read-back (what a reader needs), or the plan `inject`s `wait_for_datapoints`/`wait_for_related` (keeps the page short). Pick one policy for all of them. |
+| "Relationship type with same name already exists" on `reference/edges` | Types cannot be deleted, so the page passes once per stack. | Nothing; see the plan. |
 | Backend does not hold what the page promises | The program exited 0 without doing the job. Common where a tutorial catches its own exceptions. | The page. |
+
+### Reading a compile failure (`test_compile.py`)
+
+The Java and Rust tabs are compiled, not run. A report lists `page:line (lang #n): error`.
+
+| What you see | What it means | Where to fix |
+| --- | --- | --- |
+| `cannot find symbol: method x(...) (in class Foo)` / `E0599 no method named x` | The SDK renamed or removed a method. | The page. |
+| `cannot find symbol: class Foo` / `E0412`, `E0433`, `E0432` | A type the SDK no longer has, or a Rust `use` the page never shows. | The page. |
+| `E0061 takes 3 arguments but 1 was supplied`, `E0308 expected String, found Option` | A constructor or field changed shape. | The page. |
+| `variable x is already defined` (Java) | Two blocks are alternatives, not steps. | The plan: `independent`, `only` or `exclude` under `[java]`, or a second plan for the other alternative (see `advanced__sustained-alarm-window-live.toml`). |
+| A block that is not code (a list of signatures, a menu of one-line alternatives) | Nothing to compile. | The plan: `exclude` it, with a comment saying what it is. |
+| `Left to the reader, and not counted: …` | Values and functions the page leaves open. Not failures. | Nothing. |
+
+Unresolved **types** always fail, on purpose: a page never asks a reader to invent
+`EventModel`, so a missing one means the SDK dropped it. Do not make a compile test pass by
+adding the type to a plan's `imports` unless the page's prose names that import (the
+tutorial's `com.sun.management.OperatingSystemMXBean` is the one case). Java fragments get
+every SDK package imported automatically, read off the jars; Rust fragments get nothing,
+because Rust pages show their `use` lines.
 
 ### The rule
 
