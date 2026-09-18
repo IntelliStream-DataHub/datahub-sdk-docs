@@ -1,0 +1,16 @@
+page = "docs/reference/labels.md"
+
+# Blocks on this page:
+#   java #1  L32   Read
+#   java #2  L44   Create and update
+#   java #3  L59   Create and update
+#   java #4  L70   Delete
+
+[blocks]
+java = 4
+
+# Java only: the page shows no Python or Rust, so there is nothing to run for the language the
+# live tier covers. The blocks are compiled.
+[java]
+disabled = "no live scenario yet; the page has no Python, which is the language the live tier runs."
+independent = true
