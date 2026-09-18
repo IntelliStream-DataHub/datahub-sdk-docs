@@ -41,6 +41,8 @@ configured the suite skips rather than fails.
 | `test_tutorials.py` | One test per (page, language), plus the block-count drift guard. |
 | `test_coverage.py` | Refuses to let a page with runnable code go unaccounted for. |
 | `test_api_surface.py` | Checks every SDK name and service method the docs use against the built SDK. Needs the SDK, not a backend. |
+| `known_failures.toml` | The examples that are broken today, one line each with the reason. Listed tests are expected to fail; anything else failing is new. |
+| `known_failures.py` | Loads and writes that list, and refuses to let it name anything but the two documentation tiers. |
 | `compile_check.py` | Composes each page's Java and Rust blocks into one file per page and compiles them all in one `javac` and one `cargo check`. |
 | `test_compile.py` | One test per (language, page): the examples compile against the SDK, errors reported at the doc line. Plus controls: synthetic pages with a known result, compiled beside the docs, that fail if a compiler upgrade changes what the tier can see. Needs the SDKs and toolchains, not a backend. |
 | `test_harness.py` | Tests the guards themselves. Needs neither. |
@@ -66,6 +68,31 @@ writes the scaffold. The knobs, in rough order of how often they are needed:
 | `requires_env` / `requires_python` | Prerequisites the environment may lack — these skip, not fail. |
 | `owns` | Every external id the page creates, so the run is repeatable. `prefix_*` for ids minted at run time. |
 | `expect` | What must be true on the backend afterwards. |
+
+## The broken examples that are already there
+
+The Java and Rust examples had never been compiled by anything, so the first run found drift
+that had been piling up for months: about a dozen SDK changes across a hundred page-and-language
+pairs, plus eight pages naming Python classes the SDK dropped. That is more than one change can
+fix, and a suite that is red on all of it gates nothing, because a new break looks like the pile.
+
+So the pile is written down in `known_failures.toml`, with the reason on every line:
+
+- a listed test fails: the run stays green, and the count is printed
+- a listed test **passes**: the run goes red, because the entry is fixed and its line must go
+- anything else fails: the run goes red, which is the point of the suite
+
+The list can only shrink. Fixing a page means deleting its line in the same change, and the
+guards in `test_coverage.py` refuse an entry without a reason, an entry naming a page that no
+longer exists, and an entry for any tier other than the two that report on documentation. The
+harness's own tests can never be listed away.
+
+Regenerate it against the SDKs the docs target, never against whatever happens to be checked
+out:
+
+```bash
+./doctests/run.sh doctests/test_api_surface.py doctests/test_compile.py --write-known-failures
+```
 
 ## How the tests themselves were checked
 

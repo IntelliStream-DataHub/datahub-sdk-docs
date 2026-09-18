@@ -390,3 +390,36 @@ def test_an_awaited_call_is_checked_against_the_async_client():
                                    'units = client.units.list()\n')
     assert ("units", "by_external_id", True) in calls
     assert ("units", "list", False) in calls
+
+
+# ------------------------------------------------------------------ known failures
+
+
+def test_a_known_failure_entry_says_what_is_broken():
+    """The reason is written from the failure itself, and has to be the error, not the advice.
+
+    Every compile failure ends with the same four lines telling the reader where to look. An
+    entry that quoted those would describe 97 pages identically and tell nobody anything.
+    """
+    import known_failures
+
+    class _Report:
+        longrepr = ("The java examples on docs/quickstart.mdx do not compile (1 error(s)):\n"
+                    "  docs/quickstart.mdx:92 (java #1): cannot find symbol: method of(String) "
+                    "(in class Timeseries)\n"
+                    "  Each line names the doc line. The usual causes, in order: the SDK renamed\n"
+                    "  blocks are alternatives that one program cannot hold (say so in the plan, with\n")
+
+    assert known_failures.reason_from(_Report()) == (
+        "cannot find symbol: method of(String) (in class Timeseries) (docs/quickstart.mdx:92)")
+
+
+def test_a_known_failure_id_does_not_depend_on_where_pytest_ran():
+    import known_failures
+
+    class _Item:
+        nodeid = "doctests/test_compile.py::test_examples_compile_against_the_sdk[java:docs/x.mdx]"
+
+    assert known_failures.node_id(_Item()) == (
+        "test_compile.py::test_examples_compile_against_the_sdk[java:docs/x.mdx]")
+    assert known_failures.pages_named({_Item.nodeid.split("/", 1)[1]: "r"}) == {("docs/x.mdx", "java")}
