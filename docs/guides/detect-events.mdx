@@ -63,7 +63,7 @@ rf = intellistream_datahub_sdk.RetrieveFilter(
     end=pd.Timestamp.now(tz="UTC"))
 
 points = client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()
-if any(float(dp.value) > 110.0 for dp in points):
+if any(dp.value is not None and dp.value > 110.0 for dp in points):
     client.events.create([intellistream_datahub_sdk.Event(
         external_id=f"overheat_press_07_{int(pd.Timestamp.now().timestamp())}",
         type="overheat",
@@ -86,20 +86,21 @@ let filter = RetrieveFilter {
     end: Some(Utc::now()),
     ..Default::default()
 };
-let series = api.time_series
-    .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?
-    .get_items().remove(0);
+let response = api.time_series
+    .retrieve_datapoints(&DataWrapper::from_vec(vec![filter])).await?;
+let series = response.get_items().first().ok_or("engine_temperature returned nothing")?;
 
 let too_hot = series.datapoints.iter()
-    .any(|p| p.value.as_deref().and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.0) > 110.0);
+    .any(|p| p.value.is_some_and(|v| v > 110.0));
 
 if too_hot {
-    let mut event = Event::new(format!("overheat_press_07_{}", Utc::now().timestamp()));
-    event.r#type = Some("overheat".into());
+    let mut event = Event::new(
+        format!("overheat_press_07_{}", Utc::now().timestamp()),
+        "overheat".into(),
+        Utc::now());
     event.status = Some("open".into());
     event.add_metadata("series".into(), "engine_temperature".into());
     event.add_metadata("limit".into(), "110".into());
-    event.set_event_time(Utc::now());
     api.events.create(&vec![event]).await?;
 }
 ```
@@ -126,19 +127,17 @@ DataWrapper<EventModel> overheats = client.events().filter(retriever);
 <TabItem value="python" label="Python">
 
 ```python
-overheats = client.events.filter(intellistream_datahub_sdk.EventFilter(
-    basic_filter=intellistream_datahub_sdk.BasicEventFilter(type="overheat"),
-    limit=100))
+overheats = client.events.filter(type="overheat", limit=100)
 ```
 
 </TabItem>
 <TabItem value="rust" label="Rust">
 
 ```rust
-use intellistream_datahub_sdk::filters::{BasicEventFilter, EventFilter};
+use intellistream_datahub_sdk::filters::{EventFilter, EventFilterForm};
 
-let filter = EventFilter::default()
-    .set_filter(BasicEventFilter { r#type: Some(vec!["overheat".into()]), ..Default::default() })
+let filter = EventFilterForm::default()
+    .set_filter(EventFilter { r#type: Some(vec!["overheat".into()]), ..Default::default() })
     .set_limit(100)
     .build();
 let overheats = api.events.filter(&filter).await?;
