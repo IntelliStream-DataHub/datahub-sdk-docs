@@ -771,7 +771,7 @@ this" be expressed distinctly from "leave it alone":
 | Verb | Applies to | Effect |
 | --- | --- | --- |
 | `set` | every field | Replace the value. |
-| `setNull: true` | nullable fields only | Clear the value. `externalId` and `type` are not nullable, so asking to clear either is a `400`. |
+| `setNull: true` | nullable fields only | Clear the value. `type` is not nullable, so asking to clear it is a `400`. |
 | `add` | `metadata`, `relatedResources` | Merge entries in, keeping the rest. |
 | `remove` | the same collections | Take entries out, keeping the rest. A `relatedResources` entry matches on either side, so you can remove by `id` or by `externalId` whichever you have. |
 
@@ -789,23 +789,24 @@ this" be expressed distinctly from "leave it alone":
 }
 ```
 
-Updatable fields are `externalId`, `description`, `type`, `subType`, `status`, `source`,
-`dataSetId`, `metadata` and `relatedResources`. Sending both `set` and `setNull` for one
-field is a `400`, the request is contradictory, so it is refused rather than resolved by
-precedence.
+Updatable fields are `description`, `type`, `subType`, `status`, `source`, `dataSetId`,
+`metadata` and `relatedResources`. Sending both `set` and `setNull` for one field is a
+`400`, the request is contradictory, so it is refused rather than resolved by precedence.
 
-`eventTime` is **fixed at creation** and is not an update field at all: an update naming it
-is a `400` that names the field, the same answer as for any field the form does not have. The
-store partitions events by their time, and a row cannot move between partitions. An event
-recorded against the wrong moment is deleted and written again, or corrected by a follow-up
-event, which the caution below recommends anyway.
+`externalId` and `eventTime` are **fixed at creation** and are not update fields at all: an
+update naming either is a `400` that names the field, the same answer as for any field the
+form does not have. They are fixed for different reasons. The store partitions events by
+their time, and a row cannot move between partitions. The `externalId` is the correlation key
+that groups one subject's history (see [External ids](./external-ids)), so renaming one
+event would tear it out of its own trail. An event recorded against the wrong moment or the
+wrong key is deleted and written again, or corrected by a follow-up event, which the caution
+below recommends anyway.
 
-`setNull` is refused on `externalId` and `type`, the two fields a create cannot omit and an
-update can name. Clearing `type` would leave the event unreadable by any client that models
-`type` as required, so the write is refused rather than the read failing later. `dataSetId`
-is the one field here that genuinely is nullable: `setNull` detaches the event from its data
-set, and naming a `dataSetId` that no data set has is a `400` rather than a stored dangling
-reference.
+`setNull` is refused on `type`. Clearing it would leave the event unreadable by any client
+that models `type` as required, so the write is refused rather than the read failing later.
+`dataSetId` is the one field here that genuinely is nullable: `setNull` detaches the event
+from its data set, and naming a `dataSetId` that no data set has is a `400` rather than a
+stored dangling reference.
 
 :::caution Prefer a follow-up event to mutating one
 An event update runs a replace-and-cleanup on the stored record. While it is in flight, a
