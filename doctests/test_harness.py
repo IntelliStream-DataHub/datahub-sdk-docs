@@ -375,3 +375,18 @@ def test_an_async_example_is_run_with_an_event_loop():
     assert not runners.needs_event_loop('async def main():\n    await go()\n')
     # A program broken some other way is run as written, so the reader sees the real error.
     assert not runners.needs_event_loop("def (:\n")
+
+
+def test_an_awaited_call_is_checked_against_the_async_client():
+    """The two clients do not have the same method names.
+
+    `units.by_external_id` exists on `AsyncDataHubClient` and `by_external_ids` on the sync one.
+    Checking an awaited call against the sync surface reported the units page as calling a
+    method the SDK does not have, when the page is right.
+    """
+    import test_api_surface as surface
+
+    calls = surface._service_calls('by_ext = await client.units.by_external_id("deg_c")\n'
+                                   'units = client.units.list()\n')
+    assert ("units", "by_external_id", True) in calls
+    assert ("units", "list", False) in calls

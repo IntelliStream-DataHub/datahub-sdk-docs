@@ -138,27 +138,40 @@ def test_page_only_uses_symbols_the_sdk_has(rel, symbols):
 # The service classes are not exported at module level, so the only way to see their
 # methods is through a client. Building one is a local object construction — no
 # request is made — so this stays a build-time check with no backend.
-def _probe_client():
+def _probe_client(name: str):
     try:
-        return sdk.DataHubClient(base_url="http://127.0.0.1:9", token="offline.probe.token")
+        return getattr(sdk, name)(base_url="http://127.0.0.1:9", token="offline.probe.token")
     except Exception:
         return None
 
 
-_PROBE = _probe_client()
-SERVICES = {
-    name: type(getattr(_PROBE, name))
-    for name in ("timeseries", "events", "resources", "files", "datasets",
-                 "subscriptions", "units", "labels", "functions", "edges")
-    if _PROBE is not None and hasattr(_PROBE, name)
-}
+# Two clients, because the docs teach two. The async one is not a copy of the other: on it
+# `units.by_external_id` takes one id and returns one unit, where the sync client spells the
+# same call `by_external_ids`. Checking an awaited call against the sync surface reports a
+# method the page uses correctly as missing, which is how the units page first came back red.
+_SERVICE_NAMES = ("timeseries", "events", "resources", "files", "datasets",
+                  "subscriptions", "units", "labels", "functions", "edges")
+
+
+def _services(client) -> dict[str, type]:
+    return {name: type(getattr(client, name)) for name in _SERVICE_NAMES
+            if client is not None and hasattr(client, name)}
+
+
+SERVICES = _services(_probe_client("DataHubClient"))
+ASYNC_SERVICES = _services(_probe_client("AsyncDataHubClient"))
 _SERVICE_CALL = re.compile(
-    r"\bclient\.(" + "|".join(SERVICES) + r")\.([a-z_][a-z0-9_]*)\s*\(", re.I
+    r"(?P<await>await\s+)?\bclient\.(?P<service>" + "|".join(SERVICES) + r")"
+    r"\.(?P<method>[a-z_][a-z0-9_]*)\s*\(", re.I
 ) if SERVICES else None
 
 
-def _service_calls(source: str) -> set[tuple[str, str]]:
-    return set(_SERVICE_CALL.findall(source)) if _SERVICE_CALL else set()
+def _service_calls(source: str) -> set[tuple[str, str, bool]]:
+    """(service, method, awaited) for every `client.<service>.<method>(` the page makes."""
+    if not _SERVICE_CALL:
+        return set()
+    return {(m.group("service"), m.group("method"), bool(m.group("await")))
+            for m in _SERVICE_CALL.finditer(source)}
 
 
 CALL_CASES = [
@@ -177,11 +190,13 @@ def test_page_only_calls_service_methods_the_sdk_has(rel, calls):
     """
     if not SERVICES:
         pytest.skip("could not build a probe client to read the service surface from")
-    surface = {
-        service: {m for m in dir(SERVICES[service]) if not m.startswith("_")}
-        for service in {s for s, _ in calls} if service in SERVICES
-    }
-    missing = [f"client.{s}.{m}()" for s, m in calls if m not in surface.get(s, set())]
+
+    def surface(service: str, awaited: bool) -> set[str]:
+        services = ASYNC_SERVICES if awaited and service in ASYNC_SERVICES else SERVICES
+        return {m for m in dir(services[service]) if not m.startswith("_")} if service in services else set()
+
+    missing = [f"{'await ' if awaited else ''}client.{s}.{m}()"
+               for s, m, awaited in calls if m not in surface(s, awaited)]
     assert not missing, (
         f"{rel} calls method(s) this SDK build does not expose: {', '.join(missing)}.\n"
         "A service method was renamed, or the page guessed. The names differ per "
