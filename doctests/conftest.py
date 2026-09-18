@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 import backend
+import known_failures
 import plans as plans_mod
 import runners
 import scenario
@@ -34,6 +35,12 @@ def pytest_addoption(parser):
         default=os.environ.get("DOCTEST_COMPILE_LANGS", "java,rust"),
         help=("Languages whose examples test_compile.py type-checks against the SDK "
               "(java,rust), or 'none'. Needs no backend; a missing toolchain or SDK skips."),
+    )
+    parser.addoption(
+        "--write-known-failures",
+        action="store_true",
+        help=("Rewrite doctests/known_failures.toml from this run, keeping the reasons already "
+              "written for entries that still fail. Run it against the SDKs the docs target."),
     )
     parser.addoption(
         "--keep",
@@ -61,6 +68,52 @@ def pytest_configure(config):
     if unknown:
         raise pytest.UsageError(f"--compile-langs: unknown language(s) {sorted(unknown)}; pick from java, rust")
     config.option.compile_langs = chosen
+    global _WRITING
+    _WRITING = bool(config.getoption("--write-known-failures"))
+
+
+# ------------------------------------------------------------------ known failures
+
+_WRITING = False
+_FAILED: dict[str, str] = {}
+
+
+def pytest_collection_modifyitems(config, items):
+    """Expect the listed failures, strictly: fixing one without deleting its line fails.
+
+    Skipped while `--write-known-failures` is rewriting the file, since the point of that run
+    is to see the failures themselves.
+    """
+    if config.getoption("--write-known-failures"):
+        return
+    known = known_failures.load()
+    for item in items:
+        reason = known.get(known_failures.node_id(item))
+        if reason:
+            item.add_marker(pytest.mark.xfail(strict=True, reason=f"known failure: {reason}"))
+
+
+def pytest_runtest_logreport(report):
+    if _WRITING and report.when == "call" and report.failed:
+        node = known_failures.node_id(report)
+        if node.startswith(known_failures.LISTABLE):
+            _FAILED[node] = known_failures.reason_from(report)
+
+
+def pytest_sessionfinish(session, exitstatus):
+    if not _WRITING:
+        return
+    kept = {node: reason for node, reason in known_failures.load().items() if node in _FAILED}
+    known_failures.write({**_FAILED, **kept})
+    print(f"\nwrote {len(_FAILED)} known failure(s) to {known_failures.FILE}")
+
+
+def pytest_terminal_summary(terminalreporter):
+    listed = len(known_failures.load())
+    if listed and not _WRITING:
+        terminalreporter.write_line(
+            f"{listed} example(s) are known to be broken and expected to fail "
+            f"(doctests/known_failures.toml). Fixing one means deleting its line.")
 
 
 @pytest.fixture(scope="session")

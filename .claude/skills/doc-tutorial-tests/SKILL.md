@@ -87,6 +87,19 @@ tutorial's `com.sun.management.OperatingSystemMXBean` is the one case). Java fra
 every SDK package imported automatically, read off the jars; Rust fragments get nothing,
 because Rust pages show their `use` lines.
 
+### A failure that is already known
+
+`doctests/known_failures.toml` lists the examples that were broken when the suite landed, with
+the reason on each line. Those tests are expected to fail, so:
+
+- **A page you fixed now fails as XPASS.** That is the ratchet working. Delete its line in the
+  same change; the run stays red until you do.
+- **A failure that is not listed is new.** It came from the change in front of you, or from an
+  SDK release. Fix it, or fix the page it names; do not add a line for it. The list is a record
+  of what was already broken, not a place to put today's breakage.
+- **Regenerate only deliberately**, with `--write-known-failures`, against the SDK and platform
+  the docs target, and read the diff: a regeneration that adds lines is hiding new breakage.
+
 ### The rule
 
 **A red test is a claim about the documentation, so verify it before believing it.**
