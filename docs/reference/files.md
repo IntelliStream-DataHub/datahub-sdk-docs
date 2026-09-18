@@ -213,14 +213,14 @@ with the whole file, since `multipart/byteranges` is not supported.
 
 ## Find, update and restore (Java) {#find-update-restore}
 
-Five more `/files` endpoints that the Java client wraps. They are all node operations on the
-file index, so none of them moves bytes.
+The Java client wraps these `/files` endpoints too. They are all node operations on the file
+index, so none of them moves bytes.
 
 | Java | Endpoint | What it does |
 | --- | --- | --- |
 | `files().getById(id)` | `GET /files?id=` | One file or folder by numeric id. `404` when there is none. |
 | `files().getByExternalId(extId)` | `GET /files?externalId=` | The same by external id. |
-| `files().search(q, limit)` | `GET /files/search` | Full-text over names, paths and metadata. Crosses folders, so it finds a file whose location you do not know. Pass `null` for `limit` to take the server default. |
+| `files().search(q, limit)` | `GET /files/search` | Matches file and folder names. Neither the path nor the metadata is searched. Crosses folders, so it finds a file whose location you do not know. `limit` defaults to 100 and caps at 1000; pass `null` for the default. |
 | `files().trash()` | `GET /files/trash` | The soft-deleted files you can read. |
 | `files().restore(ids)` | `POST /files/restore` | Puts them back at the path they were deleted from. |
 | `files().update(fileUpdate)` | `POST /files/update` | Rename, move, or edit metadata on one node. |
@@ -285,15 +285,15 @@ api.files.delete(&DataWrapper::from(vec![IdAndExtId::from_external_id("report_20
 | Upload | `files().upload` | `files.upload_file` | `files.upload_file` |
 | Download | `files().download` | `files.download` / `files.download_to_path` | `files.download` / `files.download_to_path` |
 | Delete | `files().delete` | `files.delete` | `files.delete` |
-| Get by id (`GET /files?id=`) | HTTP | `files.get_by_id` | `files.get_by_id` |
-| Get by external id (`GET /files?externalId=`) | HTTP | `files.get_by_external_id` | `files.get_by_external_id` |
-| Search names and descriptions (`GET /files/search?q=`) | HTTP | `files.search(query)` | `files.search(query)` |
-| List the trash (`GET /files/trash`) | HTTP | `files.list_trash` | `files.list_trash` |
-| Restore from the trash (`POST /files/restore`) | HTTP | `files.restore` | `files.restore` |
-| Rename, move or edit (`POST /files/update`) | HTTP | `files.update(FileUpdate)` | `files.update(FileUpdate)` |
+| Get by id (`GET /files?id=`) | `files().getById` | `files.get_by_id` | `files.get_by_id` |
+| Get by external id (`GET /files?externalId=`) | `files().getByExternalId` | `files.get_by_external_id` | `files.get_by_external_id` |
+| Search names and descriptions (`GET /files/search?q=`) | `files().search(q, limit)` | `files.search(query)` | `files.search(query)` |
+| List the trash (`GET /files/trash`) | `files().trash` | `files.list_trash` | `files.list_trash` |
+| Restore from the trash (`POST /files/restore`) | `files().restore` | `files.restore` | `files.restore` |
+| Rename, move or edit (`POST /files/update`) | `files().update(FileUpdate)` | `files.update(FileUpdate)` | `files.update(FileUpdate)` |
 
 Python and Rust add `download_to_path`, which streams to disk instead of holding the whole
 file in memory, see [Download](#download).
 
-Java adds six index operations: `getById`, `getByExternalId`, `search`, `trash`, `restore`
+Java also has six index operations: `getById`, `getByExternalId`, `search`, `trash`, `restore`
 and `update`. [Find, update and restore →](#find-update-restore)

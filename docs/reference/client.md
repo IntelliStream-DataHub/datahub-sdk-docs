@@ -85,34 +85,20 @@ hands you the async service for those.
 
 | Service | Java | Python | Rust |
 | --- | --- | --- | --- |
-| Resources | `client.resources()` | `client.resources` | `api.resources` |
-| Time series | `client.timeseries()` | `client.timeseries` | `api.time_series` |
-| Datasets | `client.datasets()` | `client.datasets` | `api.datasets` |
-| Events | `client.events()` | `client.events` | `api.events` |
-| Units | `client.units()` | `client.units` | `api.units` |
-| Files | `client.files()` | `client.files` | `api.files` |
-| Subscriptions | `client.subscriptions()` | `client.subscriptions` | `api.subscriptions` |
-| Edges | `client.edges()` | `client.edges` | `api.edges` |
-
-The Java client adds six more services:
-
-| Service | Java | Covers |
-| --- | --- | --- |
-| [Assets](./resources#assets) | `client.assets()` | `/assets`, the `ASSET`-labelled resources, typed |
-| [Functions](./resources#functions) | `client.functions()` | `/functions`, the `FUNCTION`-labelled resources, typed |
-| [Labels](./labels) | `client.labels()` | `/labels`, the tenant's label vocabulary |
-| [Policies](./policies) | `client.policies()` | `/policies`, including the naming dry-run |
-| [Governance templates](./policies#governance-templates) | `client.governance()` | `/governance/templates` |
-| [Tenant](./tenant) | `client.tenant()` | `/tenant/features` and `/tenant/settings` |
-
-:::note Two endpoints no client wraps, on purpose
-`GET /stats` is internal to the console and marked hidden: it is not part of the published
-contract, so nothing should call it. The browser datapoint tail
-`/timeseries/datapoints/listen` authenticates with a `?token=` query parameter, which is for a
-page that cannot set a header. Server-side code wants the durable equivalent instead,
-[`subscriptions().listen`](./subscriptions#live-delivery), which authenticates the upgrade with
-the usual `Authorization` header and survives a reconnect.
-:::
+| [Resources](./resources) | `client.resources()` | `client.resources` | `api.resources` |
+| [Time series](./timeseries) | `client.timeseries()` | `client.timeseries` | `api.time_series` |
+| [Datasets](./datasets) | `client.datasets()` | `client.datasets` | `api.datasets` |
+| [Events](./events) | `client.events()` | `client.events` | `api.events` |
+| [Units](./units) | `client.units()` | `client.units` | `api.units` |
+| [Files](./files) | `client.files()` | `client.files` | `api.files` |
+| [Subscriptions](./subscriptions) | `client.subscriptions()` | `client.subscriptions` | `api.subscriptions` |
+| [Edges](./edges) | `client.edges()` | `client.edges` | `api.edges` |
+| [Functions](./resources#functions) | `client.functions()` | `client.functions` | `api.functions` |
+| [Labels](./labels) | `client.labels()` | `client.labels` | `api.labels` |
+| [Assets](./resources#assets) | `client.assets()` | — | — |
+| [Policies](./policies) | `client.policies()` | — | — |
+| [Governance templates](./policies#governance-templates) | `client.governance()` | — | — |
+| [Tenant](./tenant) | `client.tenant()` | — | — |
 
 ## Authentication
 

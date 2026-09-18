@@ -259,7 +259,7 @@ the server redelivers it, so make your handler idempotent.
 | Operation | Java | Python | Rust |
 | --- | --- | --- | --- |
 | Create | `subscriptions().create` | `subscriptions.create` | `subscriptions.create` |
-| List `subscriptions().list` | HTTP | `subscriptions.list(limit=None)` | `subscriptions.list(limit)` |
+| List | `subscriptions().list` | `subscriptions.list(limit=None)` | `subscriptions.list(limit)` |
 | Filter | `subscriptions().filter` | `subscriptions.filter(form=None, *, timeseries=, limit=, sort=)` | `subscriptions.filter` |
 | Delete | `subscriptions().delete` | `subscriptions.delete` | `subscriptions.delete` |
 | Live delivery | `subscriptions().listen` | `subscriptions.listen` (`SubscriptionListenerAsync` with `async for` on the async client) | `subscriptions.listen` |

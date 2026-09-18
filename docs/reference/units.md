@@ -109,6 +109,6 @@ An external id no unit has is an error here, not an empty result: `by_external_i
 | --- | --- | --- | --- |
 | List all | `units().list` | `units.list` | `units.list` |
 | Look up by id | `units().byIds` | `units.by_ids` | `units.by_ids` |
-| Look up by external id | `units().byIds` | `units.by_external_ids` (sync), `units.by_external_id` (async) | `units.by_external_id` |
+| Look up by external id | `units().getByExternalId` | `units.by_external_ids` (sync), `units.by_external_id` (async) | `units.by_external_id` |
 
 The unit catalogue is read-only in every client: units are platform-managed, not tenant data.

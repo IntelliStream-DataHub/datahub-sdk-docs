@@ -251,9 +251,11 @@ A changed grant therefore takes effect within about a minute, without a new toke
 
 `policies()` returns every policy in the tenant that a data set can be associated with, as
 graph resources. It is the dataset-facing view of the catalogue the
-[policy service](./policies) manages, so use it to offer "which policy" when creating or
-re-pointing a data set:
+[policy service](./policies) manages:
 
 ```java
 DataWrapper<Resource> choices = client.datasets().policies();
 ```
+
+It has been seen answering `200` with an empty body while `GET /policies` held rows, so don't
+read an empty result as "no policies".

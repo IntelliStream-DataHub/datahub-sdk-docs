@@ -340,8 +340,8 @@ loop {
 ## List and update series {#list-and-update}
 
 `GET /timeseries?limit=` is the cheap "what have I got" read: the first `limit` series, newest
-created first, no criteria. Add `dataSetId` (an id or an external id) to restrict it to one data
-set and everything beneath it in the `BELONGS_TO` hierarchy. Anything narrower belongs in
+created first, no criteria. Add `dataSetId`, a numeric id, to restrict it to one data set and
+everything beneath it in the `BELONGS_TO` hierarchy. An external id there is a `400`. Anything narrower belongs in
 [filter](#filter-series).
 
 `POST /timeseries/update` changes fields on series that already exist. It is a partial update:
@@ -353,7 +353,7 @@ because the stored points would no longer parse; create a new series instead.
 import ai.intellistream.datahub.timeseries.UpdateTimeseries;
 
 DataWrapper<Timeseries> newest = client.timeseries().list(100);
-DataWrapper<Timeseries> inSet = client.timeseries().list(100, "engine_data");
+DataWrapper<Timeseries> inSet = client.timeseries().list(100, 5677892L);
 
 UpdateTimeseries change = new UpdateTimeseries().setExternalId("engine_temperature");
 change.getUpdate().getDescription().set("Engine block temperature, port side");
@@ -671,14 +671,17 @@ for c in points.get_items() {
 ### Latest datapoint {#latest-datapoints}
 
 `POST /timeseries/data/latest` returns the most recent point of each named series, by id or
-external id. A series with no data at all comes back as an empty collection rather than being
-omitted, so the response lines up with the request.
+external id. A series that holds no datapoints is omitted, so compare what came back against
+what you asked for rather than indexing into the result positionally.
 
-It is much cheaper than [retrieve](#retrieve-datapoints) with a limit of one: the latest point
-is served from the cache the ingest path writes, not from a range scan.
+It is cheaper than [retrieve](#retrieve-datapoints) with a limit of one: the point is served
+from the cache the ingest path writes, falling back to a single-row lookup when that is cold.
+
+The point comes back as a `DatapointString`, the timestamp-and-value-as-text pair the datapoint
+reads use.
 
 ```java
-DataWrapper<DataCollection<DatapointDTO>> now = client.timeseries().latest(List.of(
+DataWrapper<DataCollection<DatapointString>> now = client.timeseries().latest(List.of(
         IdCollection.createFromExternalId("engine_temperature"),
         IdCollection.createFromExternalId("engine_pressure")));
 ```
@@ -803,14 +806,14 @@ if (!result.isComplete()) {
 | Look up by id / external id | `timeseries().byIds` | `timeseries.by_ids` | `time_series.by_ids` |
 | Filter | `timeseries().filter` | `timeseries.filter` | `time_series.filter` |
 | Search | `timeseries().search` | `timeseries.search` | `time_series.search` |
-| List | `timeseries().list` | `timeseries.list` | `time_series.list` / `list_with_limit` |
+| List | `timeseries().list` | `timeseries.list` | `time_series.list` |
 | Update | `timeseries().update` | `timeseries.update` | `time_series.update` |
 | Delete | `timeseries().delete` | `timeseries.delete` | `time_series.delete` |
 | Write datapoints | `insertDatapoints` / `ingest` / `ingestBinary` | `insert_datapoints` / `insert_from_lists` | `insert_datapoint` / `insert_datapoints` |
 | Read datapoints (raw and [aggregated](#retrieve-datapoints)) | `retrieve` / `retrieveAggregated` | `retrieve_datapoints` | `retrieve_datapoints` |
 | [Latest datapoint](#latest-datapoints) | `timeseries().latest` | `retrieve_latest_datapoints` | `retrieve_latest_datapoint` |
+| [Value type for a unit](#value-type-hint) | `timeseries().recommendValueType` | — | — |
 | Delete datapoints | `deleteDatapoints` | `timeseries.delete_datapoints` | `time_series.delete_datapoints` |
 
 Java is the one with `ingest`, the chunking, parallelising, retrying path described above, and
-with [`ingestBinary` and `binaryBuffer`](#binary-ingest), the binary path. It also has
-`timeseries().recommendValueType`, the [value-type hint](#value-type-hint).
+with [`ingestBinary` and `binaryBuffer`](#binary-ingest), the binary path.

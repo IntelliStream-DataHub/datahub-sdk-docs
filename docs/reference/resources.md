@@ -896,9 +896,8 @@ The nodes and relationships it creates count against their own daily quotas thro
 ordinary create path. A reverse proxy in front of the API has to pass the upload through
 unbuffered and uncapped, as the shipped nginx examples do for `/resources/import`.
 
-The Java client wraps the pair. `export` hands back the file as bytes and `importGraph` takes
-the same bytes, so moving a sub-graph between two tenants is two calls and no temporary file
-unless you want one:
+The Java client wraps the pair: `export` hands back the file as bytes, and `importGraph` takes
+the same bytes.
 
 ```java
 import ai.intellistream.datahub.api.graphtransfer.GraphImportResult;
@@ -1017,9 +1016,11 @@ you may not read as missing (`404`) rather than forbidden, exactly as `GET /asse
 | Search | `resources().search` | `resources.search` | `resources.search` |
 | Filter | `resources().filter` | `resources.filter` | `resources.filter` |
 | Traverse (`fetch-related`) | `resources().fetchRelated` | `resources.fetch_related` | `resources.fetch_related` |
-| Nearest N (`fetch-nearest`) | `resources().fetchNearest` | `resources.fetch_nearest` | `resources.fetch_nearest` |
+| Nearest N (`fetch-nearest`) | `resources().fetchNearest` | `resources.fetch_nearest`, numeric id only | `resources.fetch_nearest`, numeric id only |
 | [Export / import a graph](#graph-transfer) | `resources().export` / `importGraph` | HTTP only | HTTP only |
-
+| [Functions](#functions): create, list, delete | `functions().create` / `list` / `delete` | `functions.create` / `list` / `delete` | `functions.create` / `list` / `delete` |
+| Function by id / external id | `functions().getById`, or `resources().byIds` | `functions.by_ids` / `by_external_id` | `functions.by_ids` / `by_external_id` |
+| [Assets](#assets) | `assets()` | HTTP, or `resources` with an `ASSET` label | HTTP, or `resources` with an `ASSET` label |
 
 Relations have their own client surface in all three clients, `edges()` in Java, `edges` in
 Python and Rust. [Edges → client coverage](./edges#client-coverage)
