@@ -101,8 +101,8 @@ form.setExternalIds(List.of("COM-99-PT-1034", "vps"));
 form.setNames(List.of("Valve 21 PT 1034", "Valve pressure sensors"));
 form.setDataSetId(12L);                      // omit for the tenant policy
 
-Map<String, List<PolicyFinding>> result = client.policies().checkNaming(form);
-for (PolicyFinding finding : result.get("findings")) {
+List<PolicyFinding> findings = client.policies().checkNaming(form);
+for (PolicyFinding finding : findings) {
     System.out.println(finding.externalId() + ": " + finding.message()
             + " (try " + finding.suggestion() + ")");
 }
@@ -114,8 +114,9 @@ for (PolicyFinding finding : result.get("findings")) {
 | `names` | Optional, aligned by position. Either omit entirely or supply exactly as many as there are ids: a length mismatch is rejected rather than silently pairing the wrong name with the wrong id. Worth supplying, because a suggestion derived from a name a human chose is better than one derived from a broken id. |
 | `dataSetId` | Check against the policy governing this data set. Omit for the tenant policy. `403` when you cannot read it. |
 
-The response is a map with one key, `findings`. Only non-conforming ids appear, so an empty
-list means every id is fine. `PolicyFinding` is a record: `index()` (the item's position in
+The response is a map with one key, `findings`, which the Java client unwraps: `checkNaming`
+hands you the list itself. Only non-conforming ids appear, so an empty list means every id is
+fine. `PolicyFinding` is a record: `index()` (the item's position in
 your batch), `externalId()`, `decision()` (`OK`, `WARNING` or `NOT_OK`), `policyExternalId()`
 (`policy` on the wire), `message()` and `suggestion()`, which is null when none can be derived.
 The suggestion is offered for you to accept, never applied: nothing here rewrites an external
