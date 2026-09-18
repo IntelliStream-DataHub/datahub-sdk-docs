@@ -19,8 +19,7 @@ parent to the child, and the dependable way to build it is to create that edge e
 than setting `connectedDataSets` (`connected_data_sets` in Python and Rust) on the new data set.
 [Relationship rules →](./resources#create-resources-and-relations)
 
-:::note External ids are stored exactly as you send them
-The server does not rewrite a data set external id: `Plant-A` stays `Plant-A`. The Rust
+:::note External ids are stored exactly as you send them. In the Rust sdk
 `Dataset::new` derives one from the name, in snake_case; that is a client-side default,
 not a server rule.
 
