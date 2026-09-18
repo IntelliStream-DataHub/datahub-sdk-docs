@@ -19,7 +19,7 @@ page = "docs/reference/resources.md"
 
 [blocks]
 python = 9
-java = 8
+java = 10
 rust = 8
 
 [python]
