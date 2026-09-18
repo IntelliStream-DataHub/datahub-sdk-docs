@@ -269,14 +269,15 @@ A page that has a successor carries a `nextCursor`. Echo it back as `cursor` to 
 ```json
 { "filter": { "unit": "celsius" },
   "sort": { "property": ["name"], "order": "asc" },
-  "cursor": "djE6bmFtZXxhc2N8N3x2YQ",
+  "cursor": "bmFtZXxhc2N8N3x2YQ",
   "limit": 100 }
 ```
 
-The cursor is **opaque**, base64 of a versioned encoding carrying the sort, the boundary value
+The cursor is **opaque**, base64 of an encoding carrying the sort, the boundary value
 and the id, so do not build or parse one. Send it with the **same** sort that produced it; a
 cursor is a position in one particular order, and continuing it under another is refused. One
-that does not decode is refused with a `400` of `type: ".../errors/malformed-cursor"`.
+that does not decode is refused with a `400` of `type: ".../errors/malformed-cursor"`, and so is
+one whose boundary value or id cannot be read.
 
 `nextCursor` is absent on a short page, so "keep going while it is present" is the whole loop. A
 full page may still be the last, so a complete walk ends with one empty request.
