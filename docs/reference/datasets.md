@@ -247,9 +247,13 @@ A changed grant therefore takes effect within about a minute, without a new toke
 | Search | `datasets().search` | `datasets.search(query, filter, limit)` | `datasets.search` / `search_by_query` |
 | Update | `datasets().update` | `datasets.update` (`DatasetUpdate`) | `datasets.update` (`DatasetUpdate`) |
 | Delete | `datasets().delete` | `datasets.delete` | `datasets.delete` |
-| Policies (`GET /datasets/policies`) | HTTP | `datasets.policies` | `datasets.policies` |
+| Policies (`GET /datasets/policies`) | `datasets().policies` | `datasets.policies` | `datasets.policies` |
 
-Java has no policies call; use `GET /datasets/policies` directly. It is meant to return every
-policy in the tenant that a data set can be associated with, but it has been seen answering `200`
-with an empty body while `GET /policies` held rows, so don't read an empty result as "no
-policies".
+`policies()` returns every policy in the tenant that a data set can be associated with, as
+graph resources. It is the dataset-facing view of the catalogue the
+[policy service](./policies) manages, so use it to offer "which policy" when creating or
+re-pointing a data set:
+
+```java
+DataWrapper<Resource> choices = client.datasets().policies();
+```
