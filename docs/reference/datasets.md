@@ -122,15 +122,6 @@ entries are combined with OR, which is why they are named in the singular. `limi
 [timeseries](./timeseries#sorting-and-paging) can. The server's default `limit` is 1000, but
 not every client leaves it to the server:
 
-| | Java | Python and Rust |
-| --- | --- | --- |
-| `limit` you did not set | the server's default, 1000 | 100 |
-
-`GET /datasets?limit=N` is the plain listing: no criteria, newest created first, the server's
-1000 when `limit` is omitted, and a `400` above 10000. It returns the first page and no cursor,
-so narrow with `filter` rather than raising the limit. `POST /datasets/list`, which ran the filter
-handler under a second name, is gone and answers `405`.
-
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
 
