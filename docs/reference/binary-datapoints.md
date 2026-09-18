@@ -172,6 +172,15 @@ with a stable `reason`, plus `frameIndex` (0-based) when one frame is at fault a
 | `429` | `too-many-in-flight` | `too-many-in-flight` | This API instance is already validating its limit of binary requests; `Retry-After` is one second and [`retry`](./client#problem-documents) is `same-request`. |
 | `429` | | | The ordinary [rate limit](./limits#rate-limits) or [daily quota](./limits#daily-ingest-quotas), with their own `type`. |
 
+Two of those types are the API's own rather than this endpoint's: an oversized request is
+`request-too-large` and a rejected `Content-Encoding` is `unsupported-media-type` whichever path
+produced it, so a client that already handles them needs nothing new here. The other five are
+specific to binary frames.
+
+All seven used to be one type, `datapoint-block-rejected`, which therefore answered with six
+different statuses; RFC 9457 gives a type one status. A client matching on that type matches
+nothing now. `reason` is unchanged, so one matching on `reason` still works.
+
 ### Retrying {#retrying}
 
 Every frame is validated before any is published, so a rejected request inserted **nothing** and
