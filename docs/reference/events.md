@@ -45,6 +45,14 @@ gateway that was offline over a weekend backfills Monday morning, so every event
 carries a weekend `eventTime` and a Monday `createdTime`. Filter on `eventTime` to ask *when
 did it happen*, on `createdTime` to ask *when did we learn about it*.
 
+:::note A timestamp is ISO-8601 or epoch milliseconds
+Milliseconds is the only epoch unit, so `1767225600000` is `2026-01-01T00:00:00Z` while the
+10-digit seconds form `1767225600` is refused rather than converted. An ISO-8601 string keeps its
+own offset and **has to carry one**: `2024-06-17T12:34:56` with no zone is rejected, not read as
+UTC. That covers `eventTime` and the `min` / `max` bounds of every time filter below, for a bare
+JSON number and a quoted string alike. [Timestamps in full →](./timeseries#write-datapoints)
+:::
+
 :::note Numeric ids cross the wire as JSON strings
 `dataSetId` and the `id` of each `relatedResources` entry serialize as `"12"`, not `12`. Ids can
 exceed the 53-bit integer a JSON number is safe for in JavaScript, and a silently rounded id
@@ -104,9 +112,10 @@ client.events.create([event])
 use chrono::Utc;
 use intellistream_datahub_sdk::events::Event;
 
-let mut event = Event::new("door_open".into());
-event.r#type = Some("alarm".into());
-event.set_event_time(Utc::now());          // required: when the event occurred
+let event = Event::new(
+    "door_open".into(),
+    "alarm".into(),
+    Utc::now());                           // required: when the event occurred
 api.events.create(&vec![event]).await?;
 ```
 
@@ -132,7 +141,9 @@ one, so re-sending the same event (for example after a
 [buffered](./client#durable-ingest-buffering) outage) leaves one row instead of a duplicate.
 If you set the `id` yourself, use a time-ordered UUID v7, a random v4 scatters writes across
 that key and hurts insert and query performance. The created event (with its id) is returned
-from `create`.
+from `create`, except when [durable buffering](./client#durable-ingest-buffering) spools the
+send: the Python and Rust clients then return no events (`[]` in Python, an empty result with
+status `202` in Rust).
 :::
 
 ## Look up {#lookup}
@@ -148,12 +159,13 @@ under it, not one event.
 <TabItem value="java" label="Java">
 
 ```java
-DataWrapper<EventModel> events = client.events().byIds(List.of(
-        IdCollection.createFromExternalId("PO-4500171")));   // every event about this order
-```
+UUIDAndExternalIdCollection byUuid = new UUIDAndExternalIdCollection();
+byUuid.setId(UUID.fromString("0195f3a2-4c1b-7f9e-9c3a-1b2d4e6f8a90"));
 
-`IdCollection` carries a numeric id, so the Java client can only look events up by external
-id, an event's id is a UUID. Call `POST /events/byids` directly to fetch by UUID.
+DataWrapper<EventModel> events = client.events().byIds(List.of(
+        byUuid,
+        UUIDAndExternalIdCollection.createFromExternalId("PO-4500171")));   // every event about this order
+```
 
 </TabItem>
 <TabItem value="python" label="Python">
@@ -178,7 +190,8 @@ let events = api.events
 </Tabs>
 
 `GET /events/{id}` fetches one event by UUID and returns `404` when there is none, the one
-place a missing event is an error rather than an omission.
+place a missing event is an error rather than an omission. Python's `events.get` turns that
+`404` into `None`; Rust's `events.get` returns it as an `Err`.
 
 ## Query
 
@@ -196,30 +209,35 @@ DataWrapper<EventModel> events = client.events().filter(retriever);
 <TabItem value="python" label="Python">
 
 ```python
-filter = intellistream_datahub_sdk.EventFilter(
-    basic_filter=intellistream_datahub_sdk.BasicEventFilter(type="alarm"),
-    limit=50)
-events = client.events.filter(filter)
+events = client.events.filter(type="alarm", limit=50)
 ```
+
+The criteria can also be built once as an `EventFilter` and passed as `filter=`. `limit`,
+`sort_by`, `sort_order` and `cursor` are always arguments of `filter()`, never fields of the
+`EventFilter`.
 
 </TabItem>
 <TabItem value="rust" label="Rust">
 
 ```rust
-use intellistream_datahub_sdk::filters::{BasicEventFilter, EventFilter};
+use intellistream_datahub_sdk::filters::{EventFilter, EventFilterForm};
 
-let filter = EventFilter::default()
-    .set_filter(BasicEventFilter { r#type: Some(vec!["alarm".into()]), ..Default::default() })
-    .set_limit(50)
-    .build();
+let mut filter = EventFilterForm::new(
+    EventFilter { r#type: Some(vec!["alarm".into()]), ..Default::default() });
+filter.set_limit(50);
 let events = api.events.filter(&filter).await?;
 ```
+
+`EventFilter` is the criteria; `EventFilterForm` is the request body that wraps them with
+`limit`, `sort`, `cursor` and `advancedFilter`.
 
 </TabItem>
 </Tabs>
 
 `limit` defaults to **1 000** and is capped at **10 000**; a zero or negative value falls back
-to the default rather than returning nothing. Whatever you ask for, the result is intersected with
+to the default rather than returning nothing. The Python and Rust clients always send a
+`limit`, **100** unless you set one, so the server's default only applies to a request that
+omits the field. Whatever you ask for, the result is intersected with
 the data sets your token may read, a filter can never widen access, so an empty page can
 mean "no matches" or "none you may see", and the two are not distinguished.
 
@@ -281,11 +299,12 @@ references into a list and always sets the field silently returns zero events wh
 comes back empty. For every other filter field the same code returns the unrestricted result.
 :::
 
-:::note `eventTime.max` is exclusive; the other maxima are inclusive
-`eventTime` is matched as `min <= t < max`, while `createdTime` and `lastUpdatedTime` are
-matched as `min <= t <= max`. That makes back-to-back `eventTime` windows tile cleanly,
-`[Monday, Tuesday)` then `[Tuesday, Wednesday)` covers every event exactly once, where the
-same pattern on `createdTime` double-counts the boundary millisecond.
+:::note Every time window is inclusive at both ends
+`eventTime`, `createdTime` and `lastUpdatedTime` are all matched as `min <= t <= max`, so an
+event landing exactly on `max` is returned. Back-to-back windows that share a boundary,
+Monday to Tuesday then Tuesday to Wednesday, both return an event stamped exactly at Tuesday
+midnight. To tile windows without double-counting, set each `max` one millisecond before the
+next window's `min`; the columns are stored to the millisecond.
 :::
 
 ### Advanced filters {#advanced-filters}
@@ -513,9 +532,10 @@ if (page.getNextCursor() != null) {
 <TabItem value="python" label="Python">
 
 ```python
-page = client.events.filter(filter)
+page = client.events.filter(type="alarm", limit=50)
 if page.next_cursor is not None:
-    filter.cursor = page.next_cursor             # keep the same sort_by / sort_order
+    page = client.events.filter(type="alarm", limit=50,
+                                cursor=page.next_cursor)   # keep the same sort_by / sort_order
 ```
 
 </TabItem>
@@ -578,23 +598,20 @@ DataWrapper<EventModel> findings = client.events().filter(retriever);
 <TabItem value="python" label="Python">
 
 ```python
-filter = intellistream_datahub_sdk.EventFilter(
-    basic_filter=intellistream_datahub_sdk.BasicEventFilter(
-        type="policy_finding",
-        sub_type="naming_snake_case"),   # one policy; omit for all
+findings = client.events.filter(
+    type="policy_finding",
+    sub_type="naming_snake_case",        # one policy; omit for all
     limit=200)
-
-findings = client.events.filter(filter)
 ```
 
 </TabItem>
 <TabItem value="rust" label="Rust">
 
 ```rust
-use intellistream_datahub_sdk::filters::{BasicEventFilter, EventFilter};
+use intellistream_datahub_sdk::filters::{EventFilter, EventFilterForm};
 
-let filter = EventFilter::default()
-    .set_filter(BasicEventFilter {
+let filter = EventFilterForm::default()
+    .set_filter(EventFilter {
         r#type: Some(vec!["policy_finding".into()]),
         sub_type: Some(vec!["naming_snake_case".into()]),   // one policy; omit for all
         ..Default::default()
@@ -762,7 +779,7 @@ this" be expressed distinctly from "leave it alone":
 | Verb | Applies to | Effect |
 | --- | --- | --- |
 | `set` | every field | Replace the value. |
-| `setNull: true` | nullable fields only | Clear the value. `externalId` and `type` are not nullable, so asking to clear either is a `400`. |
+| `setNull: true` | nullable fields only | Clear the value. `type` is not nullable, so asking to clear it is a `400`. |
 | `add` | `metadata`, `relatedResources` | Merge entries in, keeping the rest. |
 | `remove` | the same collections | Take entries out, keeping the rest. A `relatedResources` entry matches on either side, so you can remove by `id` or by `externalId` whichever you have. |
 
@@ -780,23 +797,24 @@ this" be expressed distinctly from "leave it alone":
 }
 ```
 
-Updatable fields are `externalId`, `description`, `type`, `subType`, `status`, `source`,
-`dataSetId`, `metadata` and `relatedResources`. Sending both `set` and `setNull` for one
-field is a `400`, the request is contradictory, so it is refused rather than resolved by
-precedence.
+Updatable fields are `description`, `type`, `subType`, `status`, `source`, `dataSetId`,
+`metadata` and `relatedResources`. Sending both `set` and `setNull` for one field is a
+`400`, the request is contradictory, so it is refused rather than resolved by precedence.
 
-`eventTime` is **fixed at creation** and is not an update field at all: an update naming it
-is a `400` that names the field, the same answer as for any field the form does not have. The
-store partitions events by their time, and a row cannot move between partitions. An event
-recorded against the wrong moment is deleted and written again, or corrected by a follow-up
-event, which the caution below recommends anyway.
+`externalId` and `eventTime` are **fixed at creation** and are not update fields at all: an
+update naming either is a `400` that names the field, the same answer as for any field the
+form does not have. They are fixed for different reasons. The store partitions events by
+their time, and a row cannot move between partitions. The `externalId` is the correlation key
+that groups one subject's history (see [External ids](./external-ids)), so renaming one
+event would tear it out of its own trail. An event recorded against the wrong moment or the
+wrong key is deleted and written again, or corrected by a follow-up event, which the caution
+below recommends anyway.
 
-`setNull` is refused on `externalId` and `type`, the two fields a create cannot omit and an
-update can name. Clearing `type` would leave the event unreadable by any client that models
-`type` as required, so the write is refused rather than the read failing later. `dataSetId`
-is the one field here that genuinely is nullable: `setNull` detaches the event from its data
-set, and naming a `dataSetId` that no data set has is a `400` rather than a stored dangling
-reference.
+`setNull` is refused on `type`. Clearing it would leave the event unreadable by any client
+that models `type` as required, so the write is refused rather than the read failing later.
+`dataSetId` is the one field here that genuinely is nullable: `setNull` detaches the event
+from its data set, and naming a `dataSetId` that no data set has is a `400` rather than a
+stored dangling reference.
 
 :::caution Prefer a follow-up event to mutating one
 An event update runs a replace-and-cleanup on the stored record. While it is in flight, a
@@ -874,7 +892,7 @@ by id stops resolving.
 <TabItem value="java" label="Java">
 
 ```java
-client.events().delete(List.of(IdCollection.createFromExternalId("door_open")));
+client.events().delete(List.of(UUIDAndExternalIdCollection.createFromExternalId("door_open")));
 ```
 
 </TabItem>
@@ -888,7 +906,9 @@ client.events.delete(["door_open"])
 <TabItem value="rust" label="Rust">
 
 ```rust
-api.events.delete(&vec![IdAndExtId::from_external_id("door_open")]).await?;
+use intellistream_datahub_sdk::events::EventIdCollection;
+
+api.events.delete(&vec![EventIdCollection::from_external_id("door_open")]).await?;
 ```
 
 </TabItem>

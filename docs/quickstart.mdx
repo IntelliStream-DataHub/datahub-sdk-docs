@@ -103,20 +103,27 @@ client.timeseries().ingest(Map.of(
 <TabItem value="python" label="Python">
 
 ```python
-import intellistream_datahub_sdk, pandas as pd
+from datetime import datetime, timedelta, timezone
+
+import intellistream_datahub_sdk
 from intellistream_datahub_sdk import DataHubClient
 
-client = DataHubClient.from_env()
+client = DataHubClient.from_envfile(None)  # the environment, plus a .env file if there is one
 
 client.timeseries.create([
     intellistream_datahub_sdk.TimeSeries(external_id="engine_temperature", unit="celsius", value_type="float")])
 
 client.timeseries.insert_from_lists(
-    timestamps=[pd.Timestamp.now(tz="UTC")], values=[92.4], ts="engine_temperature")
+    timestamps=[datetime.now(timezone.utc)], values=[92.4], ts="engine_temperature")
 ```
 
 </TabItem>
 <TabItem value="rust" label="Rust">
+
+Every call is `async`, so run these lines inside
+`#[tokio::main] async fn main() -> Result<(), Box<dyn std::error::Error>>`, with
+`tokio = { version = "1", features = ["full"] }` and `chrono = "0.4"` added to your
+dependencies.
 
 ```rust
 use intellistream_datahub_sdk::create_api_service;
@@ -161,8 +168,8 @@ client.timeseries().retrieve(request).getItems()
 ```python
 rf = intellistream_datahub_sdk.RetrieveFilter(
     ts="engine_temperature",
-    start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=1),
-    end=pd.Timestamp.now(tz="UTC"))
+    start=datetime.now(timezone.utc) - timedelta(hours=1),
+    end=datetime.now(timezone.utc))
 
 for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
     print(dp.timestamp, dp.value)
@@ -172,7 +179,6 @@ for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
 <TabItem value="rust" label="Rust">
 
 ```rust
-use chrono::Utc;
 use intellistream_datahub_sdk::generic::{DataWrapper, RetrieveFilter};
 
 let filter = RetrieveFilter {
@@ -184,7 +190,7 @@ let filter = RetrieveFilter {
 let points = api.time_series.retrieve_datapoints(&DataWrapper::from(vec![filter])).await?;
 for c in points.get_items() {
     for p in &c.datapoints {
-        println!("{} = {}", p.timestamp, p.value);
+        println!("{} = {:?}", p.timestamp, p.value);
     }
 }
 ```

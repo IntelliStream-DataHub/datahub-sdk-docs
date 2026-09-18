@@ -279,27 +279,49 @@ from you:
 
 | Response | Retried in process | Spooled when [buffering](./client#durable-ingest-buffering) is on |
 | --- | --- | --- |
-| `429` (rate limit, daily quota), `5xx`, network failure | **Yes**, with backoff | Yes |
+| `429` (rate limit, daily quota), `5xx`, network failure | Java: **yes**, with backoff. Rust and Python: on the binary path, see below | Yes, and Rust and Python send it again on the next ingest call |
 | `401`, and `403` on a grant | No | Yes, until the credential is fixed |
-| `403` on a [lifetime ceiling](#lifetime-ceilings) | No | **No**, surfaced to you |
+| `403` on a [lifetime ceiling](#lifetime-ceilings) | No | Java: **no**, surfaced to you. Rust and Python: **yes**, like any `403` |
 | `400` / `422` (validation), `413` (body too large) | No | No, surfaced to you |
 | `404 unknown-timeseries` / `422 external-id-mismatch` on the [binary path](./timeseries#binary-ingest) | **Once**, after re-resolving the series | No, the binary path has no spool |
 
-So rate limits and daily quotas take care of themselves: the client backs off and replays.
+Java's `ingest` backs off and replays a `429`, `5xx` or network failure up to `maxRetries`
+times. Rust and Python retry JSON ingest through the spool instead: with buffering on, the
+failure is written to disk and the next ingest call sends it again, oldest first, before its own
+data; with it off, the error reaches your code. Their binary
+path, `insert_datapoints_binary`, retries `429`, `5xx` and network failures up to three times
+by default, 1, 2 and 3 seconds apart. No client waits the `Retry-After`, so a rate limit that
+outlasts those retries, or a daily quota, ends in the spool or in your code the same way.
 A `413` or a validation failure reaches your code, which is the right place for it, since
 neither is fixed by trying again.
 
-A lifetime ceiling is the one `403` that does **not** spool: it surfaces on the call that hit
-it, in `errors()` on the [`IngestResult`](./timeseries#ingestresult). Why the client treats it
-differently from the other `403`s is under
-[durable ingest buffering](./client#durable-ingest-buffering).
+In Java, a lifetime ceiling is the one `403` that does **not** spool: it surfaces on the call
+that hit it, in `errors()` on the [`IngestResult`](./timeseries#ingestresult). Why Java treats
+it differently from the other `403`s is under
+[durable ingest buffering](./client#durable-ingest-buffering). Rust and Python spool it like
+any other `403` when buffering is on, so the call returns without an error and the data waits
+in the spool until the time window or size cap drops it. With buffering off, the `403` reaches
+your code.
 
-Two things to check in your own configuration:
+Things to check in your own configuration:
 
-- **`batchSize` defaults to `10 000`**, exactly the `items` cap. If you raised it, lower it
-  back to 10 000 or below. See [IngestOptions](./timeseries#ingestoptions).
+- **Java: `batchSize` defaults to `10 000`**, exactly the `items` cap. If you raised it, lower
+  it back to 10 000 or below. See [IngestOptions](./timeseries#ingestoptions). Rust and Python
+  have no batch size to set: `insert_datapoints` cuts requests at 100 000 datapoints, the
+  numeric per-collection cap.
 - **A `TEXT` or `MIXED` series batch must stay at or under 10 000 points per collection**,
-  whatever `batchSize` says. A numeric batch of 10 000 points is roughly 500 KB of JSON,
-  comfortably inside the 16 MiB datapoint body cap.
-- **`ingestBinary` has no size knob to get wrong**: it cuts frames and requests under the
-  [binary frame caps](#binary-frames) itself.
+  whatever `batchSize` says. The Rust and Python chunking does not look at the value type
+  either, so split a text series yourself. A numeric batch of 10 000 points is roughly 500 KB
+  of JSON, comfortably inside the 16 MiB datapoint body cap.
+- **Rust and Python: `DATAPOINT_INSERT_PARALLELISM` sets how many datapoint requests are in
+  flight at once**, default `4`. Rust also takes `set_datapoint_insert_parallelism` on
+  `DataHubConfig`; Python reads it only from the environment, through `from_env()` or
+  `from_envfile(path)`. It applies with buffering off, since the buffered path sends one
+  request at a time. Each request can carry 100 000 points that the API holds in memory while
+  it parses them, so raise it with care. Java's counterpart is `parallelism` on
+  [IngestOptions](./timeseries#ingestoptions).
+- **The binary path has no size knob to get wrong**: `ingestBinary` (Java) and
+  `insert_datapoints_binary` (Rust, Python) cut frames and requests under the
+  [binary frame caps](#binary-frames) themselves. Rust tunes it with `BinaryIngestOptions`:
+  `zstd_level` (`9`), `max_retries` (`3`) and `request_concurrency` (`4`). Python takes only
+  `zstd_level=`.

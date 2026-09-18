@@ -63,10 +63,49 @@ api.subscriptions.delete(&vec![IdAndExtId::from_external_id("engine_temps")]).aw
 </TabItem>
 </Tabs>
 
-`filter` posts `POST /subscriptions/filter`, the request body every other collection uses: a
-`filter` holding the criteria, a `limit`, a `sort`, and a keyset `cursor`. The criteria are
-`id`, `externalId`, `name`, `timeseries` (only subscriptions bound to these series, by id or
-external id), `createdTime` and `lastUpdatedTime`.
+:::note Data set access control
+Creating a subscription requires **read access to every bound series' data set**. If you
+lack read access to any of them, `create` fails with **HTTP 403** and nothing is persisted.
+Access is granted through Keycloak **organization groups**: `/datasets/<externalId>/read` for one
+data set (and everything beneath it), or the wildcard `/datasets/*/read` for all of them.
+[Data set access control →](./datasets#access-control)
+:::
+
+## Find subscriptions {#find}
+
+`GET /subscriptions?limit=` returns the newest `limit` subscriptions your token may read, no
+body required and no cursor. For anything narrower, or to page, `filter` posts
+`POST /subscriptions/filter`, the same envelope every other collection's filter takes, with
+criteria combined by **AND**:
+
+| Criterion | Matching |
+| --- | --- |
+| `id`, `externalId`, `name` | Patterns, case-insensitive. `*` and `%` are wildcards, `_` is literal, and an entry with no wildcard matches exactly. |
+| `timeseries` | Subscriptions bound to **any** of these time-series, each named by `id`, `externalId`, or both. |
+| `createdTime`, `lastUpdatedTime` | `{ "min": …, "max": … }` bounds. |
+
+Each field above except `createdTime` and `lastUpdatedTime` takes **either a bare value or an
+array**, and the entries of an array are combined with **OR**, exactly as on the other
+collections' filters.
+
+Both endpoints return only subscriptions you can read in full: every timeseries a subscription
+binds must sit in a data set you have read access to, the same rule `create` above and
+[live delivery](#live-delivery) enforce. One ungranted timeseries hides the whole subscription.
+
+The page can be ordered and walked exactly as [timeseries](./timeseries#sorting-and-paging)
+can: `sort` takes `id`, `externalId`, `name`, `createdTime` or `lastUpdatedTime`, and the
+response carries `nextCursor` while more remain.
+
+```json
+{
+  "limit": 100,
+  "filter": {
+    "externalId": ["engine_*"],
+    "timeseries": [{ "externalId": "engine_temperature" }]
+  },
+  "sort": { "property": ["createdTime"], "order": "asc" }
+}
+```
 
 The clients do not all send the whole body yet:
 
@@ -80,21 +119,17 @@ The clients do not all send the whole body yet:
 `client.subscriptions.filter(timeseries=["engine_temperature"], limit=100)`, or a prepared
 `SubscriptionFilterForm`, which is the only form Rust takes.
 
-:::note Data set access control
-Creating a subscription requires **read access to every bound series' data set**. If you
-lack read access to any of them, `create` fails with **HTTP 403** and nothing is persisted.
-Access is granted through Keycloak **organization groups**: `/datasets/<externalId>/read` for one
-data set (and everything beneath it), or the wildcard `/datasets/*/read` for all of them.
-[Data set access control →](./datasets#access-control)
-:::
+This replaced `POST /subscriptions/list`, which took a `filter` argument in a shape nothing else
+in the API used: its own default page size, a sort that was not validated, and no cursor, so a
+tenant past the first page could not reach the rest.
 
 ## Live delivery
 
 `listen` opens a WebSocket to `/timeseries/datapoints/subscription/listen/<externalId>/...`,
 one path segment per subscription, and authenticates the upgrade request with the same
-`Authorization: Bearer <jwt>` header as any REST call. Stream messages to a handler or drive
-a loop, and **ack** the messages you've processed, anything left unacked is redelivered on
-reconnect.
+`Authorization: Bearer <jwt>` header as any REST call. Drive a loop (or, in Java, stream
+messages to a handler), and **ack** the messages you've processed, anything left unacked is
+redelivered on reconnect.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -141,11 +176,19 @@ with client.subscriptions.listen(["engine_temps"]) as listener:
         listener.ack([msg.message_id])
 ```
 
+The iterator never ends on its own: a dropped or closed socket is reconnected for you. An error
+is raised from it instead, which ends the `for` loop, but the listener stays usable, so catch it
+and keep iterating. `next_message()` receives one message at a time and raises the same way. On
+an `AsyncDataHubClient`, `listen` returns a `SubscriptionListenerAsync`, driven with
+`async with` and `async for`.
+
 </TabItem>
 <TabItem value="rust" label="Rust">
 
-`next().await` yields `Some(Ok(msg))`, `Some(Err(..))`, or `None` when the socket closes
-(reconnects are transparent):
+`next().await` yields `Some(Ok(msg))` or `Some(Err(..))` and never `None`: a dropped or closed
+socket is reconnected for you, with a fresh token and the same subscriptions. An `Err` is a
+refused subscription while the socket stays open, a frame that could not be decoded, or a
+reconnect that ran out of retries, and calling `next` again resumes reconnecting:
 
 ```rust
 let mut listener = api.subscriptions.listen(&["engine_temps"]).await?;
@@ -163,9 +206,10 @@ while let Some(result) = listener.next().await {
 </TabItem>
 </Tabs>
 
-Every listener also exposes `stream` for push delivery, `ack`/`nack`,
-`subscribe`/`unsubscribe`/`set_subscriptions` to change the live interest set at runtime,
-and `close`.
+Every listener has `ack`/`nack`, `subscribe`/`unsubscribe` to change the live interest set at
+runtime, and `close`. Java receives through `stream` or `poll`, with refusals on `pollError`.
+Python receives by iterating or with `next_message`, Rust with `next`, and both add
+`set_subscriptions`, which replaces the whole interest set.
 
 A frame on the wire carries one subscription's messages:
 
@@ -215,6 +259,9 @@ the server redelivers it, so make your handler idempotent.
 | Operation | Java | Python | Rust |
 | --- | --- | --- | --- |
 | Create | `subscriptions().create` | `subscriptions.create` | `subscriptions.create` |
-| Filter | `subscriptions().filter` | `subscriptions.filter` | `subscriptions.filter` |
+| List `subscriptions().list` | HTTP | `subscriptions.list(limit=None)` | `subscriptions.list(limit)` |
+| Filter | `subscriptions().filter` | `subscriptions.filter(form=None, *, timeseries=, limit=, sort=)` | `subscriptions.filter` |
 | Delete | `subscriptions().delete` | `subscriptions.delete` | `subscriptions.delete` |
-| Live delivery | `subscriptions().listen` | `subscriptions.listen` | `subscriptions.listen` |
+| Live delivery | `subscriptions().listen` | `subscriptions.listen` (`SubscriptionListenerAsync` with `async for` on the async client) | `subscriptions.listen` |
+
+
