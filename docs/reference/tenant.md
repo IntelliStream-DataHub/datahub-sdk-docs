@@ -5,15 +5,13 @@ title: Tenant
 
 # Tenant
 
-Two things about the tenant your token belongs to: which optional features are switched on, and
-the settings your organization administers for itself.
-
-The Java client reaches them through `client.tenant()`.
+Which optional features the tenant your token belongs to may use, and the settings your
+organization administers for itself. The Java client reaches them through `client.tenant()`.
 
 ## Feature flags {#features}
 
-`GET /tenant/features` says which optional features your tenant may use. Gate feature-specific
-code on it: a disabled feature still has endpoints, and they answer `404` or `403`.
+`GET /tenant/features` says which optional features the tenant may use. A disabled feature's
+endpoints answer `404` or `403`.
 
 ```java
 import ai.intellistream.datahub.tenant.TenantFeatures;
@@ -24,53 +22,48 @@ if (features.isFilesEnabled()) {
 }
 ```
 
-| Wire field | Java | Meaning |
+| Wire field | Java | Feature |
 | --- | --- | --- |
 | `files` | `isFilesEnabled()` | The [file storage](./files) endpoints. |
 | `policy` | `isPolicyFeatureEnabled()` | [Policies and governance](./policies). |
 | `streaming` | `isStreamingFeatureEnabled()` | Streaming ingest. |
 | `chat` | `isChatFeatureEnabled()` | The AI assistant, configured below. |
 
-A flag absent from the tenant's configuration falls back to the deployment default, and the
-Java accessors read absent as false.
+`policy`, `streaming` and `chat` fall back to the deployment default when the tenant's
+configuration does not carry them; `files` reads absent as off. The Java accessors return
+primitive booleans.
 
 ## What you may change {#settings-permissions}
 
 Settings are granted per **scope**, through Keycloak organization groups:
 `/settings/<scope>/read` and `/settings/<scope>/write`, or `/settings/*/read` and
-`/settings/*/write` for every scope. Read and write are separate grants, and **write does not
-imply read**. The scope known today is `llm`.
+`/settings/*/write` for every scope. Read and write are separate grants, and write does not
+imply read. The one scope is `llm`.
 
-`GET /tenant/settings/permissions` says which you hold, with wildcards already resolved, so
-every scope the platform knows is listed by name.
+`GET /tenant/settings/permissions` says which grants you hold, with wildcards resolved, so
+every scope the platform knows is listed by name. The endpoint is ungated.
 
 ```java
 import ai.intellistream.datahub.models.tenant.SettingsPermission;
 
 Map<String, SettingsPermission> grants = client.tenant().settingsPermissions();
 SettingsPermission llm = grants.get("llm");
-llm.read();     // show the form, or show it read-only
+llm.read();
 llm.write();
 ```
-
-It is deliberately ungated, so it answers for everyone. It exists so a client can decide
-between an editable form, a read-only one, and no form at all, without calling an endpoint and
-reading the `403`. It is **not** the security boundary: the settings endpoints enforce the same
-grants regardless of what this says.
 
 ## Model configuration {#llm-settings}
 
 `GET /tenant/settings/llm` and `PUT /tenant/settings/llm` read and replace the model your
 organization's assistant runs on. The API key is never returned: `apiKeySet` says whether one
-is stored, and `configured` says whether the whole thing amounts to a model that can actually
-be called. When `configured` is false, your organization has no assistant.
+is stored, and `configured` says whether the settings amount to a model that can be called.
 
 ```java
 import ai.intellistream.datahub.models.tenant.TenantLlmSettings;
 import ai.intellistream.datahub.models.tenant.TenantLlmSettingsForm;
 
 TenantLlmSettings current = client.tenant().llmSettings();
-current.apiKeySet();     // true, but never the key itself
+current.apiKeySet();
 current.configured();
 
 TenantLlmSettings saved = client.tenant().updateLlmSettings(new TenantLlmSettingsForm(
@@ -80,32 +73,28 @@ TenantLlmSettings saved = client.tenant().updateLlmSettings(new TenantLlmSetting
 ```
 
 `TenantLlmSettings` and `TenantLlmSettingsForm` are records, so the fields read as
-`current.provider()` and so on. They are two records rather than one because `apiKey` travels
-one way only: it can be written and is never read back.
+`current.provider()` and so on. `apiKey` is write-only: it is carried on the form and never
+returned by a read.
 
-:::note `apiKey` is the one exception to "replace"
 The `PUT` replaces the configuration with what you send, absent meaning unset, except for
 `apiKey`: absent or blank leaves the stored credential alone, and only a non-blank value
-overwrites it. That is what lets a form render the field empty, since the credential is never
-returned, and still be savable without retyping it.
-:::
+overwrites it.
 
-A field you leave unset falls back to the deployment default, except the ones that identify the
-model, which have no default: a `provider`, a `model`, and an `apiKey` or a `baseUrl` depending
-on the provider. Those are what make the assistant available at all.
+A field you leave unset falls back to the deployment default. The fields that identify the
+model have no default: a `provider`, a `model`, and an `apiKey` or a `baseUrl` depending on the
+provider.
 
 `effort` accepts `low`, `medium`, `high`, `xhigh` or `max`, weakest first, and the list is on
-the record as `TenantLlmSettings.EFFORT_LEVELS` so a client rendering a picker does not have to
-hard-code it.
+the record as `TenantLlmSettings.EFFORT_LEVELS`.
 
-A change takes effect for the API immediately. Other services cache the tenant registry and
-pick it up within five minutes.
+The API instance that served the write refreshes immediately. Other instances and services
+cache the tenant registry and pick the change up within five minutes.
 
-## The Java surface {#client-coverage}
+## What each client covers {#client-coverage}
 
-| Operation | Endpoint | Java |
-| --- | --- | --- |
-| Feature flags | `GET /tenant/features` | `tenant().features` |
-| Settings permissions | `GET /tenant/settings/permissions` | `tenant().settingsPermissions` |
-| Read model configuration | `GET /tenant/settings/llm` | `tenant().llmSettings` |
-| Change model configuration | `PUT /tenant/settings/llm` | `tenant().updateLlmSettings` |
+| Operation | Java | Python | Rust |
+| --- | --- | --- | --- |
+| Feature flags (`GET /tenant/features`) | `tenant().features` | — | — |
+| Settings permissions (`GET /tenant/settings/permissions`) | `tenant().settingsPermissions` | — | — |
+| Read model configuration (`GET /tenant/settings/llm`) | `tenant().llmSettings` | — | — |
+| Change model configuration (`PUT /tenant/settings/llm`) | `tenant().updateLlmSettings` | — | — |
