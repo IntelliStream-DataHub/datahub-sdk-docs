@@ -186,9 +186,9 @@ use intellistream_datahub_sdk::generic::IdAndExtId;
 
 let one = api.edges.get(341).await?;
 
-let many = api.edges.by_ids(&vec![IdAndExtId::from_id(341)]).await?;
+let many = api.edges.by_ids(&vec![IdAndExtId::from_id(341), IdAndExtId::from_id(342)]).await?;
 for endpoint in many.nodes().unwrap_or_default() {
-    println!("{}", endpoint.external_id);
+    println!("{}", endpoint.external_id());
 }
 ```
 
@@ -205,12 +205,18 @@ heavier move: it takes every relation the resource had with it.
 Deletion is **idempotent**: unknown ids are silently skipped, so a successful call is not
 evidence the edge existed.
 
-It can still be refused. Cutting an edge is rejected with a `400` if it would leave a
-surviving resource unreachable from a root, the same connectivity rule
-[deleting a resource](./resources#delete) is checked against, and the response names the
-resources that would be stranded. An edge that is the only path from a subtree to the root is
-exactly the one you cannot cut: re-attach the subtree another way first, or delete it in the
-same call. A `403` means you lack write access to a data set one of the endpoints sits in.
+It can still be refused. Cutting an edge is rejected with a `409` `would-strand` if it would
+leave a surviving resource unreachable from a root, the same connectivity rule
+[deleting a resource](./resources#delete) is checked against, and the
+[problem document](./client#problem-documents) names the resources that would be stranded in
+`blockedBy`. An edge that is the only path from a subtree to the root is exactly the one you
+cannot cut: re-attach the subtree another way first, or delete it in the same call. A `403`
+means you lack write access to a data set one of the endpoints sits in.
+
+In Python, match `e.problem_slug == "would-strand"` and read `e.problem["blockedBy"]`; in Rust,
+`e.problem().map(|p| p.blocked_by())`. The check reads the graph, which settles shortly after a
+write, so deleting an edge immediately after creating it can be wrongly allowed and strand the
+node it held up.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -331,7 +337,8 @@ this problem, that path is a proper find-or-create.
 
 All three clients cover the whole endpoint surface; what differs is how much wrapping survives.
 Java and Rust hand back the `DataWrapper`/`GraphDataWrapper` the API returns, so the items come
-out of `getItems()` / `get_items()`. Python unwraps: `create` and `types` return plain lists,
+out of `getItems()` / `get_items()`, or `nodes()` on the `GraphDataWrapper` Rust's `by_ids`
+returns. Python unwraps: `create` and `types` return plain lists,
 `get` returns an `EdgeProxy` or `None`, and `delete` returns nothing. Python's async client
 exposes the same six methods on `AsyncDataHubClient.edges`.
 

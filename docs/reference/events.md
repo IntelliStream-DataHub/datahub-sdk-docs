@@ -798,23 +798,23 @@ this" be expressed distinctly from "leave it alone":
 ```
 
 Updatable fields are `description`, `type`, `subType`, `status`, `source`, `dataSetId`,
-`metadata` and `relatedResources`. Sending both `set` and `setNull` for one field is a `400`,
-the request is contradictory, so it is refused rather than resolved by precedence.
+`metadata` and `relatedResources`. Sending both `set` and `setNull` for one field is a
+`400`, the request is contradictory, so it is refused rather than resolved by precedence.
 
-`eventTime` and `externalId` are **fixed at creation** and are not update fields at all: an
+`externalId` and `eventTime` are **fixed at creation** and are not update fields at all: an
 update naming either is a `400` that names the field, the same answer as for any field the
-form does not have. The store partitions events by their time, and a row cannot move between
-partitions. The external id is what the event is filed under, shared by every event about the
-same subject, so renaming one would take its siblings along. An event recorded against the
-wrong moment or the wrong subject is written again with the corrected value and the old one
-deleted, or corrected by a follow-up event, which the caution below recommends anyway.
+form does not have. They are fixed for different reasons. The store partitions events by
+their time, and a row cannot move between partitions. The `externalId` is the correlation key
+that groups one subject's history (see [External ids](./external-ids)), so renaming one
+event would tear it out of its own trail. An event recorded against the wrong moment or the
+wrong key is deleted and written again, or corrected by a follow-up event, which the caution
+below recommends anyway.
 
-`setNull` is refused on `type`, the one field a create cannot omit and an update can name.
-Clearing `type` would leave the event unreadable by any client that models
-`type` as required, so the write is refused rather than the read failing later. `dataSetId`
-is the one field here that genuinely is nullable: `setNull` detaches the event from its data
-set, and naming a `dataSetId` that no data set has is a `400` rather than a stored dangling
-reference.
+`setNull` is refused on `type`. Clearing it would leave the event unreadable by any client
+that models `type` as required, so the write is refused rather than the read failing later.
+`dataSetId` is the one field here that genuinely is nullable: `setNull` detaches the event
+from its data set, and naming a `dataSetId` that no data set has is a `400` rather than a
+stored dangling reference.
 
 :::caution Prefer a follow-up event to mutating one
 An event update runs a replace-and-cleanup on the stored record. While it is in flight, a
