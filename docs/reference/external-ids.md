@@ -364,7 +364,7 @@ POST /events/filter
 {
   "filter": { "type": "policy_finding" },
   "sort": { "property": ["eventTime"], "order": "asc" },
-  "cursor": "djE6ZXZlbnRUaW1lfGFzY3wxNzU0NDc2NTIyMTA0fDAxOTVmM2Ey",
+  "cursor": "djJ8ZXZlbnRUaW1lfGFzY3wwMTk1ZjNhMi05YzQxLTdiM2UtOGQyYS01ZjZlN2E4YjljMGR8djE3NTQ0NzY1MjIxMDQ",
   "limit": 200
 }
 ```

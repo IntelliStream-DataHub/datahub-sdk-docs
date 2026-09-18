@@ -494,14 +494,16 @@ To walk past the first page, echo back the `nextCursor` the response carried:
 ```json
 { "filter": { "type": "alarm" },
   "sort": { "property": ["eventTime"], "order": "desc" },
-  "cursor": "djE6ZXZlbnRUaW1lfGRlc2N8MTc1NDQ3NjUyMjEwNHwwMTk1ZjNhMg",
+  "cursor": "djJ8ZXZlbnRUaW1lfGRlc2N8MDE5NWYzYTItOWM0MS03YjNlLThkMmEtNWY2ZTdhOGI5YzBkfHYxNzU0NDc2NTIyMTA0",
   "limit": 200 }
 ```
 
 The cursor is **opaque**, base64 of a versioned encoding carrying the sort, the boundary value
 and the id, so do not build or parse one. A cursor that does not decode is refused with a
 `400` of `type: ".../errors/malformed-cursor"` rather than guessed at: half a position would
-silently skip or repeat the rows around the boundary.
+silently skip or repeat the rows around the boundary. A cursor whose boundary value or id cannot
+be read is refused the same way, and so is one minted by an earlier release: a walk that was in
+flight restarts from no cursor.
 
 Send it with the **same** `sort` that produced it: a cursor is a position in one particular
 order. Continuing it under another is refused with the same `400`, which names both sorts.
