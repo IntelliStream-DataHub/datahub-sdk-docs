@@ -75,8 +75,9 @@ PLC, upstream system). The SDK deliberately does *not* default it to "now": an e
 without it is rejected rather than silently mis-timestamped.
 
 Send it as epoch milliseconds or ISO-8601 with an offset. Epoch seconds is refused with a
-`400` naming the mistake, where it used to be accepted and stored tens of thousands of years
-out. [Timestamps](./client#timestamps) has both forms and their bounds.
+`422` of `type: ".../errors/invalid-timestamp"` naming the mistake, where it used to be accepted
+and stored tens of thousands of years out. [Timestamps](./client#timestamps) has both forms and
+their bounds.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
