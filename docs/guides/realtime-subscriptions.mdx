@@ -68,8 +68,8 @@ api.subscriptions.create(&sub).await?;
 
 ## 2. Listen and ack
 
-Hand each message to a handler (or drive a loop yourself), and ack once you've durably
-handled it. Make the handler **idempotent**, a redelivery after a crash will replay
+Drive a loop over the listener (Java can also hand each message to a handler), and ack once
+you've durably handled it. Make the handler **idempotent**, a redelivery after a crash will replay
 the last unacked messages.
 
 <Tabs groupId="lang">
@@ -109,7 +109,9 @@ try (SubscriptionListener listener = client.subscriptions().listen(List.of("engi
 </TabItem>
 <TabItem value="python" label="Python">
 
-The listener is iterable and a context manager:
+The listener is iterable and a context manager. The loop does not end on its own, since a
+dropped socket is reconnected for you, and an error such as a refused subscription is raised
+from it:
 
 ```python
 with client.subscriptions.listen(["engine_room"]) as listener:
@@ -121,7 +123,9 @@ with client.subscriptions.listen(["engine_room"]) as listener:
 </TabItem>
 <TabItem value="rust" label="Rust">
 
-`next().await` yields messages until the socket closes; reconnects are transparent.
+`next().await` never returns `None`: a dropped or closed socket is reconnected for you. An
+error comes back as `Some(Err(..))`, either a refused subscription while the socket stays open
+or a reconnect that ran out of retries, so log it and keep going.
 
 ```rust
 let mut listener = api.subscriptions.listen(&["engine_room"]).await?;
@@ -174,13 +178,23 @@ with client.subscriptions.listen(["engine_room"]) as listener:
 <TabItem value="rust" label="Rust">
 
 ```rust
+use std::time::Duration;
+use tokio::time::{timeout_at, Instant};
+
 let mut seen = 0;
 let mut listener = api.subscriptions.listen(&["engine_room"]).await?;
-while let Some(Ok(msg)) = listener.next().await {
-    listener.ack(&[msg.message_id.as_str()]).await?;
-    seen += 1;
-    println!("{seen} messages so far");
+let deadline = Instant::now() + Duration::from_secs(60);   // long enough to re-run the seed in another shell
+while let Ok(Some(result)) = timeout_at(deadline, listener.next()).await {
+    match result {
+        Ok(msg) => {
+            listener.ack(&[msg.message_id.as_str()]).await?;
+            seen += 1;
+            println!("{seen} messages so far");
+        }
+        Err(e) => eprintln!("listen error: {e}"),
+    }
 }
+listener.close().await?;
 ```
 
 </TabItem>
@@ -188,31 +202,50 @@ while let Some(Ok(msg)) = listener.next().await {
 
 ## Change the interest set at runtime
 
-A long-lived listener doesn't need to reconnect to follow more (or fewer) series,
-`subscribe` / `unsubscribe` adjust it in place.
+A long-lived listener doesn't need to reconnect to follow more (or fewer) series:
+`subscribe` / `unsubscribe` adjust it in place. They take **subscription** external ids, not
+series, so to follow another series create a subscription for it first. This swaps
+`engine_room` for one that follows the oil pressure:
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
 
 ```java
-listener.subscribe(List.of("engine_oil_pressure"));
-listener.unsubscribe(List.of("engine_rpm"));
+Subscription oil = new Subscription();
+oil.setExternalId("engine_oil");
+oil.setName("Engine oil");
+oil.setTimeseries(List.of(IdCollection.createFromExternalId("engine_oil_pressure")));
+client.subscriptions().create(List.of(oil));
+
+listener.subscribe(List.of("engine_oil"));
+listener.unsubscribe(List.of("engine_room"));
 ```
 
 </TabItem>
 <TabItem value="python" label="Python">
 
 ```python
-listener.subscribe(["engine_oil_pressure"])
-listener.unsubscribe(["engine_rpm"])
+client.subscriptions.create([
+    intellistream_datahub_sdk.Subscription(
+        external_id="engine_oil",
+        name="Engine oil",
+        timeseries=["engine_oil_pressure"])])
+
+listener.subscribe(["engine_oil"])
+listener.unsubscribe(["engine_room"])
 ```
 
 </TabItem>
 <TabItem value="rust" label="Rust">
 
 ```rust
-listener.subscribe(&["engine_oil_pressure"]).await?;
-listener.unsubscribe(&["engine_rpm"]).await?;
+let oil = Subscription::new(
+    "engine_oil".into(), "Engine oil".into(),
+    vec![IdAndExtId::from_external_id("engine_oil_pressure")]);
+api.subscriptions.create(&oil).await?;
+
+listener.subscribe(&["engine_oil"]).await?;
+listener.unsubscribe(&["engine_room"]).await?;
 ```
 
 </TabItem>
@@ -220,10 +253,11 @@ listener.unsubscribe(&["engine_rpm"]).await?;
 
 :::tip nack to retry later
 If a message can't be processed right now (a downstream system is down), `nack` it
-instead of acking, it will be redelivered rather than dropped. With `stream`, throwing
-from the handler nacks for you; to control acks explicitly use
-`stream(handler, AckMode.MANUAL)` and call `ack`/`nack` yourself. With `poll`, just call
-`nack` instead of `ack`.
+instead of acking, it will be redelivered rather than dropped. In Java, throwing from a
+`stream` handler nacks for you; to control acks explicitly use
+`stream(handler, AckMode.MANUAL)` and call `ack`/`nack` yourself, and with `poll`, just call
+`nack` instead of `ack`. Python and Rust have no `stream` or `poll`: in the loops above, call
+`listener.nack(...)` in place of `listener.ack(...)`.
 :::
 
 ## See also

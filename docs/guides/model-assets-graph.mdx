@@ -107,6 +107,10 @@ let graph = api.resources.create(
         RelForm::by_external_ids("line_a", "press_07", "contains"),
     ],
 ).await?;
+
+println!("{} nodes, {} edges",
+    graph.nodes().map_or(0, |n| n.len()),
+    graph.relations().map_or(0, |r| r.len()));
 ```
 
 </TabItem>
@@ -141,7 +145,7 @@ client.edges().create(List.of(produces));
 
 ```python
 client.timeseries.create([intellistream_datahub_sdk.TimeSeries(
-    external_id="press_07_oil_temp", name="Press 07 oil temperature",
+    external_id="press_07_oil_temp", name="Press 07 oil temperature", value_type="float",
     unit="celsius", unit_external_id="temperature_deg_c")])
 
 client.edges.create([
@@ -156,6 +160,7 @@ use intellistream_datahub_sdk::relations::RelForm;
 use intellistream_datahub_sdk::timeseries::TimeSeries;
 
 let mut oil_temp = TimeSeries::new("press_07_oil_temp", "Press 07 oil temperature");
+oil_temp.value_type = Some("float".into());
 oil_temp.unit = Some("celsius".into());
 oil_temp.unit_external_id = Some("temperature_deg_c".into());
 api.time_series.create_one(&oil_temp).await?;
@@ -170,9 +175,10 @@ api.edges.create(&vec![
 
 ## Read the graph back
 
-Fetch a node's neighbourhood with `fetchRelated`; the returned network carries the nodes it
-found and the edges between them. (`byIds` returns the node alone: `relatedResources` is
-empty on that read.) One hop out from the press finds the two edges created above.
+Fetch a node's neighbourhood with `fetch_related` (`fetchRelated` in Java); the returned network
+carries the nodes it found and the edges between them. (`by_ids` returns the node alone:
+`relatedResources` is empty on that read.) One hop out from the press finds the two edges
+created above.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">

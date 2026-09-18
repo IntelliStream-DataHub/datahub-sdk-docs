@@ -14,11 +14,12 @@ by a data set also matches everything beneath it.
 
 The hierarchy is built from `BELONGS_TO` relationships, and the server enforces that: a
 relationship pointing at a data set must be `BELONGS_TO`, and a data set can only claim a
-time series that isn't already in another data set.
+time series that isn't already in another data set. Despite the name, the edge runs from the
+parent to the child, and the dependable way to build it is to create that edge explicitly rather
+than setting `connectedDataSets` (`connected_data_sets` in Python and Rust) on the new data set.
 [Relationship rules →](./resources#create-resources-and-relations)
 
-:::note External ids are stored exactly as you send them
-The server does not rewrite a data set external id: `Plant-A` stays `Plant-A`. The Rust
+:::note External ids are stored exactly as you send them. In the Rust sdk
 `Dataset::new` derives one from the name, in snake_case; that is a client-side default,
 not a server rule.
 
@@ -37,6 +38,7 @@ spelling finds the same data set. Data sets are also subject to the
 DataSetModel dataset = new DataSetModel();
 dataset.setExternalId("plant_a");
 dataset.setName("Plant A");
+dataset.setMetadata(Map.of("tier", "gold"));
 
 client.datasets().create(List.of(dataset));
 ```
@@ -47,7 +49,8 @@ client.datasets().create(List.of(dataset));
 ```python
 import intellistream_datahub_sdk
 
-dataset = intellistream_datahub_sdk.Dataset(external_id="plant_a", name="Plant A")
+dataset = intellistream_datahub_sdk.Dataset(
+    external_id="plant_a", name="Plant A", metadata={"tier": "gold"})
 client.datasets.create([dataset])
 ```
 
@@ -58,7 +61,8 @@ client.datasets.create([dataset])
 use intellistream_datahub_sdk::datasets::Dataset;
 
 // external_id is derived as snake_case of the name → "plant_a"
-let dataset = Dataset::new("Plant A".into());
+let mut dataset = Dataset::new("Plant A".into());
+dataset.add_metadata("tier".into(), "gold".into());
 api.datasets.create(&vec![dataset]).await?;
 ```
 
@@ -106,18 +110,17 @@ other nodes are scoped *by*:
 
 | Criterion | Matching |
 | --- | --- |
-| `id`, `externalId`, `name`, `source` | Patterns, case-insensitive. `*` and `%` are wildcards, `_` is literal, and an entry with no wildcard matches exactly. |
+| `id` | Numeric ids, matched exactly. |
+| `externalId`, `name`, `source` | Patterns, case-insensitive. `*` and `%` are wildcards, `_` is literal, and an entry with no wildcard matches exactly. |
 | `labels` | Data sets carrying **all** of these labels. |
 | `metadata` | Every key/value pair given must be present. **A null value matches the key alone**, whatever it holds. |
 | `createdTime`, `lastUpdatedTime` | `{ "min": …, "max": … }` bounds. |
 
 Each field except `labels` and `metadata` takes **either a bare value or an array**, whose
-entries are combined with OR, which is why they are named in the singular. `limit` defaults to
-1000 and is capped at 10000, and the page can be ordered and walked exactly as
-[timeseries](./timeseries#sorting-and-paging) can.
-
-`POST /datasets/list` is the same handler with an empty filter, so it returns everything your
-token may read.
+entries are combined with OR, which is why they are named in the singular. `limit` is capped at
+10000, and the page can be ordered and walked exactly as
+[timeseries](./timeseries#sorting-and-paging) can. The server's default `limit` is 1000, but
+not every client leaves it to the server:
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -136,22 +139,31 @@ Pass a `DataSetRetreiver` instead of the bare criteria to set `limit`, `sort` or
 <TabItem value="python" label="Python">
 
 ```python
-matches = client.datasets.filter(intellistream_datahub_sdk.DatasetFilter(
-    intellistream_datahub_sdk.BasicDatasetFilter(name="Plant *", metadata={"tier": "gold"}),
-    limit=100))
+matches = client.datasets.filter(name="Plant *", metadata={"tier": "gold"}, limit=100)
 ```
+
+Or build the criteria once as a `DatasetFilter` and pass it as `filter=`, keeping `limit`,
+`sort_by`, `sort_order` and `cursor` on the call. Either way it returns a list-like
+[`Page`](./timeseries#sorting-and-paging) carrying `.next_cursor`.
 
 </TabItem>
 <TabItem value="rust" label="Rust">
 
 ```rust
-use intellistream_datahub_sdk::datasets::{BasicDatasetFilter, DatasetFilter};
+use intellistream_datahub_sdk::datasets::{DatasetFilter, DatasetFilterForm};
+use std::collections::HashMap;
 
-let criteria = BasicDatasetFilter::new()
+let criteria = DatasetFilter::new()
     .set_name(vec!["Plant *".to_string()])
+    .set_metadata(HashMap::from([("tier".to_string(), Some("gold".to_string()))]))
     .build();
-let matches = api.datasets.filter(&DatasetFilter::from_filter(criteria)).await?;
+let mut form = DatasetFilterForm::from_filter(criteria);
+form.set_limit(100);
+let matches = api.datasets.filter(&form).await?;
 ```
+
+`DatasetFilter` is the criteria and `DatasetFilterForm` the request body around it, which also
+takes `set_paging` for `sort` and `cursor`.
 
 </TabItem>
 </Tabs>
@@ -230,10 +242,10 @@ A changed grant therefore takes effect within about a minute, without a new toke
 | --- | --- | --- | --- |
 | Create | `datasets().create` | `datasets.create` | `datasets.create` |
 | Look up by id / external id | `datasets().byIds` | `datasets.by_ids` | `datasets.by_ids` |
-| List | `datasets().list` | `datasets.list` | `datasets.list` |
+| List (`GET /datasets`) | `datasets().list(limit)` | `datasets.list(limit=None)` | `datasets.list(limit)` |
 | Filter | `datasets().filter` | `datasets.filter` | `datasets.filter` |
-| Search | `datasets().search` | `datasets.search` | `datasets.search` |
-| Update | `datasets().update` | `datasets.update` | `datasets.update` |
+| Search | `datasets().search` | `datasets.search(query, filter, limit)` | `datasets.search` / `search_by_query` |
+| Update | `datasets().update` | `datasets.update` (`DatasetUpdate`) | `datasets.update` (`DatasetUpdate`) |
 | Delete | `datasets().delete` | `datasets.delete` | `datasets.delete` |
 | Policies (`GET /datasets/policies`) | `datasets().policies` | `datasets.policies` | `datasets.policies` |
 
