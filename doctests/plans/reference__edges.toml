@@ -1,0 +1,33 @@
+page = "docs/reference/edges.md"
+
+[blocks]
+python = 4
+java = 4
+rust = 4
+
+[python]
+timeout = 600
+# An API reference, not a tutorial: each fence is a self-contained example, and one of
+# them deletes what another reads. Each block runs on its own, against a clean slate.
+independent = true
+
+prologue = """
+import intellistream_datahub_sdk
+client = intellistream_datahub_sdk.DataHubClient.from_env()
+
+# The edge examples link resources that already exist, and they name the two this
+# section uses throughout. Anything a fixture creates must be owned below, or the
+# sweep leaves it behind and the next block fails on a duplicate.
+client.resources.create(
+    [intellistream_datahub_sdk.Resource(external_id="plant_oslo", name="Oslo Plant",
+                                        labels=["Plant"]),
+     intellistream_datahub_sdk.Resource(external_id="pump_1", name="Pump 1",
+                                        labels=["Pump"])], [])
+"""
+
+# ONCE PER STACK for block #4. It creates the `FLOWS_TO` relationship type, and the SDK has no
+# call that deletes a type (edges: create_types and types only), so a second run on the same
+# stack fails with "Relationship type with same name already exists". That is the stack's
+# memory, not the page: CI boots a fresh stack every run, where it passes or fails on its merits.
+[owns]
+resources = ["plant_oslo", "pump_1", "skid_1"]

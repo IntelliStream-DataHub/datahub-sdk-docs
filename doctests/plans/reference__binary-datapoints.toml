@@ -1,0 +1,33 @@
+page = "docs/reference/binary-datapoints.md"
+
+# Blocks on this page:
+#   python #1   L220   Producing frames from pyarrow
+
+[blocks]
+python = 1
+
+[python]
+# The page's banner: it writes into `engine_temperature`, which section A of the
+# sandbox page creates. It resolves that series and reads it back, so the series has
+# to exist with the value type the sandbox gives it.
+requires = ["guides__seed-a-sandbox-data"]
+requires_python = ["pyarrow", "requests", "zstandard"]
+timeout = 300
+
+# The one line the reader is told to fill in: their API root and their token. Both
+# come from the stack the harness is pointed at. Nothing else on the page is touched,
+# so the envelope, the directory, the zstd wrap and the read-back all run as written.
+[[python.replace]]
+find = 'BASE, HEADERS = "https://api.intellistream.ai", {"Authorization": "Bearer ..."}'
+repl = '''import os as _os
+from tutorial_support import bearer_token as _bearer_token
+BASE, HEADERS = _os.environ["BASE_URL"].rstrip("/"), {"Authorization": f"Bearer {_bearer_token()}"}'''
+
+[owns]
+timeseries = ["engine_temperature"]
+
+# The page asserts 204 and 3600 readings itself; the plan adds that they are still
+# there when the backend is asked independently, which is what a 204 promises.
+[expect]
+timeseries = ["engine_temperature"]
+stdout = ["3600 readings in the hour"]

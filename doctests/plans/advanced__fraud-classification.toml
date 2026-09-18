@@ -1,0 +1,30 @@
+page = "docs/advanced/fraud-classification.mdx"
+
+# Blocks on this page:
+#   python #1   L46    1. Pull the account's network
+#   java   #1   L58    1. Pull the account's network
+#   rust   #1   L71    1. Pull the account's network
+#   python #2   L92    2. Turn the network shape into features
+#   python #3   L126   3. Add behavioural features from the transaction series
+#   python #4   L157   4. Train on confirmed outcomes
+#   python #5   L190   5. Score live alerts and explain the call
+
+[blocks]
+python = 5
+java = 1
+rust = 1
+
+[python]
+timeout = 600
+# Every series this recipe reads is seeded by the sample-data page, which the
+# docs tell the reader to run first. It runs once per session rather than being
+# composed into all thirteen recipes.
+requires_once = ["advanced__generate-sample-data"]
+
+[owns]
+events = ["sar_candidate_*"]
+
+# The page's payoff is a SAR candidate raised for a flagged account, plus the score it prints.
+[expect]
+events = ["sar_candidate_*"]
+stdout = ["average precision:"]

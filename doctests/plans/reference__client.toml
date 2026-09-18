@@ -1,0 +1,49 @@
+page = "docs/reference/client.md"
+
+# Blocks on this page:
+#   java   #1   L17    Client & configuration
+#   python #1   L34    Client & configuration
+#   python #2   L47    Client & configuration
+#   rust   #1   L55    Client & configuration
+#   rust   #2   L69    Client & configuration
+#   java   #2   L148   Exchanging an external token (jwt-bearer)
+#   python #3   L164   Exchanging an external token (jwt-bearer)
+#   rust   #3   L182   Exchanging an external token (jwt-bearer)
+#   java   #3   L226   From HashiCorp Vault (Java)
+#   java   #4   L251   Durable ingest buffering
+#   python #4   L273   Durable ingest buffering
+#   rust   #4   L290   Durable ingest buffering
+#   java   #5   L412   Results & errors
+#   python #5   L429   Results & errors
+#   rust   #5   L446   Results & errors
+#   java   #6   L480   Reading the problem document
+#   python #6   L494   Reading the problem document
+#   rust   #6   L520   Reading the problem document
+
+[blocks]
+python = 6
+java = 6
+rust = 6
+
+[python]
+disabled = """Not a tutorial: this page lists client constructors, and its snippets point at
+https://api.intellistream.ai and an external Entra/Keycloak token exchange. Running them would
+either dial production or need identity-provider secrets that prove nothing about the SDK. The
+constructors it documents are exercised where they are actually used — the buffering client in
+tutorial.toml, from_env() across every other plan."""
+
+# The same reason holds for the other tabs, and the compile tier still checks them: each
+# snippet builds its own client (from env, with jwt-bearer, from Vault, with buffering),
+# so they compile one at a time rather than as one program that declares `client` four times.
+[java]
+disabled = "see [python]: the snippets dial production or an identity provider."
+independent = true
+# #1 ("from the environment ... or explicitly") and #3 (four Vault constructors, one per
+# line) are menus: each line declares the same `client` or `cfg`, and is meant to be
+# picked from, not run top to bottom. The constructors in #1 are compiled anyway, as the
+# client every Java fragment on the site is built with and in #2 and #4.
+exclude = [1, 3]
+
+[rust]
+disabled = "see [python]: the snippets dial production or an identity provider."
+independent = true
