@@ -127,9 +127,9 @@ tenant past the first page could not reach the rest.
 
 `listen` opens a WebSocket to `/timeseries/datapoints/subscription/listen/<externalId>/...`,
 one path segment per subscription, and authenticates the upgrade request with the same
-`Authorization: Bearer <jwt>` header as any REST call. Stream messages to a handler or drive
-a loop, and **ack** the messages you've processed, anything left unacked is redelivered on
-reconnect.
+`Authorization: Bearer <jwt>` header as any REST call. Drive a loop (or, in Java, stream
+messages to a handler), and **ack** the messages you've processed, anything left unacked is
+redelivered on reconnect.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -176,11 +176,19 @@ with client.subscriptions.listen(["engine_temps"]) as listener:
         listener.ack([msg.message_id])
 ```
 
+The iterator never ends on its own: a dropped or closed socket is reconnected for you. An error
+is raised from it instead, which ends the `for` loop, but the listener stays usable, so catch it
+and keep iterating. `next_message()` receives one message at a time and raises the same way. On
+an `AsyncDataHubClient`, `listen` returns a `SubscriptionListenerAsync`, driven with
+`async with` and `async for`.
+
 </TabItem>
 <TabItem value="rust" label="Rust">
 
-`next().await` yields `Some(Ok(msg))`, `Some(Err(..))`, or `None` when the socket closes
-(reconnects are transparent):
+`next().await` yields `Some(Ok(msg))` or `Some(Err(..))` and never `None`: a dropped or closed
+socket is reconnected for you, with a fresh token and the same subscriptions. An `Err` is a
+refused subscription while the socket stays open, a frame that could not be decoded, or a
+reconnect that ran out of retries, and calling `next` again resumes reconnecting:
 
 ```rust
 let mut listener = api.subscriptions.listen(&["engine_temps"]).await?;
@@ -198,9 +206,10 @@ while let Some(result) = listener.next().await {
 </TabItem>
 </Tabs>
 
-Every listener also exposes `stream` for push delivery, `ack`/`nack`,
-`subscribe`/`unsubscribe`/`set_subscriptions` to change the live interest set at runtime,
-and `close`.
+Every listener has `ack`/`nack`, `subscribe`/`unsubscribe` to change the live interest set at
+runtime, and `close`. Java receives through `stream` or `poll`, with refusals on `pollError`.
+Python receives by iterating or with `next_message`, Rust with `next`, and both add
+`set_subscriptions`, which replaces the whole interest set.
 
 A frame on the wire carries one subscription's messages:
 
@@ -250,7 +259,9 @@ the server redelivers it, so make your handler idempotent.
 | Operation | Java | Python | Rust |
 | --- | --- | --- | --- |
 | Create | `subscriptions().create` | `subscriptions.create` | `subscriptions.create` |
-| List (`GET /subscriptions`) | `subscriptions().list` | HTTP | HTTP |
-| Filter | `subscriptions().filter` | `subscriptions.filter` | `subscriptions.filter` |
+| List `subscriptions().list` | HTTP | `subscriptions.list(limit=None)` | `subscriptions.list(limit)` |
+| Filter | `subscriptions().filter` | `subscriptions.filter(form=None, *, timeseries=, limit=, sort=)` | `subscriptions.filter` |
 | Delete | `subscriptions().delete` | `subscriptions.delete` | `subscriptions.delete` |
-| Live delivery | `subscriptions().listen` | `subscriptions.listen` | `subscriptions.listen` |
+| Live delivery | `subscriptions().listen` | `subscriptions.listen` (`SubscriptionListenerAsync` with `async for` on the async client) | `subscriptions.listen` |
+
+
