@@ -177,9 +177,9 @@ Two of those types are the API's own rather than this endpoint's: an oversized r
 produced it, so a client that already handles them needs nothing new here. The other five are
 specific to binary frames.
 
-All seven used to be one type, `datapoint-block-rejected`, which therefore answered with six
-different statuses; RFC 9457 gives a type one status. A client matching on that type matches
-nothing now. `reason` is unchanged, so one matching on `reason` still works.
+All seven used to be one type, `datapoint-block-rejected`, which therefore answered `400`, `404`,
+`413`, `415`, `422` and `429`; RFC 9457 gives a type one status. A client matching on that type
+matches nothing now. `reason` is unchanged, so one matching on `reason` still works.
 
 ### Retrying {#retrying}
 
