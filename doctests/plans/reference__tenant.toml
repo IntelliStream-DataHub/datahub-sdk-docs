@@ -1,0 +1,15 @@
+page = "docs/reference/tenant.md"
+
+# Blocks on this page:
+#   java #1  L18   Feature flags
+#   java #2  L47   What you may change
+#   java #3  L68   Model configuration
+
+[blocks]
+java = 3
+
+# Java only, and tenant-wide: reading is harmless but every write here changes the tenant the
+# whole suite shares, so it is compiled and not run.
+[java]
+disabled = "no live scenario yet: these writes change tenant-wide settings the rest of the suite depends on."
+independent = true

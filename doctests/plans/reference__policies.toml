@@ -1,0 +1,20 @@
+page = "docs/reference/policies.md"
+
+# Blocks on this page:
+#   java #1  L27   Policy types
+#   java #2  L48   Read, create, update, delete
+#   java #3  L64   Read, create, update, delete
+#   java #4  L81   Read, create, update, delete
+#   java #5  L95   Dry-run a name against the naming policy
+#   java #6  L129  Governance templates
+
+[blocks]
+java = 6
+
+# Java only: policies are administered through the Java client, and the page shows no Python or
+# Rust. There is no live scenario for it yet (creating a policy changes what a tenant may do, so
+# it needs a throwaway tenant rather than the docs' shared sandbox), but every block is compiled.
+[java]
+disabled = "no live scenario yet: these calls change tenant-wide policy, which needs a stack of its own."
+# Separate examples, as on every other reference page: #2 and #6 both name a `one`.
+independent = true
