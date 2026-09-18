@@ -434,6 +434,10 @@ try {
 }
 ```
 
+`e.problem()` reads the same failure as the document the API explained it with, and
+`e.retryAfterSeconds()` the `Retry-After` it carried: see
+[reading the problem document](#problem-documents).
+
 </TabItem>
 <TabItem value="python" label="Python">
 
@@ -486,15 +490,35 @@ prose and may be reworded at any time (RFC 9457 §3.1.1).
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
 
-The Java client exposes the raw body only. `DatahubApiException.body()` is the problem document
-as it arrived, and there is no typed accessor for its members yet, so read it with your own JSON
-parser and match on `type`.
+`DatahubApiException.problem()` returns a `Problem`, and it is **never null**: a body that was
+empty, HTML from a proxy or JSON of another shape yields a `Problem` carrying the HTTP status
+alone, so `slug()` is simply `null` there. It exposes `type()`, `slug()`, `is("some-slug")`,
+`title()`, `status()`, `detail()`, `instance()`, `retry()`, `retryable()` (true exactly when
+`retry()` is `same-request`), `requestId()`,
+`fields()` (a `List<FieldProblem>` of `field()`, `message()`, `code()` and `rejected()`) and
+`extensions()`, a `Map<String, Object>` of every other member (`duplicated`, `blockedBy`,
+`reason`, `pointer`, ...), unknown ones included. `e.body()` is still the raw body and
+`e.retryAfterSeconds()` the `Retry-After` in seconds, or `-1`:
 
 ```java
+import ai.intellistream.datahub.api.errors.Problem;
+import ai.intellistream.datahub.sdk.http.DatahubApiException;
+
 try {
     client.timeseries().create(List.of(series));
 } catch (DatahubApiException e) {
-    System.err.println(e.statusCode() + ": " + e.body());
+    Problem p = e.problem();                        // never null
+    if (p.slug() == null) {                         // not a problem document, see the caution below
+        System.err.println(e.statusCode() + ": " + e.body());
+    } else if (p.is("validation-failed")) {
+        for (Problem.FieldProblem f : p.fields()) {
+            System.err.println(f.field() + ": " + f.message());
+        }
+    } else if (p.is("unreadable-request-body")) {
+        System.err.println(p.extensions().get("errors"));
+    } else {
+        System.err.println(p.type() + ": " + p.detail());
+    }
 }
 ```
 
@@ -567,18 +591,20 @@ the API adds later is readable without a client upgrade.
 | `docs` | Types with a page that explains them | A link to that page. Absent when nothing is written yet |
 
 `retry` is **advisory**. It says whether repeating the request unchanged could ever work, which is
-not the same question as what a client should do, and the two part company in one place on
-purpose: a `403` is marked `needs-operator`, yet [durable buffering](#durable-ingest-buffering)
-still spools `401`/`403`, so a rotated credential does not cost the batch.
-[Which failures are worth retrying](#retryable-failures) is the split the ingest paths act on.
+not the same question as what a client should do. Java's in-process retry does act on it (below),
+but buffering does not, and on purpose: a `401` is marked `change-request` and a `403`
+`needs-operator`, yet [durable buffering](#durable-ingest-buffering) still spools both, so a
+rotated credential does not cost the batch. What each ingest path does with either is
+[which failures are worth retrying](#retryable-failures).
 
 :::caution Not every failure is a problem document
 Some endpoints still answer in a shape the API has not converged yet: plain text, a Spring
 whitelabel body carrying a stack trace, the legacy `{"error": {...}}` wrapper, or a
 success-shaped `{"items": [...]}` envelope. Those all arrive labelled `application/json`, so the
 `Content-Type` does not separate them and the clients read the body's structure instead.
-`problem` is absent for every one of them, and a real problem document may still carry no `type`
-(some `404`s), which leaves the slug absent. Write that branch first and keep the status and raw
+`problem` is absent for every one of them in Python and Rust; in Java `problem()` is never null,
+but carries the HTTP status alone and leaves `slug()` null. A real problem document may also carry no `type`
+(some `404`s), which leaves the slug absent too. Write that branch first and keep the status and raw
 message as the fallback: it stays load-bearing until the API is done converging.
 :::
 
@@ -593,16 +619,23 @@ them apart from the status alone:
 | `413` | The [request body](./limits#request-body-size) is too large | Split the batch, never retry as-is |
 | `403` with `type: ".../errors/tenant-limit-reached"` | A [lifetime ceiling](./limits#lifetime-ceilings) | Nothing to wait for: it is raised by asking |
 | `400` / `422` | Validation, including the [field and batch caps](./limits#field-caps) | Fix the request |
-| `404` or `422` with `type: ".../errors/datapoint-block-rejected"` and `reason` `unknown-timeseries` or `external-id-mismatch` | A [binary datapoint request](./binary-datapoints#responses) naming a series that was removed or renamed since you cached it | Re-resolve the ids in `timeseriesIds`, rebuild, send once more; the Java SDK does |
+| `404` with `type: ".../errors/unknown-timeseries"`, or `422` with `".../errors/external-id-mismatch"` | A [binary datapoint request](./binary-datapoints#responses) naming a series that was removed or renamed since you cached it | Re-resolve the ids in `timeseriesIds`, rebuild, send once more; the Java SDK does |
 
-The ingest paths act on that split for you, differently per client. Java's `ingest` retries
-`429`, `5xx` and network failures with backoff and surfaces everything else. Rust and Python
-retry JSON ingest through the [durable spool](#durable-ingest-buffering): with buffering on,
-those failures and a `401` or `403` are written to disk and sent again, oldest first, by the next
-ingest call; with it off, they reach you. Their binary path,
+The ingest paths act on that split for you, differently per client. Java's `ingest` follows the
+problem's `retry` member wherever the answer carries one: `same-request` is replayed with backoff,
+`change-request` and `needs-operator` are surfaced. So a `409 optimistic-lock` is retried and a
+`500 internal` is not. Where there is no problem document (a network failure, a proxy's HTML
+`502`), the status decides as before: status `0`, `429` and `5xx` are retried. Java floors its
+backoff at the `Retry-After` the response asked for, and fails the batch at once rather than
+sleeping when that is over 30 seconds, so a spent daily quota reaches your code, or the spool,
+instead of parking a thread until midnight UTC.
+
+Rust and Python retry JSON ingest through the [durable spool](#durable-ingest-buffering): with
+buffering on, a `429`, `5xx` or network failure and a `401` or `403` are written to disk and sent
+again, oldest first, by the next ingest call; with it off, they reach you. Their binary path,
 `insert_datapoints_binary`, retries `429`, `5xx` and network failures up to three times by
 default, 1, 2 and 3 seconds apart, and rebuilds a request refused for a removed or renamed
-series once. No client waits the `Retry-After`. [Limits & quotas](./limits#sdk-behaviour) has
+series once. Neither waits the `Retry-After`. [Limits & quotas](./limits#sdk-behaviour) has
 the numbers.
 
 ### Batch writes are all-or-nothing
