@@ -63,10 +63,49 @@ api.subscriptions.delete(&vec![IdAndExtId::from_external_id("engine_temps")]).aw
 </TabItem>
 </Tabs>
 
-`filter` posts `POST /subscriptions/filter`, the request body every other collection uses: a
-`filter` holding the criteria, a `limit`, a `sort`, and a keyset `cursor`. The criteria are
-`id`, `externalId`, `name`, `timeseries` (only subscriptions bound to these series, by id or
-external id), `createdTime` and `lastUpdatedTime`.
+:::note Data set access control
+Creating a subscription requires **read access to every bound series' data set**. If you
+lack read access to any of them, `create` fails with **HTTP 403** and nothing is persisted.
+Access is granted through Keycloak **organization groups**: `/datasets/<externalId>/read` for one
+data set (and everything beneath it), or the wildcard `/datasets/*/read` for all of them.
+[Data set access control →](./datasets#access-control)
+:::
+
+## Find subscriptions {#find}
+
+`GET /subscriptions?limit=` returns the newest `limit` subscriptions your token may read, no
+body required and no cursor. For anything narrower, or to page, `filter` posts
+`POST /subscriptions/filter`, the same envelope every other collection's filter takes, with
+criteria combined by **AND**:
+
+| Criterion | Matching |
+| --- | --- |
+| `id`, `externalId`, `name` | Patterns, case-insensitive. `*` and `%` are wildcards, `_` is literal, and an entry with no wildcard matches exactly. |
+| `timeseries` | Subscriptions bound to **any** of these time-series, each named by `id`, `externalId`, or both. |
+| `createdTime`, `lastUpdatedTime` | `{ "min": …, "max": … }` bounds. |
+
+Each field above except `createdTime` and `lastUpdatedTime` takes **either a bare value or an
+array**, and the entries of an array are combined with **OR**, exactly as on the other
+collections' filters.
+
+Both endpoints return only subscriptions you can read in full: every timeseries a subscription
+binds must sit in a data set you have read access to, the same rule `create` above and
+[live delivery](#live-delivery) enforce. One ungranted timeseries hides the whole subscription.
+
+The page can be ordered and walked exactly as [timeseries](./timeseries#sorting-and-paging)
+can: `sort` takes `id`, `externalId`, `name`, `createdTime` or `lastUpdatedTime`, and the
+response carries `nextCursor` while more remain.
+
+```json
+{
+  "limit": 100,
+  "filter": {
+    "externalId": ["engine_*"],
+    "timeseries": [{ "externalId": "engine_temperature" }]
+  },
+  "sort": { "property": ["createdTime"], "order": "asc" }
+}
+```
 
 The clients do not all send the whole body yet:
 
@@ -80,13 +119,9 @@ The clients do not all send the whole body yet:
 `client.subscriptions.filter(timeseries=["engine_temperature"], limit=100)`, or a prepared
 `SubscriptionFilterForm`, which is the only form Rust takes.
 
-:::note Data set access control
-Creating a subscription requires **read access to every bound series' data set**. If you
-lack read access to any of them, `create` fails with **HTTP 403** and nothing is persisted.
-Access is granted through Keycloak **organization groups**: `/datasets/<externalId>/read` for one
-data set (and everything beneath it), or the wildcard `/datasets/*/read` for all of them.
-[Data set access control →](./datasets#access-control)
-:::
+This replaced `POST /subscriptions/list`, which took a `filter` argument in a shape nothing else
+in the API used: its own default page size, a sort that was not validated, and no cursor, so a
+tenant past the first page could not reach the rest.
 
 ## Live delivery
 
@@ -224,10 +259,9 @@ the server redelivers it, so make your handler idempotent.
 | Operation | Java | Python | Rust |
 | --- | --- | --- | --- |
 | Create | `subscriptions().create` | `subscriptions.create` | `subscriptions.create` |
-| List (`GET /subscriptions?limit=`) | HTTP | `subscriptions.list(limit=None)` | `subscriptions.list(limit)` |
+| List `subscriptions().list` | HTTP | `subscriptions.list(limit=None)` | `subscriptions.list(limit)` |
 | Filter | `subscriptions().filter` | `subscriptions.filter(form=None, *, timeseries=, limit=, sort=)` | `subscriptions.filter` |
 | Delete | `subscriptions().delete` | `subscriptions.delete` | `subscriptions.delete` |
 | Live delivery | `subscriptions().listen` | `subscriptions.listen` (`SubscriptionListenerAsync` with `async for` on the async client) | `subscriptions.listen` |
 
-`list` is the plain listing: newest created first, the server's default of 1000 when `limit` is
-omitted, a `400` above 10000, and no cursor, so narrow with `filter` rather than raising the limit.
+
