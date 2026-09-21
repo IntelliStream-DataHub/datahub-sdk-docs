@@ -505,9 +505,6 @@ silently skip or repeat the rows around the boundary.
 
 Send it with the **same** `sort` that produced it: a cursor is a position in one particular
 order. Continuing it under another is refused with the same `400`, which names both sorts.
-Sorting by `subType` or `status` cannot be paged at all,
-both columns are nullable, and a keyset boundary on them would skip the events that have no
-value.
 
 Prefer this to counting pages. Events are stored partitioned by event time, so resuming from
 a position lets whole partitions be skipped, where an offset re-reads everything ahead of it
