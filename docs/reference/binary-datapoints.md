@@ -134,7 +134,7 @@ Fixed in the format, not deployment policy, except the last row:
 | Decompressed payload per frame | 4 MiB | `413 frame-too-large` |
 | Frames per request | 32 | `413 too-many-frames` |
 | Decompressed total per request | 64 MiB | `413 request-too-large` |
-| Compressed body per request | 64 MiB by default, `datahub.limits.max-body-bytes-datapoints-binary` | `413 request-too-large` |
+| Compressed body per request | 64 MiB by default, `datahub.limits.max-body-bytes-datapoints-binary` | `413`, no `reason` |
 
 A frame is published as one message, so the 4 MiB keeps it under the broker's limit with room
 to spare. 100 000 float points are about 2.4 MB decompressed and a few hundred KB compressed, so
@@ -160,19 +160,27 @@ Branch on the `type`, and on `reason` to tell apart the thirteen ways a frame ca
 ```
 
 Every `type` below is prefixed `https://intellistream.ai/errors/`.
-
 | Status | `type` | `reason` | Meaning |
 | --- | --- | --- | --- |
 | `204` | | | Accepted and published. |
 | `400` | `invalid-frame` | `malformed-frame`, `unsupported-version`, `unsupported-codec`, `unknown-value-type`, `uncompressed-frame`, `trailing-bytes`, `directory-invalid`, `payload-invalid`, `schema-mismatch`, `row-count-mismatch`, `unsorted`, `duplicate-row`, `value-invalid` | The frame at `frameIndex` breaks the format; `detail` says where. Fix the producer. |
 | `403` | `dataset-forbidden`, or `tenant-limit-reached` | | The caller lacks write on a series' data set (the usual [data set `403`](./datasets#access-control)), or the tenant is at a [lifetime ceiling](./limits#lifetime-ceilings). Neither carries a `reason`. |
 | `404` | `unknown-timeseries` | `unknown-timeseries` | `timeseriesIds` do not exist in this tenant. Re-resolve them. |
-| `413` | `request-too-large` | `frame-too-large`, `too-many-frames`, `request-too-large` | Over a [cap](#caps). Split; a retry as-is never succeeds. |
+| `413` | `request-too-large` | `frame-too-large`, `too-many-frames`, `request-too-large` | Over a [cap](#caps). Split; a retry as-is never succeeds. A body over the compressed cap is refused before any frame is read, without a `reason`. |
 | `415` | `unsupported-media-type` | `unsupported-content-encoding` | A `Content-Encoding` header. The wrong `Content-Type` is also a `415`, from the framework, without a `reason`. |
 | `422` | `value-type-mismatch` | `value-type-mismatch` | `timeseriesIds` in `frameIndex` have another value type than the envelope declares. |
 | `422` | `external-id-mismatch` | `external-id-mismatch` | `timeseriesIds` in `frameIndex` have another external id than the directory says. Drop them from your cache and resolve again. |
-| `429` | `too-many-in-flight` | `too-many-in-flight` | This API instance is already validating its limit of binary requests; `Retry-After` is one second. |
+| `429` | `too-many-in-flight` | `too-many-in-flight` | This API instance is already validating its limit of binary requests; `Retry-After` is one second and [`retry`](./client#problem-documents) is `same-request`. |
 | `429` | `rate-limit-exceeded`, `ingest-quota-exceeded` | | The ordinary [rate limit](./limits#rate-limits) or [daily quota](./limits#daily-ingest-quotas), with no `reason`. |
+
+Two of the seven binary types are the API's own rather than this endpoint's: an oversized request
+is `request-too-large` and a rejected `Content-Encoding` is `unsupported-media-type` whichever
+path produced it, so a client that already handles them needs nothing new here. The other five
+are specific to binary frames.
+
+All seven used to be one type, `datapoint-block-rejected`, which therefore answered `400`, `404`,
+`413`, `415`, `422` and `429`; RFC 9457 gives a type one status. A client matching on that type
+matches nothing now. `reason` is unchanged, so one matching on `reason` still works.
 
 ### Retrying {#retrying}
 

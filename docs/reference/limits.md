@@ -98,9 +98,9 @@ The `items` cap is enforced wherever the handler validates the body. `/events/up
 A `413` is **terminal**. The same request will never become acceptable by being sent again,
 so split the batch instead of retrying it.
 
-On `POST /timeseries/data/binary` an oversized body answers with the same
-`.../errors/request-too-large` type, still a `413`, and carries `reason: "request-too-large"`
-beside it.
+`POST /timeseries/data/binary` answers a body over its cap the same way, `request-too-large`
+with `limitBytes` and no `reason`, before any frame is read. A body under the cap can still
+break a [frame cap](#binary-frames): the same `413` and `type`, plus a `reason`.
 
 ## Binary frame caps {#binary-frames}
 

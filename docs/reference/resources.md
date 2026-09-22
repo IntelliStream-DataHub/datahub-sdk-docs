@@ -1004,7 +1004,7 @@ A **function** is a plain node distinguished by its `FUNCTION` label.
 `GET /functions/{id}` returns the one function wrapped in `items`, and reports a function
 you may not read as missing (`404`) rather than forbidden, exactly as `GET /assets/{id}` does.
 
-  ## What each client covers {#client-coverage}
+## What each client covers {#client-coverage}
 
 | Operation | Java | Python | Rust |
 | --- | --- | --- | --- |
