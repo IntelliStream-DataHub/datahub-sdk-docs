@@ -16,7 +16,7 @@ second.
 | [Field caps](#field-caps) | `400` / `422` | the usual validation body | Shorten the field |
 | [Batch caps](#batch-caps) | `400` / `422` | the usual validation body | Split the batch |
 | [Request body size](#request-body-size) | `413` | `.../errors/request-too-large` | Split the batch |
-| [Binary frame caps](#binary-frames) | `400` / `413` | `.../errors/invalid-frame` / `.../errors/request-too-large` | Split the frame or fix the producer |
+| [Binary frame caps](#binary-frames) | `400` / `413` | `.../errors/invalid-frame` on the `400`, `.../errors/request-too-large` on the `413` | Split the frame or fix the producer |
 | [Rate limit](#rate-limits) | `429` + `Retry-After` | `.../errors/rate-limit-exceeded` | Wait the seconds it names |
 | [Daily ingest quota](#daily-ingest-quotas) | `429` + `Retry-After` | `.../errors/ingest-quota-exceeded` | Wait until 00:00 UTC |
 | [Lifetime ceiling](#lifetime-ceilings) | `403`, no `Retry-After` | `.../errors/tenant-limit-reached` | Ask for it to be raised |
@@ -105,10 +105,10 @@ break a [frame cap](#binary-frames): the same `413` and `type`, plus a `reason`.
 ## Binary frame caps {#binary-frames}
 
 [`POST /timeseries/data/binary`](./binary-datapoints) carries datapoints as frames, and the
-frame format fixes its own caps. Every refusal is a problem document with a stable `reason`,
-and nothing of the request was inserted. Its `type` follows the status: `.../errors/invalid-frame`
-for a `400`, `.../errors/request-too-large` for a `413`, `.../errors/too-many-in-flight` for the
-`429`:
+frame format fixes its own caps. Every refusal is a problem document carrying the `type` its
+status calls for, `.../errors/invalid-frame` on a `400`, `.../errors/request-too-large` on a
+`413` and `.../errors/too-many-in-flight` on the `429`, each with a stable `reason` beside it,
+and nothing of the request was inserted:
 
 | Cap | Value | Answered with |
 | --- | --- | --- |
@@ -281,18 +281,26 @@ from you:
 
 | Response | Retried in process | Spooled when [buffering](./client#durable-ingest-buffering) is on |
 | --- | --- | --- |
-| `429` (rate limit, daily quota), `5xx`, network failure | Java: **yes**, with backoff. Rust and Python: on the binary path, see below | Yes, and Rust and Python send it again on the next ingest call |
+| `429` (rate limit, daily quota), `5xx`, network failure | Java: **yes**, with backoff, except a `5xx` the API explains as `needs-operator` (a `500 internal`). Rust and Python: on the binary path, see below | Yes, and Rust and Python send it again on the next ingest call |
 | `401`, and `403` on a grant | No | Yes, until the credential is fixed |
 | `403` on a [lifetime ceiling](#lifetime-ceilings) | No | Java: **no**, surfaced to you. Rust and Python: **yes**, like any `403` |
 | `400` / `422` (validation), `413` (body too large) | No | No, surfaced to you |
 | `404 unknown-timeseries` / `422 external-id-mismatch` on the [binary path](./timeseries#binary-ingest) | **Once**, after re-resolving the series | No, the binary path has no spool |
 
-Java's `ingest` backs off and replays a `429`, `5xx` or network failure up to `maxRetries`
-times. Rust and Python retry JSON ingest through the spool instead: with buffering on, the
-failure is written to disk and the next ingest call sends it again, oldest first, before its own
-data; with it off, the error reaches your code. Their binary
+Java's `ingest` reads the `retry` member of the
+[problem document](./client#problem-documents) where the answer carries one, and falls back to
+the status where it does not (a network failure, a proxy's HTML `502`). It backs off and replays a `429`, a
+`502`/`503`/`504`, a network failure and anything else marked `same-request`, up to `maxRetries`
+times; a `500` the API marks `needs-operator` is surfaced instead. Its backoff is floored at the
+`Retry-After` the response asked for, and a `Retry-After` over 30 seconds fails the batch at once
+rather than sleeping, so a spent daily quota reaches your code, or the spool, instead of holding
+a thread until 00:00 UTC.
+
+Rust and Python retry JSON ingest through the spool instead: with buffering on, a `429`, `5xx` or
+network failure is written to disk and the next ingest call sends it again, oldest first, before
+its own data; with it off, the error reaches your code. Their binary
 path, `insert_datapoints_binary`, retries `429`, `5xx` and network failures up to three times
-by default, 1, 2 and 3 seconds apart. No client waits the `Retry-After`, so a rate limit that
+by default, 1, 2 and 3 seconds apart. Neither waits the `Retry-After`, so a rate limit that
 outlasts those retries, or a daily quota, ends in the spool or in your code the same way.
 A `413` or a validation failure reaches your code, which is the right place for it, since
 neither is fixed by trying again.

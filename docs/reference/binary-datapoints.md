@@ -142,10 +142,10 @@ a full frame is comfortably inside it; a producer only needs to split on the row
 
 ## Responses {#responses}
 
-Every refusal is an [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) problem document whose
-`type` follows the status (the table below, each prefixed `https://intellistream.ai/errors/`),
-with a stable `reason`, plus `frameIndex` (0-based) when one frame is at fault and
-`timeseriesIds` when particular series are:
+Every refusal is an [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) problem document carrying
+the `type` its status calls for, with a stable `reason` beside it as the sub-code, plus
+`frameIndex` (0-based) when one frame is at fault and `timeseriesIds` when particular series are.
+Branch on the `type`, and on `reason` to tell apart the thirteen ways a frame can be malformed:
 
 ```json
 {
@@ -159,23 +159,24 @@ with a stable `reason`, plus `frameIndex` (0-based) when one frame is at fault a
 }
 ```
 
+Every `type` below is prefixed `https://intellistream.ai/errors/`.
 | Status | `type` | `reason` | Meaning |
 | --- | --- | --- | --- |
 | `204` | | | Accepted and published. |
 | `400` | `invalid-frame` | `malformed-frame`, `unsupported-version`, `unsupported-codec`, `unknown-value-type`, `uncompressed-frame`, `trailing-bytes`, `directory-invalid`, `payload-invalid`, `schema-mismatch`, `row-count-mismatch`, `unsorted`, `duplicate-row`, `value-invalid` | The frame at `frameIndex` breaks the format; `detail` says where. Fix the producer. |
-| `403` | | | The caller lacks write on a series' data set. The usual [data set `403`](./datasets#access-control), none of the types here. |
+| `403` | `dataset-forbidden`, or `tenant-limit-reached` | | The caller lacks write on a series' data set (the usual [data set `403`](./datasets#access-control)), or the tenant is at a [lifetime ceiling](./limits#lifetime-ceilings). Neither carries a `reason`. |
 | `404` | `unknown-timeseries` | `unknown-timeseries` | `timeseriesIds` do not exist in this tenant. Re-resolve them. |
 | `413` | `request-too-large` | `frame-too-large`, `too-many-frames`, `request-too-large` | Over a [cap](#caps). Split; a retry as-is never succeeds. A body over the compressed cap is refused before any frame is read, without a `reason`. |
-| `415` | `unsupported-media-type` | `unsupported-content-encoding` | A `Content-Encoding` header. The wrong `Content-Type` is the same type, from the framework, without a `reason`. |
+| `415` | `unsupported-media-type` | `unsupported-content-encoding` | A `Content-Encoding` header. The wrong `Content-Type` is also a `415`, from the framework, without a `reason`. |
 | `422` | `value-type-mismatch` | `value-type-mismatch` | `timeseriesIds` in `frameIndex` have another value type than the envelope declares. |
 | `422` | `external-id-mismatch` | `external-id-mismatch` | `timeseriesIds` in `frameIndex` have another external id than the directory says. Drop them from your cache and resolve again. |
 | `429` | `too-many-in-flight` | `too-many-in-flight` | This API instance is already validating its limit of binary requests; `Retry-After` is one second and [`retry`](./client#problem-documents) is `same-request`. |
-| `429` | | | The ordinary [rate limit](./limits#rate-limits) or [daily quota](./limits#daily-ingest-quotas), with their own `type`. |
+| `429` | `rate-limit-exceeded`, `ingest-quota-exceeded` | | The ordinary [rate limit](./limits#rate-limits) or [daily quota](./limits#daily-ingest-quotas), with no `reason`. |
 
-Two of those types are the API's own rather than this endpoint's: an oversized request is
-`request-too-large` and a rejected `Content-Encoding` is `unsupported-media-type` whichever path
-produced it, so a client that already handles them needs nothing new here. The other five are
-specific to binary frames.
+Two of the seven binary types are the API's own rather than this endpoint's: an oversized request
+is `request-too-large` and a rejected `Content-Encoding` is `unsupported-media-type` whichever
+path produced it, so a client that already handles them needs nothing new here. The other five
+are specific to binary frames.
 
 All seven used to be one type, `datapoint-block-rejected`, which therefore answered `400`, `404`,
 `413`, `415`, `422` and `429`; RFC 9457 gives a type one status. A client matching on that type
@@ -187,7 +188,9 @@ Every frame is validated before any is published, so a rejected request inserted
 is retried **as a whole**. Datapoints are keyed by `(series, timestamp)`, so replaying a request
 that did reach the store, say after a lost response, is harmless.
 
-- `429` with `Retry-After`, `5xx` and a dropped connection: wait and resend the same body.
+- `429` with `Retry-After`, a `502`/`503`/`504` and a dropped connection: wait and resend the same
+  body. The document says so itself in `retry`, and a refusal marked `needs-operator` (a `500`,
+  say) is not worth resending.
 - `404 unknown-timeseries` and `422 external-id-mismatch`: forget the named ids, look them up
   again by external id, rebuild the frames and resend once. If it fails the same way, the series
   really is gone.
