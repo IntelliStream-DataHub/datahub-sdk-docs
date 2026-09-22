@@ -1,0 +1,50 @@
+page = "docs/reference/filters.md"
+
+# The blocks on this page, for reference while writing the plan below:
+#   java   #1   L74    The node filter family {#node-filters}
+#   python #1   L83    The node filter family {#node-filters}
+#   rust   #1   L94    The node filter family {#node-filters}
+#   java   #2   L143   Event filters {#event-filters}
+#   python #2   L157   Event filters {#event-filters}
+#   rust   #2   L172   Event filters {#event-filters}
+#   java   #3   L216   Retrieving datapoints {#retrievefilter}
+#   python #3   L227   Retrieving datapoints {#retrievefilter}
+#   rust   #3   L242   Retrieving datapoints {#retrievefilter}
+
+# Pinned so an edit to the page fails this plan instead of silently
+# re-pointing its block selections. Update deliberately, after re-reading.
+[blocks]
+python = 3
+java = 3
+rust = 3
+
+# Nothing here is disabled because it is unwritten. This page documents the *shape* of
+# the filter objects, so every block constructs one and stops: no client is built, no
+# request is sent, and there is nothing a run could assert that construction has not
+# already proven. It reads no seeded data either, which is why the page carries no
+# "Needs a sandbox" banner.
+#
+# The check that keeps this page honest is the compile job, not the tutorial runner.
+# It composes the Java and Rust blocks against the real SDKs whether or not a section
+# is disabled for running (see compile_check.py), so a filter field that is renamed, a
+# setter that changes arity, and a type that stops being public all fail there. That is
+# the failure this page exists to prevent: the version it replaces documented
+# `setType("alarm")` against a `List<String>` field, and a page of prose could not have
+# caught it.
+#
+# Python has no equivalent compile gate. If this page starts calling the API, enable
+# the section below rather than leaving it disabled.
+
+[python]
+disabled = "constructs filters only; no client, no request, nothing to run end to end"
+
+[java]
+disabled = "constructs filters only; the compile job checks these blocks against the SDK"
+
+[rust]
+disabled = "constructs filters only; the compile job checks these blocks against the SDK"
+
+# Creates nothing, so there is nothing to sweep.
+[owns]
+
+[expect]
