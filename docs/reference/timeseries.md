@@ -36,7 +36,8 @@ import intellistream_datahub_sdk
 ts = intellistream_datahub_sdk.TimeSeries(
     external_id="engine_temperature",
     name="Engine temperature",
-    unit="celsius")
+    unit="celsius",
+    value_type="float")          # Python's default is bigint
 
 client.timeseries.create([ts])
 ```
@@ -49,6 +50,7 @@ use intellistream_datahub_sdk::timeseries::TimeSeries;
 
 let mut ts = TimeSeries::new("engine_temperature", "Engine temperature");
 ts.unit = Some("celsius".into());
+ts.set_value_type("float");           // decimal readings
 api.time_series.create_one(&ts).await?;
 ```
 
@@ -57,10 +59,17 @@ api.time_series.create_one(&ts).await?;
 
 ## Value types
 
-Every series has a **value type** that decides how its datapoints are stored. Leave it
-unset and the series is floating-point (`float32`), right for most sensor readings, so
-the create above accepts decimal values as-is. Set it explicitly when you need something
-else:
+Every series has a **value type** that decides how its datapoints are stored. A create that
+sends no value type gets floating-point (`float32`), right for most sensor readings. Whether
+yours sends one depends on the client:
+
+- **Java** sends none unless you set it.
+- **Python**'s `TimeSeries` always sends one and defaults to `bigint`, which refuses decimal
+  values. Pass `value_type="float"` for readings.
+- **Rust**'s `TimeSeries::new` sets `float`.
+
+So the create above gets `float32` from Java and `float` from Python and Rust, and each accepts
+decimal values as-is. Set the type explicitly when you need something else:
 
 | Value type | Use it for |
 | --- | --- |
@@ -73,6 +82,11 @@ else:
 
 A float written to a `bigint` series is [rejected](#write-datapoints), so pick the type that
 matches the data.
+
+Python can set only three of these: `TimeSeries` accepts `bigint`, `float` (or its alias
+`decimal`) and `text`, and raises `ValueError` for `float32`, `numeric`, `decimal32` and
+`mixed`. Create a series of those types from Java, Rust or `POST /timeseries/create`; Python
+reads and writes it like any other.
 
 ### Ask which type suits a unit {#value-type-hint}
 
@@ -119,10 +133,15 @@ client.timeseries().create(List.of(price));
 </TabItem>
 <TabItem value="python" label="Python">
 
+Python cannot create a `numeric` series: `value_type="numeric"` raises `ValueError` (see
+above). Create it from Java or Rust, then write to it from Python with the value's string form:
+
 ```python
-client.timeseries.create([intellistream_datahub_sdk.TimeSeries(
-    external_id="book_value_usd", name="Book value (USD)",
-    unit="usd", value_type="numeric")])
+import pandas as pd
+
+client.timeseries.insert_datapoints([intellistream_datahub_sdk.DatapointsCollectionString(
+    [intellistream_datahub_sdk.DatapointString(pd.Timestamp.now(tz="UTC"), "12.34")],
+    ts="book_value_usd")])
 ```
 
 </TabItem>
@@ -131,7 +150,7 @@ client.timeseries.create([intellistream_datahub_sdk.TimeSeries(
 ```rust
 let mut price = TimeSeries::new("book_value_usd", "Book value (USD)");
 price.unit = Some("usd".into());
-price.value_type = "numeric".into();  // exact decimals, no float rounding
+price.set_value_type("numeric");      // exact decimals, no float rounding
 api.time_series.create_one(&price).await?;
 ```
 
@@ -185,13 +204,15 @@ Pass a `TimeseriesRetreiver` instead of the bare criteria to set an explicit `li
 <TabItem value="python" label="Python">
 
 ```python
-form = intellistream_datahub_sdk.TimeSeriesFilterForm(
+series = client.timeseries.filter(
     data_set_id=[12],            # this data set and every data set beneath it
     unit="celsius",              # a pattern field also takes a bare value
     limit=100)
-
-series = client.timeseries.filter(form)
 ```
+
+The criteria are keywords, or a prepared `filter=intellistream_datahub_sdk.TimeSeriesFilter(...)`
+(passing both is a `TypeError`). `limit`, `sort_by`, `sort_order` and `cursor` are always
+arguments of the call, so one `TimeSeriesFilter` can be reused across `filter()` and `search()`.
 
 </TabItem>
 <TabItem value="rust" label="Rust">
@@ -303,8 +324,8 @@ while (page.getNextCursor() != null) {
 ```python
 cursor = None
 while True:
-    page = client.timeseries.filter(intellistream_datahub_sdk.TimeSeriesFilterForm(
-        unit="celsius", limit=100, sort_by="name", sort_order="asc", cursor=cursor))
+    page = client.timeseries.filter(
+        unit="celsius", limit=100, sort_by="name", sort_order="asc", cursor=cursor)
     for ts in page:
         ...
     cursor = page.next_cursor
@@ -469,8 +490,8 @@ api.time_series
 ## High-throughput ingestion
 
 For large or unbounded volumes the SDK chunks and sends in bulk. See the
-[ingestion guide](/guides/ingest-timeseries) for the full story. Java also has a
-[binary path](#binary-ingest) for sustained volume.
+[ingestion guide](/guides/ingest-timeseries) for the full story. Every client also has a
+[binary path](#binary-ingest) for sustained volume (Python on its synchronous client only).
 
 :::tip Survive outages with durable buffering
 Enable [durable buffering](/reference/client#durable-ingest-buffering) on the client and datapoint
@@ -499,7 +520,7 @@ System.out.printf("ingested %,d, failed %,d%n", result.succeeded(), result.faile
 </TabItem>
 <TabItem value="python" label="Python">
 
-`insert_from_lists` takes whole arrays (NumPy / pandas) and handles batching for you:
+`insert_from_lists` takes whole arrays (NumPy / pandas) and splits them into requests for you:
 
 ```python
 import numpy as np, pandas as pd
@@ -513,7 +534,7 @@ client.timeseries.insert_from_lists(
 </TabItem>
 <TabItem value="rust" label="Rust">
 
-`insert_datapoints` auto-batches large inputs (chunks at the 100 000-point collection cap):
+`insert_datapoints` splits a large input into requests for you:
 
 ```rust
 use intellistream_datahub_sdk::generic::{DataWrapper, DatapointsCollection, DatapointString};
@@ -530,22 +551,38 @@ api.time_series.insert_datapoints(&mut dw).await?;
 </TabItem>
 </Tabs>
 
-## Binary ingest (Java) {#binary-ingest}
+Python runs on the Rust implementation, so the two behave alike. A call is split into requests
+of at most 100 000 datapoints, and up to four are in flight at once. Change that with
+`DATAPOINT_INSERT_PARALLELISM` in the environment, which `create_api_service()` and Python's
+`from_env()` read, or with `set_datapoint_insert_parallelism` on a Rust `DataHubConfig`. Retries
+go through the [durable spool](./client#durable-ingest-buffering): with buffering on, the requests
+go one at a time, a transient failure (429, 5xx, network, or a `401`/`403`) writes the input to
+disk, and the next insert sends the spool again, oldest first, before its own data. With buffering
+off, the first request to fail ends the call with its error and the requests not yet sent are
+dropped, so part of the input may have landed. Sending all of it again is safe either way, since
+datapoints dedup on `(series, timestamp)`. The split counts datapoints and ignores the value type,
+so keep a `text` or `mixed` series to 10 000 points per call.
 
-`ingestBinary` sends the same datapoints as zstd-compressed Arrow frames to
-[`POST /timeseries/data/binary`](./binary-datapoints) instead of JSON. Values are parsed, sorted
-and de-duplicated on the client, and one request carries up to a million points, so it is the
-path for sustained volume from Java. `ingest` stays right for modest volume and for the
-[durable spool](./client#durable-ingest-buffering), which does not apply here. Python and Rust
-do not have the binary path yet.
+## Binary ingest {#binary-ingest}
 
-| | `ingest` (JSON) | `ingestBinary` |
+`ingestBinary` in Java, and `insert_datapoints_binary` in Python and Rust, send the same
+datapoints as zstd-compressed Arrow frames to [`POST /timeseries/data/binary`](./binary-datapoints)
+instead of JSON. Values are parsed, sorted and de-duplicated on the client, and one request
+carries a million points or more, so it is the path for sustained volume. The JSON path stays
+right for modest volume and for the [durable spool](./client#durable-ingest-buffering), which does
+not apply here. Python has it on the synchronous `DataHubClient` only; `AsyncDataHubClient` does
+not.
+
+| | JSON (`ingest`, `insert_datapoints`) | Binary (`ingestBinary`, `insert_datapoints_binary`) |
 | --- | --- | --- |
-| Points per request | 10 000 | up to 1 000 000, in frames of at most 100 000 |
+| Points per request | 10 000 in Java, 100 000 in Python and Rust | up to 1 000 000 in Java, up to 32 frames in Python and Rust; frames of at most 100 000 |
 | Series named by | external id | internal id, resolved once through `/timeseries/byids` and cached for the life of the client |
 | Access needed on the data set | write | write, and **read** for the lookup ([access control](./datasets#access-control)) |
 | Durable spool | yes | no |
 | A request the server refuses | that batch fails | nothing was inserted; the whole request is retried |
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
 
 ```java
 import ai.intellistream.datahub.sdk.ingest.BinaryIngestOptions;
@@ -568,9 +605,75 @@ that does not fit the series' type (422). A request the server refuses as `unkno
 or `external-id-mismatch`, a series removed or renamed since it was cached, is rebuilt once
 after re-resolving; `429`, `5xx` and network failures are retried as for `ingest`.
 
-For many small inserts, a buffer batches them into frames and sends once **10 000 points** have
-accumulated or the oldest is **200 ms** old, whichever comes first. `add` never blocks on the
-network; flushes run on a thread of their own:
+</TabItem>
+<TabItem value="python" label="Python">
+
+`insert_datapoints_binary` takes the same collections as `insert_datapoints`, and
+`insert_from_lists_binary` the same arrays as `insert_from_lists`. Both are on the synchronous
+client only:
+
+```python
+import pandas as pd
+
+now = pd.Timestamp.now(tz="UTC")
+client.timeseries.insert_datapoints_binary([
+    intellistream_datahub_sdk.DatapointsCollectionString(
+        [intellistream_datahub_sdk.DatapointString(now, "92.4")], ts="engine_temperature"),
+    intellistream_datahub_sdk.DatapointsCollectionString(
+        [intellistream_datahub_sdk.DatapointString(now, "1500")], ts="engine_rpm"),
+])
+
+# or from arrays, tuned: zstd level 1, 3 or 9 (default 9; the client pays for it)
+client.timeseries.insert_from_lists_binary(
+    timestamps=[now], values=[92.4], ts="engine_temperature", zstd_level=3)
+```
+
+Both run on the Rust implementation, so they check and retry as the Rust tab describes and raise
+`DataHubException` where Rust returns an error. `zstd_level` is the only option Python passes.
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+`insert_datapoints_binary` takes the same `DataWrapper` as `insert_datapoints`, with timestamps
+in epoch milliseconds, which `DatapointString::from_datetime` writes. An ISO string is refused
+before any request.
+
+```rust
+use chrono::Utc;
+use intellistream_datahub_sdk::generic::{DataWrapper, DatapointString, DatapointsCollection};
+use intellistream_datahub_sdk::timeseries::BinaryIngestOptions;
+
+let now = Utc::now();
+let mut by_external_id = DataWrapper::new();
+for (external_id, value) in [("engine_temperature", "92.4"), ("engine_rpm", "1500")] {
+    let mut collection = DatapointsCollection::from_external_id(external_id);
+    collection.datapoints.push(DatapointString::from_datetime(now, value));   // epoch millis
+    by_external_id.add_item(collection);
+}
+
+api.time_series
+    .insert_datapoints_binary(&by_external_id, &BinaryIngestOptions::default())
+    .await?;
+
+// or tuned: zstd level 1, 3 or 9 (default 9; the client pays for it)
+api.time_series
+    .insert_datapoints_binary(&by_external_id, &BinaryIngestOptions::new().zstd_level(3))
+    .await?;
+```
+
+Two things are caught before any request is sent and returned as the error: a series that does
+not exist or is not readable (404, naming it) and a value that does not fit the series' type
+(422). A request the server refuses as `unknown-timeseries` or `external-id-mismatch` is rebuilt
+once after re-resolving every series. `429`, `5xx` and network failures are retried up to
+`max_retries` times, waiting a second longer before each attempt.
+
+</TabItem>
+</Tabs>
+
+For many small inserts, Java has a buffer that batches them into frames and sends once
+**10 000 points** have accumulated or the oldest is **200 ms** old, whichever comes first. `add`
+never blocks on the network; flushes run on a thread of their own. Python and Rust have no
+binary buffer: collect the readings and call `insert_datapoints_binary` yourself.
 
 ```java
 import ai.intellistream.datahub.sdk.ingest.BinaryIngestBuffer;
@@ -598,6 +701,12 @@ outcome. `add` takes a `double`, `long` or `String` value, or a `Datapoint`.
 
 `BinaryIngestOptions.defaults()` returns the defaults. The wire format, caps and every
 `reason` the endpoint answers with are on [Binary datapoint frames](./binary-datapoints).
+
+Rust's `BinaryIngestOptions` has three knobs, each a public field and a builder method of the
+same name: `zstd_level` (default `9`, as above), `max_retries` (`3`, for 429, 5xx and network
+failures) and `request_concurrency` (`4`, requests in flight when a call needs more than one).
+Frames are always compressed in parallel, and the first failed request ends the call, as
+`failFast` would. Python passes `zstd_level` and leaves the other two at their defaults.
 
 ## Retrieve datapoints
 
@@ -772,8 +881,9 @@ api.time_series.delete_datapoints(&DataWrapper::from_vec(vec![filter])).await?;
 
 ## IngestOptions
 
-The Java `ingest` tuning knobs (Python's `insert_from_lists` and Rust's
-`insert_datapoints` batch internally):
+The Java `ingest` tuning knobs. Python's `insert_from_lists` and Rust's `insert_datapoints` take
+no options; their one knob is the request concurrency, see
+[high-throughput ingestion](#high-throughput-ingestion).
 
 | Option | Default | Meaning |
 | --- | --- | --- |
@@ -818,11 +928,16 @@ if (!result.isComplete()) {
 | List | `timeseries().list` | `timeseries.list` | `time_series.list` / `list_with_limit` |
 | Update | `timeseries().update` | `timeseries.update` | `time_series.update` |
 | Delete | `timeseries().delete` | `timeseries.delete` | `time_series.delete` |
-| Write datapoints | `insertDatapoints` / `ingest` / `ingestBinary` | `insert_datapoints` / `insert_from_lists` | `insert_datapoint` / `insert_datapoints` |
+| Write datapoints | `insertDatapoints` / `ingest` | `insert_datapoints` / `insert_from_lists` | `insert_datapoint` / `insert_datapoints` |
+| [Binary ingest](#binary-ingest) | `ingestBinary` / `binaryBuffer` | `insert_datapoints_binary` / `insert_from_lists_binary`, synchronous client only | `insert_datapoints_binary` |
+| Create a `float32`, `numeric`, `decimal32` or `mixed` series | `setValueType` | no, see [value types](#value-types) | `set_value_type` |
 | Read datapoints (raw and [aggregated](#retrieve-datapoints)) | `retrieve` / `retrieveAggregated` | `retrieve_datapoints` | `retrieve_datapoints` |
 | [Latest datapoint](#latest-datapoints) | `timeseries().latest` | `retrieve_latest_datapoints` | `retrieve_latest_datapoint` |
 | Delete datapoints | `deleteDatapoints` | `timeseries.delete_datapoints` | `time_series.delete_datapoints` |
 
 Java is the one with `ingest`, the chunking, parallelising, retrying path described above, and
-with [`ingestBinary` and `binaryBuffer`](#binary-ingest), the binary path. It also has
+with `binaryBuffer`. Python and Rust chunk and send concurrently too, and retry through the
+durable spool when buffering is on; with it off, the first failed request is the call's error.
+All three have the [binary path](#binary-ingest), Python on its synchronous client only. Python
+can create a series of only three [value types](#value-types). Java also has
 `timeseries().recommendValueType`, the [value-type hint](#value-type-hint).

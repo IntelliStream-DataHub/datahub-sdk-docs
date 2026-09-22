@@ -71,7 +71,7 @@ let filter = RetrieveFilter {
 let result = api.time_series.retrieve_datapoints(&DataWrapper::from(vec![filter])).await?;
 for series in result.get_items() {
     for p in &series.datapoints {
-        println!("{} = {}", p.timestamp, p.value);
+        println!("{} = {:?}", p.timestamp, p.value);     // value is Option<f64>
     }
 }
 ```
@@ -191,6 +191,8 @@ do {
 <TabItem value="python" label="Python">
 
 ```python
+end = pd.Timestamp.now(tz="UTC")
+start = end - pd.Timedelta(days=1)
 cursor = None
 while True:
     rf = intellistream_datahub_sdk.RetrieveFilter(ts="engine_temperature",
@@ -209,18 +211,19 @@ while True:
 ```rust
 use chrono::Utc;
 
+let (start, end) = (Utc::now() - chrono::Duration::days(1), Utc::now());
 let mut cursor: Option<String> = None;
 loop {
     let filter = RetrieveFilter {
         external_id: Some("engine_temperature".into()),
-        start: Some(Utc::now() - chrono::Duration::days(1)),
-        end: Some(Utc::now()),
+        start: Some(start),
+        end: Some(end),
         cursor: cursor.clone(),
         ..Default::default()
     };
-    let page = api.time_series
-        .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?
-        .get_items().remove(0);
+    let result = api.time_series
+        .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?;
+    let page = &result.get_items()[0];
     for p in &page.datapoints { handle(p); }
     cursor = page.next_cursor.clone();
     if cursor.is_none() { break; }
