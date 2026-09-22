@@ -1,0 +1,37 @@
+page = "docs/guides/query-and-aggregate.mdx"
+
+# python #1 L39  — Raw datapoints for a window
+# python #2 L104 — Hourly averages
+# python #3 L184 — Paging large windows
+[blocks]
+python = 3
+java = 3
+rust = 3
+
+[python]
+# Per the sandbox page's own table: it aggregates the engine series.
+requires = ["guides__seed-a-sandbox-data"]
+timeout = 180
+
+# Block 3 pages over `start`/`end` and hands each point to `handle`, all three of
+# which the prose describes rather than shows. This is what a reader supplies.
+prologue = """
+import pandas as _pd
+start = _pd.Timestamp.now(tz="UTC") - _pd.Timedelta(days=1)
+end = _pd.Timestamp.now(tz="UTC")
+_seen = []
+def handle(dp):
+    _seen.append(dp)
+"""
+
+[java]
+disabled = "Java scenario not written yet."
+# Raw points, hourly averages and paging are three separate reads, each declaring its own
+# `filter` and `request`; Java cannot hold them in one method, so they compile one at a time.
+independent = true
+
+[owns]
+timeseries = ["engine_temperature"]
+
+[expect]
+timeseries = ["engine_temperature"]

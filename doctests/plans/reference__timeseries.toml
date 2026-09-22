@@ -1,0 +1,70 @@
+page = "docs/reference/timeseries.md"
+
+# Blocks on this page:
+#   java   #1   L21    Create a series
+#   python #1   L33    Create a series
+#   rust   #1   L47    Create a series
+#   java   #2   L91    Value types
+#   python #2   L104   Value types
+#   rust   #2   L113   Value types
+#   java   #3   L154   Filter series
+#   python #3   L169   Filter series
+#   rust   #3   L181   Filter series
+#   java   #4   L270   Sorting and paging
+#   python #4   L285   Sorting and paging
+#   rust   #4   L303   Sorting and paging
+#   java   #5   L335   Delete a series
+#   python #5   L344   Delete a series
+#   rust   #5   L351   Delete a series
+#   java   #6   L376   Write datapoints
+#   python #6   L390   Write datapoints
+#   rust   #6   L402   Write datapoints
+#   java   #7   L432   High-throughput ingestion
+#   python #7   L448   High-throughput ingestion
+#   rust   #7   L462   High-throughput ingestion
+#   java   #8   L494   Binary ingest (Java)
+#   java   #9   L519   Binary ingest (Java)
+#   java   #10  L568   Retrieve datapoints
+#   python #8   L588   Retrieve datapoints
+#   rust   #8   L605   Retrieve datapoints
+#   java   #11  L651   Delete datapoints
+#   java   #12  L665   Delete datapoints
+#   python #9   L676   Delete datapoints
+#   rust   #9   L689   Delete datapoints
+#   java   #13  L720   IngestResult
+#   java   #14  L734   IngestResult
+
+[blocks]
+python = 9
+java = 14
+rust = 9
+
+[python]
+timeout = 600
+# An API reference, not a tutorial: each fence is a self-contained example, and they
+# are meant to be read independently. Running them as one program would invent
+# conflicts a reader never meets — the delete example removing what the write example
+# needs — so each block runs on its own.
+independent = true
+
+# Each example needs a client. Composing the quickstart in to get one would also
+# create its `engine_temperature`, which several of these pages create themselves;
+# `from_env()` is the constructor this section documents, so this is the reader's
+# own call.
+prologue = """
+import intellistream_datahub_sdk
+client = intellistream_datahub_sdk.DataHubClient.from_env()
+"""
+
+[java]
+disabled = "Java scenario not written yet."
+# Independent examples, as for Python. #13 is a list of IngestResult's method signatures,
+# not code.
+independent = true
+exclude = [13]
+
+[owns]
+timeseries = ["book_value_usd", "engine_temperature"]
+
+[expect]
+timeseries = ["book_value_usd", "engine_temperature"]

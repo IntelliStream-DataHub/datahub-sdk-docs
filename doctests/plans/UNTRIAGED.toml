@@ -1,0 +1,10 @@
+# Pages that carry runnable code but have no test plan yet.
+#
+# This is a backlog, not a waiver. Every entry is a tutorial nobody is checking,
+# so the list is meant to shrink: pick one, run `./doctests/bin/newplan.py <page>`,
+# write the scenario, delete the line. The coverage test refuses to let a page be
+# both planned and listed, or listed and gone, so the file cannot drift out of date.
+#
+# Currently empty: every page with runnable code has a plan.
+
+[pages]

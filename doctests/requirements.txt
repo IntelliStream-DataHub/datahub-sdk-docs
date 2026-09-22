@@ -1,0 +1,20 @@
+# What the harness needs, plus every package the docs tell a reader to install.
+# A page that imports something missing here fails on its first line in CI, which
+# says nothing about the page, so keep this in step with the `import`s in docs/.
+#
+# tensorflow is left out on purpose: it is most of a gigabyte for the two LSTM
+# recipes, whose plans declare `requires_python = ["tensorflow"]` and skip with that
+# reason when it is absent. `pip install tensorflow` into the venv to run them.
+pytest
+maturin
+pandas
+numpy
+scipy
+scikit-learn
+xgboost
+matplotlib
+networkx
+psutil
+pyarrow
+requests
+zstandard

@@ -11,9 +11,10 @@ Two alarms fire within seconds of each other. Are they one incident or two? A fl
 lookup can't tell you, but the **relationship graph** can. If both alarmed sensors
 sit under the same subsystem, the two alarms share a subsystem.
 
-`fetchRelated` walks the graph outward from a node and returns the connected
-sub-graph. Walk the neighbourhood of each alarm and intersect the two: a shared
-ancestor, say a `cooling_system` both sensors are `PART_OF`, is the common cause.
+Graph traversal (`fetch_related` in Python and Rust, `fetchRelated` in Java) walks the graph
+outward from a node and returns the connected sub-graph. Walk the neighbourhood of each alarm
+and intersect the two: a shared ancestor, say a `cooling_system` both sensors are `PART_OF`, is
+the common cause.
 
 :::info Needs a sandbox
 This guide reads data it does not create. [Seed a sandbox](/guides/seed-a-sandbox) writes it
@@ -21,9 +22,9 @@ in one go.
 :::
 
 :::note Why a flat read isn't enough
-`byIds` returns a resource and its *direct* edges only. A shared subsystem might be
-several hops away (sensor → pump → skid → cooling_system). Graph traversal follows the
-chain; a single-hop read stops at the first neighbour.
+A flat read (`by_ids`, `get_by_id`, `filter`, `search`) returns the resource alone, with an
+empty `relatedResources`: it carries no edges at all. A shared subsystem might be several hops
+away (sensor → pump → skid → cooling_system), and only graph traversal follows the chain.
 :::
 
 ## 1. From alarms to resources
@@ -128,9 +129,9 @@ assert "cooling_system" in shared, f"expected cooling_system, found {shared}"
 ```rust
 use std::collections::HashSet;
 
-let a_nodes: HashSet<&str> = na.nodes().iter().map(|n| n.external_id.as_str()).collect();
+let a_nodes: HashSet<&str> = na.nodes().iter().map(|n| n.external_id()).collect();
 let mut shared: HashSet<&str> = nb.nodes().iter()
-    .map(|n| n.external_id.as_str())
+    .map(|n| n.external_id())
     .filter(|id| a_nodes.contains(id))
     .collect();
 shared.remove("sensor_a");

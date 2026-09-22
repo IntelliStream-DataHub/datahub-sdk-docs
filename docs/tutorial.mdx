@@ -30,8 +30,8 @@ The whole flow is five steps, and each is a section below:
 
 You need a reachable DataHub API and credentials. This tutorial uses **OAuth2
 client-credentials**, the SDK fetches the bearer token and refreshes it when it
-expires, so a long-running agent never works with a stale token. The client reads the
-configuration from the environment (or a `.env` file in the working directory):
+expires, so a long-running agent never works with a stale token. The program reads the
+configuration from environment variables:
 
 ```bash
 export BASE_URL="https://api.intellistream.ai"                  # or your own instance
@@ -123,8 +123,9 @@ hostname = "0.4"
 ```
 
 The code below lives in `src/main.rs`. The `blocking` feature enables the SDK's
-synchronous client (`intellistream_datahub_sdk::blocking`), same services and methods as
-the async API, but no async runtime and no `async`/`.await` in your code.
+synchronous client (`intellistream_datahub_sdk::blocking`): no async runtime and no
+`async`/`.await` in your code. It has every call this tutorial makes, but not yet all of the
+async API: `subscriptions` and a few calls such as `time_series.filter` are async only.
 
 </TabItem>
 </Tabs>
@@ -310,7 +311,7 @@ for (base, name) in METRICS {
     }
     let mut ts = TimeSeries::new(&ext_id, &format!("{name} ({host})"));
     ts.unit = Some("bytes".into());
-    ts.value_type = "BIGINT".into();
+    ts.value_type = Some("BIGINT".into());
     api.time_series.create_one(&ts).await?;
 }
 ```
@@ -334,7 +335,7 @@ for (base, name) in METRICS {
     }
     let mut ts = TimeSeries::new(&ext_id, &format!("{name} ({host})"));
     ts.unit = Some("bytes".into());
-    ts.value_type = "BIGINT".into();
+    ts.value_type = Some("BIGINT".into());
     api.time_series.create_one(&ts)?;
 }
 ```
@@ -940,7 +941,7 @@ async fn ensure_series(api: &ApiService, host: &str) -> Result<(), Box<dyn std::
         }
         let mut ts = TimeSeries::new(&ext_id, &format!("{name} ({host})"));
         ts.unit = Some("bytes".into());
-        ts.value_type = "BIGINT".into();
+        ts.value_type = Some("BIGINT".into());
         api.time_series.create_one(&ts).await?;
     }
     Ok(())
@@ -1044,7 +1045,7 @@ fn ensure_series(api: &blocking::ApiService, host: &str) -> Result<(), Box<dyn s
         }
         let mut ts = TimeSeries::new(&ext_id, &format!("{name} ({host})"));
         ts.unit = Some("bytes".into());
-        ts.value_type = "BIGINT".into();
+        ts.value_type = Some("BIGINT".into());
         api.time_series.create_one(&ts)?;
     }
     Ok(())
