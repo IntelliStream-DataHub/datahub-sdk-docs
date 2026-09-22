@@ -1,0 +1,23 @@
+page = "docs/guides/detect-events.mdx"
+
+# python #1 L52  — Detect a threshold breach and record it
+# python #2 L123 — Query the events later
+[blocks]
+python = 2
+java = 2
+rust = 2
+
+[python]
+# Per the sandbox page's own table: the seeded engine series include a hot stretch, so the rule actually fires.
+requires = ["guides__seed-a-sandbox-data"]
+timeout = 180
+
+
+# The event id carries a timestamp, so it cannot be named ahead of the run; the
+# sweep resolves the pattern against the backend instead.
+[owns]
+timeseries = ["engine_temperature"]
+events = ["overheat_press_07_*"]
+
+[expect]
+timeseries = ["engine_temperature"]

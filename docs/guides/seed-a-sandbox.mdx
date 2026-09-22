@@ -44,8 +44,11 @@ def ingest(external_id, index, values, unit=None, name=None):
     print(f"ingested {len(values):,} points → {external_id}")
 ```
 
-A second run of any block below answers `409` on the duplicate external id; the helper
-catches that and goes on to write the datapoints, which dedup on `(series, timestamp)`.
+Every block below can be run again. A second run of a series or resource create answers
+`409` on the duplicate external id: the helper catches that and goes on to write the
+datapoints, which dedup on `(series, timestamp)`, and block B catches it around the graph
+create. Events are the exception: an event's external id is not unique, so a second run raises
+two more alarms.
 
 ## A. An engine, with the last twenty minutes running hot
 
@@ -98,8 +101,12 @@ edges = [
     intellistream_datahub_sdk.RelForm.by_external_ids("sensor_b", "pump_b", "PART_OF"),
 ]
 
-graph = client.resources.create(nodes, edges)
-print(len(graph.nodes), "nodes,", len(graph.relations), "edges")
+try:
+    graph = client.resources.create(nodes, edges)
+    print(len(graph.nodes), "nodes,", len(graph.relations), "edges")
+except intellistream_datahub_sdk.DataHubException as e:
+    if e.status_code != 409:              # a second run finds the graph already there
+        raise
 ```
 
 Two alarms, seconds apart, one on each sensor. They look like two incidents and are one.
@@ -130,11 +137,10 @@ points = client.timeseries.retrieve_datapoints(intellistream_datahub_sdk.Retriev
     start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=1),
     end=pd.Timestamp.now(tz="UTC")))[0].get_datapoints()
 
-alarms = list(client.events.filter(intellistream_datahub_sdk.EventFilter(
-    basic_filter=intellistream_datahub_sdk.BasicEventFilter(type="alarm"), limit=10)))
+alarms = client.events.filter(type="alarm", external_id="alarm_sensor_*", limit=10)
 
 print(f"{len(points)} readings in the last hour, {len(alarms)} alarms")
-# 60 readings in the last hour, 2 alarms
+# 60 readings in the last hour, 2 alarms (2 more for each re-run of the alarm block)
 ```
 
 If both numbers are non-zero, every guide on this site has something to run against.

@@ -1,0 +1,15 @@
+page = "docs/advanced/sustained-alarm-window.mdx"
+
+# The page's closing section, "Run the same detector live", as its own Java program: the
+# detector class from #1 and the subscription loop in #4. It re-declares the `detector`
+# that the replay in #2 declares, so it cannot share a method with it. See
+# advanced__sustained-alarm-window.toml for the replay, and for the Python scenario, which
+# runs both halves in order.
+[blocks]
+python = 4
+java = 4
+rust = 4
+
+[java]
+disabled = "Java scenario not written yet; compiled by test_compile.py."
+only = [1, 4]

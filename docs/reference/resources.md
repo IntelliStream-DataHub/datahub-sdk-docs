@@ -64,7 +64,7 @@ an element whose labels contain `TIMESERIES` *is* the time series shape.
 | `ASSET` | An asset: the body above, `geoLocation` included. |
 | `TIMESERIES` | A [time series](./timeseries): `unit`, `unitExternalId`, `valueType`. |
 | `DATASET` | A [data set](./datasets). |
-| `POLICY` | A policy: `type`, `value`, `deactivated`, `templateId`. |
+| `POLICY` | A policy: `type` and `deactivated`. A read never carries its `value`, `templateId` or `dataSetId`. |
 | `FUNCTION` | A function. |
 | none | A plain resource, the body above. |
 
@@ -123,6 +123,13 @@ one variant per type. Match it, or use the accessors for the fields every node s
 
 ```rust
 use intellistream_datahub_sdk::Node;
+use intellistream_datahub_sdk::filters::NodeFilter;
+use intellistream_datahub_sdk::resources::{ResourceFilter, ResourceFilterForm};
+
+let form = ResourceFilterForm::new(ResourceFilter {
+    node: NodeFilter { external_id: Some(vec!["pump_*".into()]), ..Default::default() },
+    ..Default::default()
+});
 
 for node in api.resources.filter(&form).await?.get_items() {
     match node {
@@ -143,6 +150,10 @@ Create and update echoes are typed the same way, so an asset updated through
 update echo: `relatedResources` is left empty on purpose. The request touched only some of the
 node's edges, and answering with those alone would be indistinguishable from answering with all
 of them. A delete has no echo at all, being a `204` with no body.
+
+The Python and Rust clients read the update echo as a flat `Resource` whatever the node's type,
+so a time series updated there comes back without its `unit`, and an asset without its
+`geoLocation`. Read the node again with `get_by_id` or `by_ids` when you need its typed shape.
 
 ## Look up
 
@@ -217,16 +228,20 @@ alike. Both refuse the whole request, so a rejected batch creates nothing.
 
 | Refused | Status | Named in |
 | --- | --- | --- |
-| An `externalId` already taken in the tenant, or repeated within the same batch. Compared without case. | `409` | `error.duplicated`, one entry per offending id |
-| A `dataSetId` that does not exist, or that resolves to a node which is not a data set. | `400` | `error.fields`, one entry per offending id |
+| An `externalId` already taken in the tenant, or repeated within the same batch. Compared without case. | `409` `duplicate` | `duplicated`, one entry per offending id |
+| A `dataSetId` that does not exist, or that resolves to a node which is not a data set. | `400` `bad-request` | `fields`, one entry per offending id |
+
+Both are [problem documents](./client#problem-documents), so branch on the `type` and read the
+entries from the extension member. `requestId` and `retry` ride along as on any refusal:
 
 ```json
 {
-  "error": {
-    "code": 409,
-    "message": "A node with that externalId already exists.",
-    "duplicated": [{ "externalId": "pump_1" }]
-  }
+  "type": "https://intellistream.ai/errors/duplicate",
+  "title": "Conflict",
+  "status": 409,
+  "detail": "A node with that externalId already exists.",
+  "instance": "/resources/create",
+  "duplicated": [{ "externalId": "pump_1" }]
 }
 ```
 
@@ -307,6 +322,10 @@ pump.labels = Some(vec!["Pump".into()]);
 let contains = RelForm::by_external_ids("plant_oslo", "pump_1", "contains");
 
 let created = api.resources.create(vec![plant, pump], vec![contains]).await?;
+
+println!("{} resources, {} relations",
+    created.nodes().map_or(0, |n| n.len()),
+    created.relations().map_or(0, |r| r.len()));
 ```
 
 </TabItem>
@@ -335,6 +354,33 @@ without touching its endpoints, the relationship-type catalogue), has its own pa
 To disconnect two resources without touching either of them, [delete the edge](./edges#delete).
 [Deleting a resource](#delete) is the heavier move: it takes every relation the resource had
 with it.
+
+## List
+
+`GET /resources?limit=` returns the newest `limit` resources you may read, with no body and no
+criteria. It is the cheap "what have I got" read, and **every node type answers it the same way**:
+
+| Endpoint | Returns |
+| --- | --- |
+| `GET /resources?limit=` | The newest resources you may read. |
+| `GET /assets?limit=` | The same, restricted to assets. |
+| `GET /datasets?limit=` | Data sets. |
+| `GET /timeseries?limit=` | Time-series. It also takes `dataSetId=` to scope to one data set and everything beneath it. |
+| `GET /events?limit=` | Events. |
+| `GET /policies?limit=` | Policies. |
+| `GET /functions?limit=` | Functions. |
+
+`limit` defaults to **1000** and is capped at **10000**; above that is a `400` rather than a
+silent clamp, so a short page always means you ran out of rows. Absent, zero or negative all mean
+"you decide" and give you the default. These are the same numbers `POST /<collection>/filter`
+uses, so which one you reach for cannot change the page size you get.
+
+The listing is the **first page only**: it never returns a `nextCursor`. A walk needs a `sort` and
+a cursor to continue it, and both belong in a request body, so paging lives on `/filter` below.
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" "$API/resources?limit=50"
+```
 
 ## Filter
 
@@ -419,11 +465,11 @@ matches = client.resources.filter(
 ```rust
 use intellistream_datahub_sdk::filters::NodeFilter;
 use intellistream_datahub_sdk::generic::IdAndExtId;
-use intellistream_datahub_sdk::resources::{ResourceFilter, ResourceRetreiver};
+use intellistream_datahub_sdk::resources::{ResourceFilter, ResourceFilterForm};
 
 // The criteria every node type shares are a flattened `NodeFilter`, so they nest in Rust even
 // though they sit alongside the resource's own fields on the wire.
-let retriever = ResourceRetreiver::new(ResourceFilter {
+let form = ResourceFilterForm::new(ResourceFilter {
     node: NodeFilter {
         name: Some(vec!["pipe%".into()]),
         metadata: Some([("work_order".into(), Some("wo-sap-12344".into()))].into()),
@@ -433,7 +479,7 @@ let retriever = ResourceRetreiver::new(ResourceFilter {
     ..Default::default()
 }).with_limit(100);
 
-let matches = api.resources.filter(&retriever).await?;
+let matches = api.resources.filter(&form).await?;
 ```
 
 </TabItem>
@@ -482,21 +528,17 @@ DataWrapper<NodeModel> matches = client.resources().search(search);
 <TabItem value="python" label="Python">
 
 ```python
-form = intellistream_datahub_sdk.SearchAndFilterForm(query="pump", limit=10)
-matches = client.resources.search(form)
+matches = client.resources.search("pump", limit=10)
 ```
 
 </TabItem>
 <TabItem value="rust" label="Rust">
 
 ```rust
-use intellistream_datahub_sdk::generic::{SearchAndFilterForm, SearchForm};
+use intellistream_datahub_sdk::generic::SearchAndFilterForm;
+use intellistream_datahub_sdk::resources::ResourceFilter;
 
-let form = SearchAndFilterForm {
-    search: Some(SearchForm { name: None, description: None, query: Some("pump".into()) }),
-    limit: Some(10),
-    filter: None,
-};
+let form = SearchAndFilterForm::<ResourceFilter>::new("pump").with_limit(10);
 let matches = api.resources.search(&form).await?;
 ```
 
@@ -554,9 +596,9 @@ RFC 9457 problem response. The whole batch is **all-or-nothing**.
 
 :::caution A `409` means someone else got there first
 Updates are guarded by optimistic locking. If another request changed or deleted the
-resource while yours was in flight, you get a `409` with `"cause": "concurrency"` and
+resource while yours was in flight, you get a `409` of type `optimistic-lock` and
 **nothing was written**, no partial application to unpick. Re-read the resource with
-`byIds` and retry the update against fresh state.
+`byids` and retry the update against fresh state.
 
 This is worth designing for rather than retrying blindly: two writers doing
 `metadata: { add: … }` can both succeed after a re-read, whereas two doing
@@ -577,9 +619,10 @@ Deleting a resource takes **all** of its relationships with it, inbound and outb
 where the one real constraint comes from:
 
 :::caution The graph must stay connected
-A delete is rejected with `400` if it would leave any surviving resource unreachable from a
-root resource, that is, if it would strand part of the graph. The response names the
-resources that would be stranded, so the fix is either to include them in the same delete or
+A delete is rejected with `409` `would-strand` if it would leave any surviving resource
+unreachable from a root resource, that is, if it would strand part of the graph. The problem
+document names the resources that would be stranded in `blockedBy`
+(`[{ "externalId": "pump_1" }]`), so the fix is either to include them in the same delete or
 to re-attach them through another path first.
 
 Delete a mid-level node in a hierarchy and this is what you will hit: removing a plant that
@@ -617,7 +660,7 @@ api.resources.delete(&vec![IdAndExtId::from_external_id("pump_1")]).await?;
 
 ## Traverse the graph
 
-`fetchRelated` walks the graph outward from a starting resource and returns the
+`fetch-related` walks the graph outward from a starting resource and returns the
 connected sub-graph, a `ResourceNetwork` of `nodes`, the `edges` between them, and
 their `labels`. Traversal is **undirected** and bounded by `depth` (`-1` = the whole
 connected component), optionally filtered to specific relationship types. Use it for
@@ -637,12 +680,12 @@ connected site an unbounded `depth` will hit 5 000 nodes long before it runs out
 and what you get back is a *neighbourhood*, not the component you asked for. Bound `depth`
 to 1–3 unless you know the graph is sparse.
 
-Nodes from `fetchRelated` and `fetch-nearest` come back [typed by label](#typed-reads) and
+Nodes from `fetch-related` and `fetch-nearest` come back [typed by label](#typed-reads) and
 carry the fields the graph mirror holds: `id`, `externalId`, `name`, `description`, `source`,
 `dataSetId`, `labels`, `metadata`, `createdTime` and `lastUpdatedTime`, plus `relatedResources`
 built from the edges of the network you fetched. By type: `isRoot` on resources and assets,
 `geoLocation` on assets, `unit`, `unitExternalId` and `valueType` on time series, and
-`isDeactivated` on policies. Fetch by id when you need a field outside that list.
+`deactivated` on policies. Fetch by id when you need a field outside that list.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -686,7 +729,7 @@ let net = api.resources.fetch_related(
         .with_relationship_types(vec!["PART_OF".into()])).await?;
 
 for node in net.nodes() {
-    println!("{}", node.external_id);
+    println!("{}", node.external_id());
 }
 ```
 
@@ -695,7 +738,7 @@ for node in net.nodes() {
 
 ### The nearest N of a kind {#fetch-nearest}
 
-`POST /resources/fetch-nearest` answers a question `fetchRelated` cannot: *the ten nearest
+`POST /resources/fetch-nearest` answers a question `fetch-related` cannot: *the ten nearest
 time series to this pump*. It walks breadth-first and caps on the number of **matching
 end-nodes**, not on hops or total nodes, so "the 10 nearest `TIMESERIES`" is exactly ten
 however many intermediate nodes lie between them. You get those nodes plus the sub-graph
@@ -703,13 +746,13 @@ connecting them back to the start.
 
 | Field | Default | Meaning |
 | --- | --- | --- |
-| `id` / `externalId` | none | Where to start. Supply exactly one, as for `fetchRelated`. |
+| `id` / `externalId` | none | Where to start. Supply exactly one, as for `fetch-related`. |
 | `endLabels` | none | Labels that qualify as a match, e.g. `["TIMESERIES"]`. The walk continues past them. |
 | `limit` | `10` | How many matching end-nodes to return. |
 | `relationshipTypes` | all | Which edge types the walk may follow. |
 | `excludedLabels` | none | Labels never traversed or returned. |
 
-That is the difference worth internalising: with `fetchRelated` you pick a radius and find
+That is the difference worth internalising: with `fetch-related` you pick a radius and find
 out what is inside it, which on an unfamiliar graph is a guess. With `fetch-nearest` you name
 what you are looking for and how many you want, and the radius follows.
 
@@ -853,7 +896,25 @@ The nodes and relationships it creates count against their own daily quotas thro
 ordinary create path. A reverse proxy in front of the API has to pass the upload through
 unbuffered and uncapped, as the shipped nginx examples do for `/resources/import`.
 
-No client wraps the pair. Call them over HTTP with the bearer token the client already holds:
+The Java client wraps the pair. `export` hands back the file as bytes and `importGraph` takes
+the same bytes, so moving a sub-graph between two tenants is two calls and no temporary file
+unless you want one:
+
+```java
+import ai.intellistream.datahub.api.graphtransfer.GraphImportResult;
+
+byte[] graph = source.resources().export(5677892L);
+
+GraphImportResult result = target.resources().importGraph(graph);
+System.out.println(result.nodesCreated() + " created, "
+        + result.nodesSkippedExisting() + " already there, "
+        + result.nodesSkippedTimeseries() + " to create as series first");
+```
+
+`GraphImportResult` is a record, so its fields read as `result.nodesCreated()` and so on, one
+per key of the JSON above.
+
+Python and Rust call the endpoints over HTTP with the bearer token the client already holds:
 
 ```bash
 curl -fsS -H "Authorization: Bearer $TOKEN" \
@@ -880,6 +941,7 @@ several node types.
 | `POST /assets/create` | [create](#create-resources-and-relations) | Nodes only, no `relations` array. `201`, and the echo is asset-shaped. `labels` may be omitted: `ASSET` is added for you. |
 | `GET /assets/{id}` | [look up](#look-up) | One asset, wrapped in `items` like every other read. |
 | `POST /assets/byids` | [look up](#look-up) | Ids that are missing, are not assets, or are not readable are omitted rather than failing the call. |
+| `GET /assets?limit=` | [filter](#filter) | The first `limit` assets, newest first, no criteria. Never returns a `nextCursor`: it is the first page and nothing more. `limit` defaults to 1000 and caps at 10 000. |
 | `POST /assets/filter` | [filter](#filter) | The same criteria, the same paging. A `nodeType` in the body is replaced, see below. |
 | `POST /assets/search` | [search](#search) | Same replacement, and the `filter` block is applied exactly as on [`/resources/search`](#search-filter). |
 | `POST /assets/update` | [update](#update) | Takes `nodes` and `relations` exactly as `/resources/update` does. |
@@ -913,19 +975,34 @@ of some other type, and an asset in a data set you may not read. That is deliber
 distinguishable `403` would confirm that an id exists.
 :::
 
+The Java client has `assets()`, whose reads come back as `Asset` rather than the polymorphic
+`NodeModel` that `/resources` returns, so `isRoot` and `geoLocation` are there without a cast:
+
+```java
+import ai.intellistream.datahub.models.Asset;
+
+Asset plant = new Asset();
+plant.setExternalId("plant_oslo");
+plant.setName("Oslo Plant");
+plant.setIsRoot(true);
+client.assets().create(List.of(plant));
+
+DataWrapper<Asset> newest = client.assets().list(100);
+DataWrapper<Asset> one = client.assets().getById(5677892L);
+DataWrapper<Asset> some = client.assets().byIds(List.of(
+        IdCollection.createFromExternalId("plant_oslo")));
+```
+
+`filter`, `search`, `update` and `delete` take the same forms as their `resources()`
+counterparts. The update echo is a `GraphDataWrapper<NodeModel, EdgeProxy>`, not an asset one,
+because an update may touch a relation whose other end is not an asset.
+
 ## The `/functions` endpoints {#functions}
 
-A **function** is a plain node distinguished by its `FUNCTION` label, with the same shape as a
-resource. Its family is `POST /functions/create`, `GET /functions/list`, `GET /functions/{id}`,
-`POST /functions/update` and `POST` or `DELETE /functions/delete`, on the same shared pipeline.
-`GET /functions/list` takes no filter: the inventory is expected to be small.
+A **function** is a plain node distinguished by its `FUNCTION` label. 
 
 `GET /functions/{id}` returns the one function wrapped in `items`, and reports a function
 you may not read as missing (`404`) rather than forbidden, exactly as `GET /assets/{id}` does.
-
-The Java client has no `assets()` or `functions()` service, so reach for the endpoints there.
-Creating an asset through `resources().create` with an `ASSET` label is the same pipeline and
-gives you the same asset back.
 
 ## What each client covers {#client-coverage}
 
@@ -933,6 +1010,7 @@ gives you the same asset back.
 | --- | --- | --- | --- |
 | Get by numeric id | `resources().getById` | `resources.get_by_id` | `resources.get_by_id` |
 | Look up by id / external id | `resources().byIds` | `resources.by_ids` | `resources.by_ids` |
+| List, newest first (`GET /resources`) | `resources().list` | `resources.list` | `resources.list` |
 | Create | `resources().create` | `resources.create` | `resources.create` |
 | Update | `resources().update` | `resources.update` | `resources.update` |
 | Delete | `resources().delete` | `resources.delete` | `resources.delete` |
@@ -940,7 +1018,8 @@ gives you the same asset back.
 | Filter | `resources().filter` | `resources.filter` | `resources.filter` |
 | Traverse (`fetch-related`) | `resources().fetchRelated` | `resources.fetch_related` | `resources.fetch_related` |
 | Nearest N (`fetch-nearest`) | `resources().fetchNearest` | `resources.fetch_nearest` | `resources.fetch_nearest` |
-| [Export / import a graph](#graph-transfer) | HTTP only | HTTP only | HTTP only |
+| [Export / import a graph](#graph-transfer) | `resources().export` / `importGraph` | HTTP only | HTTP only |
+
 
 Relations have their own client surface in all three clients, `edges()` in Java, `edges` in
 Python and Rust. [Edges → client coverage](./edges#client-coverage)

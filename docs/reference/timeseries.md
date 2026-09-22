@@ -74,6 +74,23 @@ else:
 A float written to a `bigint` series is [rejected](#write-datapoints), so pick the type that
 matches the data.
 
+### Ask which type suits a unit {#value-type-hint}
+
+`GET /timeseries/recommend-value-type/{unitExternalId}` suggests the `valueType` that gives the
+best storage compression for a unit while still representing it faithfully. The mapping is a
+heuristic: small low-precision ranges map to `DECIMAL32`, wide-magnitude analog values to
+`FLOAT32`, and a unit it does not know gets a compact default with `recognized` false. Use it to
+pre-select the type in a create form; it is advice, not a constraint.
+
+```java
+import ai.intellistream.datahub.api.responses.ValueTypeRecommendation;
+
+ValueTypeRecommendation hint = client.timeseries().recommendValueType("temperature_deg_c");
+hint.getRecommendedValueType();   // the suggested type, upper case
+hint.getReason();                 // why, in a sentence you can show a user
+hint.isRecognized();              // false means you got the generic default
+```
+
 Every value crosses the wire as a string, whatever the type. For an exact decimal, send the
 string form rather than a float: `Datapoint.of(ts, "12.34")` in Java, `DatapointString(ts,
 "12.34")` with `insert_datapoints` in Python (`insert_from_lists` takes floats and converts
@@ -320,6 +337,31 @@ loop {
 
 </TabItem>
 </Tabs>
+
+## List and update series {#list-and-update}
+
+`GET /timeseries?limit=` is the cheap "what have I got" read: the first `limit` series, newest
+created first, no criteria. Add `dataSetId` (an id or an external id) to restrict it to one data
+set and everything beneath it in the `BELONGS_TO` hierarchy. Anything narrower belongs in
+[filter](#filter-series).
+
+`POST /timeseries/update` changes fields on series that already exist. It is a partial update:
+only the fields named in each entry's `update` block change, and the series is identified by
+`id` or `externalId`. Changing `valueType` on a series that already holds data is refused,
+because the stored points would no longer parse; create a new series instead.
+
+```java
+import ai.intellistream.datahub.timeseries.UpdateTimeseries;
+
+DataWrapper<Timeseries> newest = client.timeseries().list(100);
+DataWrapper<Timeseries> inSet = client.timeseries().list(100, "engine_data");
+
+UpdateTimeseries change = new UpdateTimeseries().setExternalId("engine_temperature");
+change.getUpdate().getDescription().set("Engine block temperature, port side");
+client.timeseries().update(List.of(change));
+```
+
+The Python and Rust method names are in the [coverage table](#client-coverage).
 
 ## Delete a series
 
@@ -638,6 +680,21 @@ for c in points.get_items() {
 </TabItem>
 </Tabs>
 
+### Latest datapoint {#latest-datapoints}
+
+`POST /timeseries/data/latest` returns the most recent point of each named series, by id or
+external id. A series with no data at all comes back as an empty collection rather than being
+omitted, so the response lines up with the request.
+
+It is much cheaper than [retrieve](#retrieve-datapoints) with a limit of one: the latest point
+is served from the cache the ingest path writes, not from a range scan.
+
+```java
+DataWrapper<DataCollection<DatapointDTO>> now = client.timeseries().latest(List.of(
+        IdCollection.createFromExternalId("engine_temperature"),
+        IdCollection.createFromExternalId("engine_pressure")));
+```
+
 ## Delete datapoints
 
 Clears part of a series and leaves the definition alone. To remove the series itself, see
@@ -758,13 +815,14 @@ if (!result.isComplete()) {
 | Look up by id / external id | `timeseries().byIds` | `timeseries.by_ids` | `time_series.by_ids` |
 | Filter | `timeseries().filter` | `timeseries.filter` | `time_series.filter` |
 | Search | `timeseries().search` | `timeseries.search` | `time_series.search` |
-| List | HTTP | `timeseries.list` | `time_series.list` / `list_with_limit` |
-| Update | HTTP | `timeseries.update` | `time_series.update` |
+| List | `timeseries().list` | `timeseries.list` | `time_series.list` / `list_with_limit` |
+| Update | `timeseries().update` | `timeseries.update` | `time_series.update` |
 | Delete | `timeseries().delete` | `timeseries.delete` | `time_series.delete` |
 | Write datapoints | `insertDatapoints` / `ingest` / `ingestBinary` | `insert_datapoints` / `insert_from_lists` | `insert_datapoint` / `insert_datapoints` |
-| Read datapoints (raw and [aggregated](#retrieve-datapoints)) | `retrieve` / `retrieveAggregated` | `retrieve_datapoints` / `retrieve_latest_datapoints` | `retrieve_datapoints` / `retrieve_latest_datapoint` |
+| Read datapoints (raw and [aggregated](#retrieve-datapoints)) | `retrieve` / `retrieveAggregated` | `retrieve_datapoints` | `retrieve_datapoints` |
+| [Latest datapoint](#latest-datapoints) | `timeseries().latest` | `retrieve_latest_datapoints` | `retrieve_latest_datapoint` |
 | Delete datapoints | `deleteDatapoints` | `timeseries.delete_datapoints` | `time_series.delete_datapoints` |
 
 Java is the one with `ingest`, the chunking, parallelising, retrying path described above, and
-with [`ingestBinary` and `binaryBuffer`](#binary-ingest), the binary path. It is missing `list`
-and `update`, so reach for the endpoint there.
+with [`ingestBinary` and `binaryBuffer`](#binary-ingest), the binary path. It also has
+`timeseries().recommendValueType`, the [value-type hint](#value-type-hint).

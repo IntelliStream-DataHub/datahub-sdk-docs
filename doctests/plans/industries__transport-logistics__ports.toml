@@ -1,0 +1,33 @@
+page = "docs/industries/transport-logistics/ports.mdx"
+
+# Blocks on this page:
+#   python #1   L25    Set up demo data
+#   java   #1   L44    1. Watch crane productivity by the hour
+#   python #2   L62    1. Watch crane productivity by the hour
+#   rust   #1   L78    1. Watch crane productivity by the hour
+#   java   #2   L108   2. Flag yard congestion before it blocks moves
+#   python #3   L121   2. Flag yard congestion before it blocks moves
+#   rust   #2   L132   2. Flag yard congestion before it blocks moves
+#   python #4   L152   See the result
+
+[blocks]
+python = 4
+java = 2
+rust = 2
+
+[python]
+timeout = 600
+
+prologue = """
+from tutorial_support import Recorder
+
+# Placeholders the page leaves to the reader; a Recorder keeps what it is handed.
+compare_to_target = Recorder("compare_to_target")
+"""
+
+[owns]
+events = ["yard_congestion_b07_*"]
+timeseries = ["crane_qc_07_moves"]
+
+[expect]
+timeseries = ["crane_qc_07_moves"]

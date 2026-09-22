@@ -1,0 +1,41 @@
+page = "docs/industries/oil-and-gas/storage.mdx"
+
+# Blocks on this page:
+#   python #1   L26    Set up demo data
+#   java   #1   L49    1. Reconcile movement against measurement
+#   python #2   L75    1. Reconcile movement against measurement
+#   rust   #1   L95    1. Reconcile movement against measurement
+
+[blocks]
+python = 2
+java = 1
+rust = 1
+
+# The placeholder readings return the page's own worked numbers (a 3000 bbl fall
+# against 2500 bbl metered) so the discrepancy branch — the point of the page —
+# actually runs. Left at the default they would cancel to zero and the tutorial
+# would exit 0 having done nothing.
+[python]
+timeout = 600
+
+prologue = """
+import pandas as _pd
+
+# The reconciliation is "over one shift" — the page never says which.
+shift_start = _pd.Timestamp.now(tz="UTC") - _pd.Timedelta(hours=12)
+from tutorial_support import Recorder
+
+# Placeholders the page leaves to the reader; a Recorder keeps what it is handed.
+first_value = Recorder("first_value", returns=50000.0)
+latest = Recorder("latest", returns=47000.0)
+sum_over = Recorder("sum_over", returns=2500.0)
+tolerance = Recorder("tolerance", returns=100.0)
+
+"""
+
+[owns]
+events = ["inventory_discrepancy_t12_*"]
+timeseries = ["tank_t_12_deliveries_bbl", "tank_t_12_receipts_bbl", "tank_t_12_volume_bbl"]
+
+[expect]
+timeseries = ["tank_t_12_deliveries_bbl", "tank_t_12_receipts_bbl", "tank_t_12_volume_bbl"]

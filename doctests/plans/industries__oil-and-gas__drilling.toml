@@ -1,0 +1,47 @@
+page = "docs/industries/oil-and-gas/drilling.mdx"
+
+# Blocks on this page:
+#   python #1   L27    Set up demo data
+#   java   #1   L58    1. Stream the drilling signals live
+#   python #2   L81    1. Stream the drilling signals live
+#   rust   #1   L96    1. Stream the drilling signals live
+#   python #3   L139   See the result
+
+[blocks]
+python = 3
+java = 1
+rust = 1
+
+[python]
+timeout = 600
+
+prologue = """
+from tutorial_support import Recorder, feed, take
+
+# Placeholders the page leaves to the reader; a Recorder keeps what it is handed.
+influx_detected = Recorder("influx_detected")
+"""
+
+# The page's payoff is the listen loop, so it runs — bounded, not skipped. Two
+# declared substitutions make that possible: one starts a background writer so
+# messages actually arrive (the subscription names its series through a `channels`
+# variable, hence the literal list here), the other caps the loop at three messages
+# and 45 seconds. Both must keep matching the page, so a rewritten loop fails here
+# rather than hanging CI.
+[[python.replace]]
+find = """with client.subscriptions.listen(["rig_deepwater_1"]) as listener:"""
+repl = """with client.subscriptions.listen(["rig_deepwater_1"]) as listener:
+    feed(client, ["rig_dw1_flow_out_gpm", "rig_dw1_pit_volume_bbl"], points=40, every=0.3)"""
+
+[[python.replace]]
+find = """    for msg in listener:"""
+repl = """    for msg in take(listener, 3, 45):"""
+
+[owns]
+events = ["kick_detected_a12_*"]
+subscriptions = ["rig_deepwater_1"]
+timeseries = ["rig_dw1_flow_in_gpm", "rig_dw1_flow_out_gpm", "rig_dw1_pit_volume_bbl"]
+
+[expect]
+subscriptions = ["rig_deepwater_1"]
+timeseries = ["rig_dw1_flow_in_gpm", "rig_dw1_flow_out_gpm", "rig_dw1_pit_volume_bbl"]

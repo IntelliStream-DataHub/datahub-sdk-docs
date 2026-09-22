@@ -1,0 +1,12 @@
+// Gradle init script: print the datahub-java-sdk runtime classpath so the Java
+// runner can compile a doc snippet against the same jars an application would.
+// Used via `gradlew -I java-classpath.gradle :datahub-java-sdk:printSdkCp`.
+allprojects {
+    tasks.register("printSdkCp") {
+        doLast {
+            def cp = (configurations.findByName("runtimeClasspath")?.files ?: []) as List
+            cp += tasks.findByName("jar")?.archiveFile?.get()?.asFile
+            println "SDKCP=" + cp.findAll { it != null }.join(File.pathSeparator)
+        }
+    }
+}
