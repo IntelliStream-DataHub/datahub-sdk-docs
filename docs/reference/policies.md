@@ -38,6 +38,9 @@ DataWrapper<Policy> types = client.policies().listTypes();
 | `HAS_REQUIREMENT` | One data set | Marks a data set that must meet a compliance requirement. |
 | `NAMING_CONVENTION` | Tenant-wide, overridable per data set | Enforces the [external-id naming convention](./external-ids#the-naming-policy) at write time. Applies to resources and data sets; events are exempt. |
 
+Attaching a policy where its type does not allow is refused on create, over the whole batch,
+rather than accepted and quietly enforcing nothing.
+
 ## Read, create, update, delete
 
 ```java

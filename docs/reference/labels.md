@@ -45,12 +45,22 @@ client.labels().create(List.of(critical));
 
 A name that already exists is a `409`.
 
-`update` identifies each label by `id`, and the fields you send replace what is stored.
+`update` identifies each label by `id` or by `name`, and the fields you send replace what is
+stored. `id` wins when both are given. An item that carries neither is a `400`. Renaming is the
+one case that needs the `id`, since a name used as the lookup key cannot also be the new name.
 
 ```java
 LabelForm recolour = new LabelForm();
 recolour.setId(5677892L);
-recolour.setName("critical");            // required on the form
+recolour.setColor("#a11");
+client.labels().update(List.of(recolour));
+```
+
+By name instead, for a caller that never saw the synthetic id:
+
+```java
+LabelForm recolour = new LabelForm();
+recolour.setName("critical");
 recolour.setColor("#a11");
 client.labels().update(List.of(recolour));
 ```
