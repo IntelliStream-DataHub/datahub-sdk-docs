@@ -36,9 +36,40 @@ import intellistream_datahub_sdk
 client = intellistream_datahub_sdk.DataHubClient.from_env()
 """
 
-[owns]
-events = ["door_open"]
+# "Fold the stream" is one worked example across two fences: #5 fetches `findings`, #6 folds
+# it. The prose reads as a continuation, so the page is right — but `independent` gives each
+# fence its own program, and #6 then has no `findings`. This is #5's query verbatim; if it
+# stops matching, that is the page changing and this should change with it. An empty result is
+# fine — the fold still executes, which is what the fence is demonstrating.
+[[python.inject]]
+before = 6
+code = """
+findings = client.events.filter(
+    type="policy_finding",
+    sub_type="naming_snake_case",
+    limit=200)
+"""
 
-# The create example must leave its event behind.
-[expect]
-events = ["door_open"]
+# #7 is `client.events.create(events)` and the fence says what `events` is — `# list[Event]`,
+# the reader's own batch, exactly as the Java tab treats it. Nothing on the page builds it, so
+# the live run has to, in the shape #1 documents.
+[[python.inject]]
+before = 7
+code = """
+from datetime import datetime, timezone
+events = [intellistream_datahub_sdk.Event(
+    external_id=f"batch_ingest_{i}",
+    type="alarm",
+    event_time=datetime.now(timezone.utc)) for i in range(3)]
+"""
+
+[owns]
+# `batch_ingest_*`: the batch the injection above hands #7. Anything a fixture makes has to be
+# owned, or the sweep leaves it behind and the next run fails on a duplicate.
+events = ["door_open", "batch_ingest_*"]
+
+# No [expect]: the last fence on the page is `events.delete(["door_open"])`, so nothing this
+# page makes is meant to outlive the run — the same shape as reference__datasets. Expecting
+# `door_open` asserted that the create example ran, but the delete example ran too, and a
+# check that two fences cannot both satisfy is a check about the harness, not the page. The
+# proof it worked is that every fence executed cleanly.
