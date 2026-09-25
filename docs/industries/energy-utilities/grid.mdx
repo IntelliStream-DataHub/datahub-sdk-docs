@@ -144,6 +144,7 @@ for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
 <TabItem value="rust" label="Rust">
 
 ```rust
+use intellistream_datahub_sdk::generic::{DataWrapper, RetrieveFilter};
 use chrono::Utc;
 
 let filter = RetrieveFilter {
@@ -196,6 +197,7 @@ client.events.create([intellistream_datahub_sdk.Event(
 <TabItem value="rust" label="Rust">
 
 ```rust
+use intellistream_datahub_sdk::events::Event;
 use chrono::Utc;
 
 let mut event = Event::new(

@@ -229,12 +229,13 @@ if any(float(dp.value) < 80.0 for dp in points.get_datapoints()):
 <TabItem value="rust" label="Rust">
 
 ```rust
+use intellistream_datahub_sdk::events::Event;
 use chrono::Utc;
 
 let points = api.time_series.retrieve_datapoints(&last_hour("pump_intake_pressure_bar")).await?
     .get_items().remove(0);
 let low = points.datapoints.iter()
-    .any(|p| p.value.as_deref().and_then(|v| v.parse::<f64>().ok()).unwrap_or(99.0) < 80.0);
+    .any(|p| p.value.unwrap_or(99.0) < 80.0);
 if low {
     let mut event = Event::new(
         format!("esp_anomaly_a12_{}", Utc::now().timestamp()),

@@ -112,8 +112,7 @@ events and label each `(pump, day)` accordingly.
 # failures: DataFrame of (pump, failed_on), pulled from /events (type = esp_failure)
 failures = pd.DataFrame([
     {"pump": e.metadata.get("pump"), "failed_on": pd.to_datetime(e.event_time, utc=True)}
-    for e in client.events.filter(intellistream_datahub_sdk.EventFilter(
-        intellistream_datahub_sdk.BasicEventFilter(type="esp_failure"), limit=1000))])
+    for e in client.events.filter(type="esp_failure", limit=1000)])
 
 # one feature row per pump per day across the history you have
 training_grid = [(p, d) for p in ["pump_esp_a12"]

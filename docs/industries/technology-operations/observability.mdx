@@ -199,19 +199,18 @@ DataWrapper<EventModel> breaches = client.events().filter(retriever);
 <TabItem value="python" label="Python">
 
 ```python
-breaches = client.events.filter(intellistream_datahub_sdk.EventFilter(
-    basic_filter=intellistream_datahub_sdk.BasicEventFilter(type="slo_breach"), limit=200))
+breaches = client.events.filter(type="slo_breach", limit=200)
 ```
 
 </TabItem>
 <TabItem value="rust" label="Rust">
 
 ```rust
-use intellistream_datahub_sdk::filters::{BasicEventFilter, EventFilter};
+use intellistream_datahub_sdk::filters::{EventFilter, EventFilterForm};
 
-let mut basic = BasicEventFilter::default();
+let mut basic = EventFilter::default();
 basic.set_type(&["slo_breach"]);
-let mut filter = EventFilter::default();
+let mut filter = EventFilterForm::default();
 filter.set_filter(basic);
 filter.set_limit(200);
 let breaches = api.events.filter(&filter).await?;

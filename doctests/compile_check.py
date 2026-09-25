@@ -554,13 +554,13 @@ def check_java(units: list[Unit], workdir: Path, classpath: str, timeout: int = 
             u.source = u.source.replace(_SDK_IMPORTS_MARK, "\n".join(imports), 1)
             u.segments = [replace(s, first_line=s.first_line + shift) for s in u.segments]
 
-    out: dict[str, list[Diagnostic]] = {u.name: [] for u in units}
+    first: dict[str, list[tuple[int, Diagnostic]]] = {u.name: [] for u in units}
     stubs: dict[str, dict[int, list[tuple[str, str]]]] = {}  # unit -> line -> (kind, name)
     for e in _javac({f"{u.name}.java": u for u in units}, workdir, classpath, timeout):
         symbol, location = e.field("symbol"), e.field("location")
         text = e.message + (f": {symbol}" if symbol else "") + (f" (in {location})" if symbol and location else "")
         name = java_placeholder(e.message, symbol, location, e.unit.name)
-        out[e.unit.name].append(Diagnostic(e.unit.page, "java", e.unit.locate(e.line), text, name))
+        first[e.unit.name].append((e.line, Diagnostic(e.unit.page, "java", e.unit.locate(e.line), text, name)))
         if name and e.unit.program is None:
             kind = symbol.split()[0]
             stubs.setdefault(e.unit.name, {}).setdefault(e.line, []).append((kind, name))
@@ -589,16 +589,36 @@ def check_java(units: list[Unit], workdir: Path, classpath: str, timeout: int = 
         lines = [ln + " @SuppressWarnings(\"unchecked\") static <T> T __doctestAny(Object... ignored) { return null; }"
                  if ln.startswith(f"public class {u.name} {{") else ln for ln in lines]
         stubbed[f"{u.name}.java"] = replace(u, source="\n".join(lines))
+    survives: dict[str, set[int]] = {}
+    extra: dict[str, list[Diagnostic]] = {}
     if stubbed:
         for e in _javac(stubbed, workdir / "stubbed", classpath, timeout):
-            if e.line not in stubs[e.unit.name] or not _lookup_failed(e):
+            if e.line not in stubs[e.unit.name]:
+                continue
+            survives.setdefault(e.unit.name, set()).add(e.line)
+            if not _lookup_failed(e):
                 continue
             symbol, location = e.field("symbol"), e.field("location")
             text = (e.message + (f": {symbol} (in {location})" if symbol else "")
                     + " [with the page's reader-supplied names stubbed]")
-            diag = Diagnostic(e.unit.page, "java", e.unit.locate(e.line), text)
-            if all((d.where, d.message) != (diag.where, diag.message) for d in out[e.unit.name]):
-                out[e.unit.name].append(diag)
+            extra.setdefault(e.unit.name, []).append(Diagnostic(e.unit.page, "java", e.unit.locate(e.line), text))
+
+    out: dict[str, list[Diagnostic]] = {}
+    for unit in units:
+        kept = []
+        for line, diag in first[unit.name]:
+            # An error on a line whose reader-supplied names were stubbed, which then goes away
+            # once they are stubbed, was about the placeholder and not about the page:
+            # `ingest(Map.of("x", readings))` cannot infer its map type while `readings` is
+            # unknown, and reports as a type mismatch on a call the reader would make correctly.
+            near_stub = any(abs(line - stubbed_line) <= 3 for stubbed_line in stubs.get(unit.name, {}))
+            if (diag.placeholder is None and near_stub
+                    and line not in survives.get(unit.name, set())):
+                continue
+            kept.append(diag)
+        seen = {(d.where, d.message) for d in kept}
+        kept += [d for d in extra.get(unit.name, []) if (d.where, d.message) not in seen]
+        out[unit.name] = kept
     return out
 
 

@@ -375,7 +375,7 @@ because the stored points would no longer parse; create a new series instead.
 import ai.intellistream.datahub.timeseries.UpdateTimeseries;
 
 DataWrapper<Timeseries> newest = client.timeseries().list(100);
-DataWrapper<Timeseries> inSet = client.timeseries().list(100, "engine_data");
+DataWrapper<Timeseries> inSet = client.timeseries().list(100, 5677892L);   // the data set's numeric id
 
 UpdateTimeseries change = new UpdateTimeseries().setExternalId("engine_temperature");
 change.getUpdate().getDescription().set("Engine block temperature, port side");
@@ -799,7 +799,7 @@ It is much cheaper than [retrieve](#retrieve-datapoints) with a limit of one: th
 is served from the cache the ingest path writes, not from a range scan.
 
 ```java
-DataWrapper<DataCollection<DatapointDTO>> now = client.timeseries().latest(List.of(
+DataWrapper<DataCollection<DatapointString>> now = client.timeseries().latest(List.of(
         IdCollection.createFromExternalId("engine_temperature"),
         IdCollection.createFromExternalId("engine_pressure")));
 ```

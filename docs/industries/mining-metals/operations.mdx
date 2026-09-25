@@ -83,7 +83,7 @@ use chrono::Utc;
 let points = api.time_series.retrieve_datapoints(&last_hour("truck_785_oil_pressure_kpa")).await?
     .get_items().remove(0);
 let low = points.datapoints.iter()
-    .any(|p| p.value.as_deref().and_then(|v| v.parse::<f64>().ok()).unwrap_or(999.0) < 250.0);
+    .any(|p| p.value.unwrap_or(999.0) < 250.0);
 if low {
     let mut warning = Event::new(
         format!("equipment_warning_785_{}", Utc::now().timestamp()),

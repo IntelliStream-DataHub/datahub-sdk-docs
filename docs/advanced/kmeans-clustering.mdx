@@ -120,8 +120,7 @@ for asset, d in zip(assets, dist):
             event_time=pd.Timestamp.now(tz="UTC"),
             metadata={"asset": asset, "cohort": str(int(km.labels_[assets.index(asset)]))})])
 
-outliers = list(client.events.filter(intellistream_datahub_sdk.EventFilter(
-    basic_filter=intellistream_datahub_sdk.BasicEventFilter(type="peer_outlier"), limit=100)))
+outliers = list(client.events.filter(type="peer_outlier", limit=100))
 print(f"{len(outliers)} peer outlier(s) on record")
 ```
 

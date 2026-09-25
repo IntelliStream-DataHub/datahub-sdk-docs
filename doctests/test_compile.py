@@ -68,6 +68,13 @@ CONTROLS = {
                 placeholders=frozenset({"readerValue", "recordReading"})),
         Control("missing_method_with_reader_argument", "client.timeseries().noSuchMethodForDoctest(readerValue);",
                 hard_lines=(1,), placeholders=frozenset({"readerValue"})),
+        # The other half of that pair: a call the reader would make correctly, which javac cannot
+        # type while one argument is unknown. `Map.of("x", readings)` cannot infer its value type,
+        # and the error lands on the ingest call as a mismatch. Stubbing the name resolves it, so
+        # it is the placeholder's error, not the page's.
+        Control("inference_blocked_by_reader_argument",
+                'client.timeseries().ingest(Map.of("x", readerReadings));',
+                placeholders=frozenset({"readerReadings"})),
     ],
     "rust": [
         Control("compiles", "use intellistream_datahub_sdk::timeseries::TimeSeries;\n"

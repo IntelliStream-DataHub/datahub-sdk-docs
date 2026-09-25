@@ -518,9 +518,9 @@ search query itself, everything else is applied to the hits afterwards.
 <TabItem value="java" label="Java">
 
 ```java
-ResourceSearch search = new ResourceSearch();
+SearchBody<ResourceFilter> search = new SearchBody<>();
 search.setLimit(10);
-search.getSearch().setQuery("pump");
+search.setSearch(new SearchForm("pump"));
 DataWrapper<NodeModel> matches = client.resources().search(search);
 ```
 
