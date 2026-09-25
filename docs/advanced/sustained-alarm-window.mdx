@@ -287,7 +287,7 @@ SERIES = "pump_p101_discharge_bar"
 points = client.timeseries.retrieve_datapoints(intellistream_datahub_sdk.RetrieveFilter(
     ts=SERIES,
     start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=7),
-    end=pd.Timestamp.now(tz="UTC")))[0].get_datapoints()
+    end=pd.Timestamp.now(tz="UTC"), limit=10_000))[0].get_datapoints()
 
 readings = [(dp.timestamp, float(dp.value)) for dp in points]
 crossings = sum(1 for a, b in zip(readings, readings[1:])
@@ -314,6 +314,7 @@ let filter = RetrieveFilter {
     external_id: Some(SERIES.into()),
     start: Some(Utc::now() - Duration::hours(7)),
     end: Some(Utc::now()),
+    limit: Some(10_000),
     ..Default::default()
 };
 let series = api.time_series

@@ -17,8 +17,9 @@ What we solve here is device availability and fast, complete recall tracing.
 
 ## Set up demo data
 
-New workspace? Run this once (Python) to create three pumps of the same model in a ward —
-so the recall walk in step 2 returns the full pull list. Safe to re-run.
+New workspace? Run this once (Python) to create the ward, the pump model and two of its
+pumps; step 1 below adds the third, so the recall walk in step 2 returns the full pull list.
+Safe to re-run.
 
 ```python
 import intellistream_datahub_sdk
@@ -28,7 +29,7 @@ client = intellistream_datahub_sdk.DataHubClient.from_env()
 nodes = [intellistream_datahub_sdk.Resource(external_id="model_acme_x200", name="Acme X200 infusion pump", labels=["PumpModel"]),
          intellistream_datahub_sdk.Resource(external_id="ward_icu", name="Intensive care", labels=["Ward"])]
 edges = []
-for u in ["3391", "3392", "3401"]:
+for u in ["3392", "3401"]:
     nodes.append(intellistream_datahub_sdk.Resource(external_id=f"pump_icu_{u}", name=f"Infusion pump {u}", labels=["Pump"]))
     edges += [intellistream_datahub_sdk.RelForm.by_external_ids(f"pump_icu_{u}", "ward_icu", "located_in"),
               intellistream_datahub_sdk.RelForm.by_external_ids(f"pump_icu_{u}", "model_acme_x200", "is_model")]

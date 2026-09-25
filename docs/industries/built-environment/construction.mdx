@@ -18,18 +18,14 @@ This scenario pairs **document management** with safety events on a modelled sit
 
 ## Set up demo data
 
-New workspace? Run this once (Python) to create the site graph and a crane-utilisation
-series. (The drawing upload in step 1 needs a local file — any PDF works.) Safe to re-run.
+New workspace? Run this once (Python) to create a crane-utilisation series; step 1 below
+models the site itself. (The drawing upload there needs a local file, any PDF works.) Safe to
+re-run.
 
 ```python
 import intellistream_datahub_sdk, numpy as np, pandas as pd
 
 client = intellistream_datahub_sdk.DataHubClient.from_env()
-
-client.resources.create(
-    [intellistream_datahub_sdk.Resource(external_id=x, name=x, labels=[lbl]) for x, lbl in
-     [("site_harbour_tower", "Site"), ("zone_level_12", "Zone")]],
-    [intellistream_datahub_sdk.RelForm.by_external_ids("site_harbour_tower", "zone_level_12", "contains")])
 
 client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id="crane_02_hours", name="Crane 02 hours", unit="h", value_type="float")])
 idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=14, freq="1d")
