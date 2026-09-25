@@ -108,8 +108,10 @@ The Java client adds six more services:
 :::note Two endpoints no client wraps, on purpose
 `GET /stats` is internal to the console and marked hidden: it is not part of the published
 contract, so nothing should call it. The browser datapoint tail
-`/timeseries/datapoints/listen` authenticates with a `?token=` query parameter, which is for a
-page that cannot set a header. Server-side code wants the durable equivalent instead,
+`/timeseries/datapoints/listen` is for a page that cannot set a header, so it takes the token
+as a `datahub.bearer.<jwt>` WebSocket subprotocol, offered alongside `datahub.v1` for the
+server to echo back. It used to take a `?token=` query parameter; that is no longer read, and
+a client still sending one is closed as unauthenticated. Server-side code wants the durable equivalent instead,
 [`subscriptions().listen`](./subscriptions#live-delivery), which authenticates the upgrade with
 the usual `Authorization` header and survives a reconnect.
 :::
