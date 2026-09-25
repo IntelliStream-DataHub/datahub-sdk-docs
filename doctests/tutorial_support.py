@@ -221,3 +221,27 @@ def bearer_token() -> str:
         headers={"Content-Type": "application/x-www-form-urlencoded"})
     with urllib.request.urlopen(request, timeout=30) as response:
         return json.load(response)["access_token"]
+
+def ensure_series(client, *external_ids: str, unit: str = "celsius") -> None:
+    """Create the series an example writes to, when the example does not create it itself.
+
+    A reference page's fences are alternatives, so the harness sweeps between them and each
+    one meets a clean backend — the way a reader meets it. That works while every fence
+    creates what it touches. `docs/reference/timeseries.md` breaks the pattern: its create
+    example is one section and the write, retrieve and delete-datapoint examples several
+    sections below all write to the `engine_temperature` it made, which by then is gone.
+
+    So the plan supplies the precondition the prose states rather than the page repeating a
+    create in every fence. Already-exists is the desired state, so a 409 is ignored; anything
+    else is the caller's problem and is raised.
+    """
+    import intellistream_datahub_sdk as sdk
+
+    for external_id in external_ids:
+        try:
+            client.timeseries.create([sdk.TimeSeries(
+                external_id=external_id, name=external_id.replace("_", " ").capitalize(),
+                unit=unit, value_type="float")])
+        except Exception as exc:
+            if "already exists" not in str(exc):
+                raise

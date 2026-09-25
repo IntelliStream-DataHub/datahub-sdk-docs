@@ -29,6 +29,22 @@ import intellistream_datahub_sdk
 client = intellistream_datahub_sdk.DataHubClient.from_env()
 """
 
+# #2 writes to `book_value_usd`, and the prose above it says why Python cannot run it alone:
+# "Python cannot create a `numeric` series … Create it from Java or Rust, then write to it
+# from Python." The Python scenario is the only one that runs live here, so the series never
+# exists and the insert answers 404 — the page is right and the run has no way to satisfy it.
+# It comes back the moment there is a Java or Rust scenario to create the series first; until
+# then the call itself is still checked by the API-surface tier.
+#
+# #5 is the delete example, and it deletes `engine_temperature` — which #6 through #10 then
+# write to and read back. `independent` gives each fence its own program, but they still run
+# in order against one backend, so the delete really does remove what the later examples need.
+# That is the conflict the note above says a reader never meets: on a reference page the
+# fences are alternatives, not a sequence. Excluding the create example instead would leave
+# the page's most important call untested, and a prologue cannot both create the series for
+# #6 and leave it absent for #1.
+exclude = [2, 5]
+
 [java]
 disabled = "Java scenario not written yet."
 # Independent examples, as for Python. #16 is a list of IngestResult's method signatures, not
@@ -38,8 +54,50 @@ disabled = "Java scenario not written yet."
 independent = true
 exclude = [16]
 
+# #6 through #10 write to, retrieve from and delete datapoints on `engine_temperature` — the
+# series the create example makes, sections earlier. Independent fences are swept apart, so by
+# the time these run it is gone and the api answers 404. The page is right that they belong to
+# one running example; what it does not say is that each fence has to stand alone, which is the
+# plan's job to supply. #8 writes a second series alongside it.
+[[python.inject]]
+before = 6
+code = """
+from tutorial_support import ensure_series
+ensure_series(client, "engine_temperature")
+"""
+
+[[python.inject]]
+before = 7
+code = """
+from tutorial_support import ensure_series
+ensure_series(client, "engine_temperature")
+"""
+
+[[python.inject]]
+before = 8
+code = """
+from tutorial_support import ensure_series
+ensure_series(client, "engine_temperature", "engine_rpm")
+"""
+
+[[python.inject]]
+before = 9
+code = """
+from tutorial_support import ensure_series
+ensure_series(client, "engine_temperature")
+"""
+
+[[python.inject]]
+before = 10
+code = """
+from tutorial_support import ensure_series
+ensure_series(client, "engine_temperature")
+"""
+
 [owns]
-timeseries = ["book_value_usd", "engine_temperature"]
+timeseries = ["book_value_usd", "engine_temperature", "engine_rpm"]
 
 [expect]
-timeseries = ["book_value_usd", "engine_temperature"]
+# Not `book_value_usd`: no program that runs here creates it (see the [python] exclude), and
+# expecting an entity nothing creates asserts the state of the backend, not the page.
+timeseries = ["engine_temperature"]

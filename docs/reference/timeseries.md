@@ -470,7 +470,7 @@ import pandas as pd
 client.timeseries.insert_from_lists(
     timestamps=pd.date_range("2026-01-01", periods=3, freq="h", tz="UTC"),
     values=[92.4, 92.6, 92.1],
-    ts=ts)
+    ts="engine_temperature")
 ```
 
 </TabItem>
@@ -528,7 +528,7 @@ import numpy as np, pandas as pd
 client.timeseries.insert_from_lists(
     timestamps=pd.date_range("2026-01-01", periods=1_000_000, freq="s", tz="UTC"),
     values=np.random.rand(1_000_000),
-    ts=ts)
+    ts="engine_temperature")
 ```
 
 </TabItem>
