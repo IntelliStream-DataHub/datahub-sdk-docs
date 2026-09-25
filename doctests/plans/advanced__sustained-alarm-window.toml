@@ -40,6 +40,11 @@ repl = """    for msg in take(listener, 3, 45):"""
 disabled = "Java scenario not written yet."
 only = [1, 2, 3]
 
+[[python.replace]]
+find = "found = list(client.events.filter(type=\"sustained_high\", limit=100))"
+repl = """import time as _doctest_time; _doctest_time.sleep(3)   # the event index trails the create
+found = list(client.events.filter(type=\"sustained_high\", limit=100))"""
+
 [owns]
 subscriptions = ["pump_p101"]
 events = ["sustained_high_*"]

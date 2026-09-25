@@ -16,6 +16,10 @@ java = 2
 rust = 2
 
 [python]
+# The demo block and step 1 create the same nodes, and a reader does one or the other. Here the
+# demo block is what runs: it seeds the rest of the graph and the datapoints the later blocks
+# read, which step 1 alone does not. Step 1's own call is the same shape, and is compiled.
+exclude = [2]
 timeout = 600
 
 [owns]

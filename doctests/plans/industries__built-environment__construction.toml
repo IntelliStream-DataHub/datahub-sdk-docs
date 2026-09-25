@@ -17,6 +17,10 @@ rust = 2
 [python]
 timeout = 600
 
+# ONCE PER STACK. Step 1 uploads a drawing, and a deleted file keeps its path (delete moves it
+# to trash and nothing purges it), so a second run on the same stack fails with "File with
+# submitted path or externalId already exists". The same limitation is recorded in
+# reference__files.toml. CI boots a fresh stack, where the page runs as written.
 [owns]
 events = ["safety_incident_l12_*"]
 files = ["drawing_level_12_structural_rev_c"]

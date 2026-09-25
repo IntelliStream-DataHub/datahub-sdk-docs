@@ -19,6 +19,11 @@ timeout = 600
 # composed into all thirteen recipes.
 requires_once = ["advanced__generate-sample-data"]
 
+[[python.replace]]
+find = "# the seeded fault sits in the last ten hours, so the deviation must be on record"
+repl = """import time as _doctest_time; _doctest_time.sleep(3)   # the event index trails the create
+# the seeded fault sits in the last ten hours, so the deviation must be on record"""
+
 [owns]
 events = ["process_deviation_cdu1_*"]
 
