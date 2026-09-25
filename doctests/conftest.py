@@ -8,6 +8,7 @@ test would make a partial run's report inconsistent with itself.
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -19,6 +20,9 @@ import scenario
 from docblocks import EXECUTABLE
 
 REPO = Path(__file__).parent.parent
+
+# The api answers a tripped quota with RFC 9457 and a 429; test_tutorials reads the same shape.
+_RATE_LIMITED = re.compile(r"rate-limit-exceeded|429 Too Many Requests")
 
 
 def pytest_addoption(parser):
@@ -124,6 +128,11 @@ def seed(env, cli, tmp_path_factory):
         backend.sweep(cli, owns)
         workdir = tmp_path_factory.mktemp(f"seed-{slug}")
         result = runners.RUNNERS[lang](source, line_map, workdir, env, run.lang_plan)
+
+        if not result.ok and _RATE_LIMITED.search(result.stderr):
+            # The quota is the stack's, not the page's: say so once, and skip what depends on it.
+            pytest.skip(f"the stack rate-limited the seeding page {run.plan.page} "
+                        "(429, rate-limit-exceeded), so its data could not be planted")
 
         if not result.ok:
             done[key] = (

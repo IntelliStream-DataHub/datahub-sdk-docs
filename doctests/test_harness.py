@@ -390,3 +390,17 @@ def test_an_awaited_call_is_checked_against_the_async_client():
                                    'units = client.units.list()\n')
     assert ("units", "by_external_id", True) in calls
     assert ("units", "list", False) in calls
+
+
+def test_a_rate_limited_run_is_not_a_broken_page():
+    """A 429 says the stack's quota was used up, not that the page is wrong.
+
+    The seeding pages make hundreds of requests, so a suite run can trip a per-user limit and
+    then report every page after it as broken documentation.
+    """
+    import test_tutorials
+
+    assert test_tutorials._RATE_LIMITED.search(
+        'DataHubException: {"type":"https://intellistream.ai/errors/rate-limit-exceeded",'
+        '"status":429,"detail":"This user has used its 600 requests per minute."}')
+    assert not test_tutorials._RATE_LIMITED.search("DataHubException: 409 Conflict, already exists")

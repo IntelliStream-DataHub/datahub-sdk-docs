@@ -43,6 +43,9 @@ FIXTURE_SLUGS = {
 # back into the doc line the reader would be looking at.
 _PY_FRAME = re.compile(r'File "[^"]*tutorial\.py", line (\d+)')
 
+# The api answers a tripped quota with RFC 9457 and a 429.
+_RATE_LIMITED = re.compile(r"rate-limit-exceeded|429 Too Many Requests")
+
 
 def _cases():
     """(slug, lang) for every language a plan actually declares a scenario for."""
@@ -188,6 +191,14 @@ def test_tutorial_runs_end_to_end(slug, lang, langs, cli, env, seed, pytestconfi
     result = next((r for r in results if not r.ok), results[0])
     source, line_map = next(((s_, l_) for (s_, l_), r in zip(programs, results) if not r.ok),
                             programs[0])
+
+    # A quota is the stack's policy, not the page's mistake. The seeding pages alone make
+    # hundreds of requests, so a suite run against a stack someone else is also using can trip
+    # the per-user limit, and every page after it would be reported as broken documentation.
+    if not result.ok and _RATE_LIMITED.search(result.stderr):
+        pytest.skip(f"{plan.page} [{lang}]: the stack rate-limited this run "
+                    "(429, datahub.limits rate-limit-exceeded), so nothing here is a statement "
+                    "about the page. Re-run when the window resets, or raise the tenant's limit.")
 
     try:
         assert result.ok, _explain(plan, lang, result)
