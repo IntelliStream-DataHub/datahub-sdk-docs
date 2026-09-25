@@ -593,10 +593,11 @@ def check_java(units: list[Unit], workdir: Path, classpath: str, timeout: int = 
     extra: dict[str, list[Diagnostic]] = {}
     if stubbed:
         for e in _javac(stubbed, workdir / "stubbed", classpath, timeout):
-            if e.line not in stubs[e.unit.name]:
-                continue
+            # Every line that still errors with the stubs in place, not only the stubbed ones:
+            # an error one line above a placeholder is the page's, and dropping it because this
+            # pass "did not repeat it" would hide a removed type on a declaration.
             survives.setdefault(e.unit.name, set()).add(e.line)
-            if not _lookup_failed(e):
+            if e.line not in stubs[e.unit.name] or not _lookup_failed(e):
                 continue
             symbol, location = e.field("symbol"), e.field("location")
             text = (e.message + (f": {symbol} (in {location})" if symbol else "")

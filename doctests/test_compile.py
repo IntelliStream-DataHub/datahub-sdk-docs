@@ -75,6 +75,13 @@ CONTROLS = {
         Control("inference_blocked_by_reader_argument",
                 'client.timeseries().ingest(Map.of("x", readerReadings));',
                 placeholders=frozenset({"readerReadings"})),
+        # And the line that keeps that suppression honest. A removed type sitting next to a
+        # placeholder is still the page's error: the stubbed pass resolves the placeholder and
+        # the type is *still* missing. Suppressing by proximity alone loses it, which is how a
+        # renamed SDK type on a declaration once slipped through.
+        Control("missing_type_beside_reader_value",
+                "double n = readerValue;\nNoSuchTypeForDoctest t = null;",
+                hard_lines=(2,), placeholders=frozenset({"readerValue"})),
     ],
     "rust": [
         Control("compiles", "use intellistream_datahub_sdk::timeseries::TimeSeries;\n"
