@@ -51,12 +51,12 @@ on a host fan out to the services it affects.
 <TabItem value="java" label="Java">
 
 ```java
-Asset service = new Asset();
+Resource service = new Resource();
 service.setExternalId("service_checkout");
 service.setName("Checkout service");
 service.setLabels(List.of("Service"));
 
-Asset host = new Asset();
+Resource host = new Resource();
 host.setExternalId("host_web_01");
 host.setName("web-01");
 host.setLabels(List.of("Host"));

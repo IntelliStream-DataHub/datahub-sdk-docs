@@ -58,17 +58,17 @@ Modeling it as a graph lets you walk from a field down to any individual sensor.
 <TabItem value="java" label="Java">
 
 ```java
-Asset field = new Asset();
+Resource field = new Resource();
 field.setExternalId("field_north_sea");
 field.setName("North Sea field");
 field.setLabels(List.of("Field"));
 
-Asset well = new Asset();
+Resource well = new Resource();
 well.setExternalId("well_a12");
 well.setName("Well A-12");
 well.setLabels(List.of("Well"));
 
-Asset pump = new Asset();
+Resource pump = new Resource();
 pump.setExternalId("pump_esp_a12");
 pump.setName("ESP — Well A-12");
 pump.setLabels(List.of("Pump"));
