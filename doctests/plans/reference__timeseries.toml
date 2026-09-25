@@ -8,9 +8,9 @@ page = "docs/reference/timeseries.md"
 #   java #16 #17 IngestResult (#16 is a signature listing, excluded below)
 
 [blocks]
-python = 9
+python = 10
 java = 17
-rust = 9
+rust = 10
 
 [python]
 timeout = 600

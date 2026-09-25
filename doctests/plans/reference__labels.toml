@@ -7,7 +7,7 @@ page = "docs/reference/labels.md"
 #   java #4  L70   Delete
 
 [blocks]
-java = 4
+java = 5
 
 # Java only: the page shows no Python or Rust, so there is nothing to run for the language the
 # live tier covers. The blocks are compiled.
