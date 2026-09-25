@@ -159,13 +159,14 @@ client.events.create([intellistream_datahub_sdk.Event(
 use intellistream_datahub_sdk::events::Event;
 use chrono::Utc;
 
-let mut incident = Event::new(format!("safety_incident_l12_{}", Utc::now().timestamp()));
-incident.r#type = Some("safety_incident".into());
+let mut incident = Event::new(
+    format!("safety_incident_l12_{}", Utc::now().timestamp()),
+    "safety_incident".into(),
+    Utc::now());
 incident.sub_type = Some("near_miss".into());
 incident.status = Some("open".into());
 incident.add_metadata("zone".into(), "zone_level_12".into());
 incident.add_metadata("category".into(), "dropped_object".into());
-incident.set_event_time(Utc::now());
 api.events.create(&vec![incident]).await?;
 ```
 

@@ -198,13 +198,14 @@ client.events.create([intellistream_datahub_sdk.Event(
 ```rust
 use chrono::Utc;
 
-let mut event = Event::new(format!("feeder_overload_f12_{}", Utc::now().timestamp()));
-event.r#type = Some("feeder_overload".into());
+let mut event = Event::new(
+    format!("feeder_overload_f12_{}", Utc::now().timestamp()),
+    "feeder_overload".into(),
+    Utc::now());
 event.status = Some("open".into());
 event.add_metadata("feeder".into(), "feeder_f12".into());
 event.add_metadata("peak_mw".into(), "14.8".into());
 event.add_metadata("rating_mw".into(), "12.0".into());
-event.set_event_time(Utc::now());
 api.events.create(&vec![event]).await?;
 ```
 

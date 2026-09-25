@@ -90,7 +90,7 @@ let filter = RetrieveFilter {
 };
 let series = api.time_series
     .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?
-    .get_items().remove(0);
+    .get_items_mut().remove(0);
 let monthly: f64 = series.datapoints.iter()
     .filter_map(|p| p.sum).sum();
 ```
@@ -135,13 +135,14 @@ client.events.create([intellistream_datahub_sdk.Event(
 use intellistream_datahub_sdk::events::Event;
 use chrono::Utc;
 
-let mut exceedance = Event::new(format!("flaring_exceedance_north_{}", Utc::now().timestamp()));
-exceedance.r#type = Some("flaring_exceedance".into());
+let mut exceedance = Event::new(
+    format!("flaring_exceedance_north_{}", Utc::now().timestamp()),
+    "flaring_exceedance".into(),
+    Utc::now());
 exceedance.status = Some("open".into());
 exceedance.add_metadata("site".into(), "platform_north".into());
 exceedance.add_metadata("flared_m3".into(), "142000".into());
 exceedance.add_metadata("permit_m3".into(), "120000".into());
-exceedance.set_event_time(Utc::now());
 api.events.create(&vec![exceedance]).await?;
 ```
 

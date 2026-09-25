@@ -139,9 +139,9 @@ let lot_b = api.resources.fetch_related(
     &RelatedResourcesForm::from_external_id("lot_22863").with_depth(6)).await?;
 
 let tools_a: HashSet<&str> = lot_a.nodes().iter()
-    .map(|n| n.external_id.as_str()).filter(|id| id.starts_with("tool_")).collect();
+    .map(|n| n.external_id()).filter(|id| id.starts_with("tool_")).collect();
 let suspect: Vec<&str> = lot_b.nodes().iter()
-    .map(|n| n.external_id.as_str()).filter(|id| tools_a.contains(id)).collect();
+    .map(|n| n.external_id()).filter(|id| tools_a.contains(id)).collect();
 // suspect contains "tool_etch_07"
 ```
 

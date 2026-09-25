@@ -137,11 +137,11 @@ let impacted = api.resources.fetch_related(
     &RelatedResourcesForm::from_external_id("lot_acme_8842").with_depth(10)).await?;
 
 for node in impacted.nodes() {
-    if node.external_id.starts_with("shipment_") {
-        println!("recall shipment: {}", node.external_id);
+    if node.external_id().starts_with("shipment_") {
+        println!("recall shipment: {}", node.external_id());
     }
-    if node.external_id.starts_with("product_") {
-        println!("affected product: {}", node.external_id);
+    if node.external_id().starts_with("product_") {
+        println!("affected product: {}", node.external_id());
     }
 }
 ```

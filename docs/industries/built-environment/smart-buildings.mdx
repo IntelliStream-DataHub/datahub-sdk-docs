@@ -92,12 +92,13 @@ use chrono::Utc;
 let mut listener = api.subscriptions.listen(&["tower_a_comfort"]).await?;
 while let Some(Ok(msg)) = listener.next().await {
     if outside_comfort(&msg.payload) {              // temp or CO2 out of band
-        let mut alert = Event::new(format!("comfort_alert_l8_{}", Utc::now().timestamp()));
-        alert.r#type = Some("comfort_alert".into());
+        let mut alert = Event::new(
+            format!("comfort_alert_l8_{}", Utc::now().timestamp()),
+            "comfort_alert".into(),
+            Utc::now());
         alert.status = Some("open".into());
         alert.add_metadata("zone".into(), "zone_l8_open_plan".into());
         alert.add_metadata("co2_ppm".into(), "1180".into());
-        alert.set_event_time(Utc::now());
         api.events.create(&vec![alert]).await?;
     }
     listener.ack(&[msg.message_id.as_str()]).await?;

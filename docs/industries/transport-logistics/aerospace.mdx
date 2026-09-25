@@ -156,8 +156,8 @@ let affected = api.resources.fetch_related(
     &RelatedResourcesForm::from_external_id("part_type_hp_47").with_depth(3)).await?;
 
 for node in affected.nodes() {
-    if node.external_id.starts_with("aircraft_") {
-        println!("inspect: {}", node.external_id);
+    if node.external_id().starts_with("aircraft_") {
+        println!("inspect: {}", node.external_id());
     }
 }
 ```

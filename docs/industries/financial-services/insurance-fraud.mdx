@@ -129,8 +129,8 @@ let ring = api.resources.fetch_related(
     &RelatedResourcesForm::from_external_id("claim_88421").with_depth(4)).await?;
 
 for node in ring.nodes() {
-    if node.external_id.starts_with("claim_") && node.external_id != "claim_88421" {
-        println!("linked claim: {}", node.external_id);
+    if node.external_id().starts_with("claim_") && node.external_id() != "claim_88421" {
+        println!("linked claim: {}", node.external_id());
     }
 }
 ```

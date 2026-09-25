@@ -149,9 +149,9 @@ let c1 = api.resources.fetch_related(
     &RelatedResourcesForm::from_external_id("cell_oslo_4412").with_depth(4)).await?;
 let c2 = api.resources.fetch_related(
     &RelatedResourcesForm::from_external_id("cell_oslo_4418").with_depth(4)).await?;
-let n1: HashSet<&str> = c1.nodes().iter().map(|n| n.external_id.as_str()).collect();
+let n1: HashSet<&str> = c1.nodes().iter().map(|n| n.external_id()).collect();
 let shared: Vec<&str> = c2.nodes().iter()
-    .map(|n| n.external_id.as_str()).filter(|id| n1.contains(id)).collect();
+    .map(|n| n.external_id()).filter(|id| n1.contains(id)).collect();
 // shared contains "backhaul_link_88"
 ```
 

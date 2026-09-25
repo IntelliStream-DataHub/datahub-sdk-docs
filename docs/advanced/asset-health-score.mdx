@@ -84,7 +84,7 @@ use intellistream_datahub_sdk::generic::{DataWrapper, IdAndExtId};
 let latest = api.time_series
     .retrieve_latest_datapoint(&DataWrapper::from(vec![
         IdAndExtId::from_external_id("pump_07_bearing_temp_c")])).await?
-    .get_items().remove(0);
+    .get_items_mut().remove(0);
 let bearing_temp = latest.datapoints.last().and_then(|p| p.value).unwrap_or(f64::NAN);
 ```
 

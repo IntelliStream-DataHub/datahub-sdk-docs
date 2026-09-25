@@ -161,12 +161,13 @@ let mut listener = api.subscriptions.listen(&["bed_capacity"]).await?;
 while let Some(Ok(msg)) = listener.next().await {
     update_wallboard(&msg.payload);
     if over_threshold(&msg.payload) {                  // e.g. occupancy > 95%
-        let mut warning = Event::new(format!("capacity_warning_icu_{}", Utc::now().timestamp()));
-        warning.r#type = Some("capacity_warning".into());
+        let mut warning = Event::new(
+            format!("capacity_warning_icu_{}", Utc::now().timestamp()),
+            "capacity_warning".into(),
+            Utc::now());
         warning.status = Some("open".into());
         warning.add_metadata("ward".into(), "ward_icu".into());
         warning.add_metadata("occupancy_pct".into(), "96".into());
-        warning.set_event_time(Utc::now());
         api.events.create(&vec![warning]).await?;
     }
     listener.ack(&[msg.message_id.as_str()]).await?;

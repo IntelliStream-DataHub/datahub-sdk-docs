@@ -87,12 +87,13 @@ use intellistream_datahub_sdk::events::Event;
 let mut listener = api.subscriptions.listen(&["network_status"]).await?;
 while let Some(Ok(msg)) = listener.next().await {
     if faulted(&msg.payload) {
-        let mut down = Event::new(format!("charger_down_oslo_14_{}", Utc::now().timestamp()));
-        down.r#type = Some("charger_down".into());
+        let mut down = Event::new(
+            format!("charger_down_oslo_14_{}", Utc::now().timestamp()),
+            "charger_down".into(),
+            Utc::now());
         down.status = Some("open".into());
         down.add_metadata("charger".into(), "charger_oslo_14".into());
         down.add_metadata("connector".into(), "2".into());
-        down.set_event_time(Utc::now());
         api.events.create(&vec![down]).await?;
     }
     listener.ack(&[msg.message_id.as_str()]).await?;

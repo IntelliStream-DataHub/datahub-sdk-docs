@@ -122,8 +122,8 @@ let ring = api.resources.fetch_related(
     &RelatedResourcesForm::from_external_id("account_77310").with_depth(5)).await?;
 
 for node in ring.nodes() {
-    if node.external_id.starts_with("account_") {
-        println!("linked account: {}", node.external_id);
+    if node.external_id().starts_with("account_") {
+        println!("linked account: {}", node.external_id());
     }
 }
 ```

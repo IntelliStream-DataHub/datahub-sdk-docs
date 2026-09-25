@@ -139,8 +139,8 @@ let lineage = api.resources.fetch_related(
     &RelatedResourcesForm::from_external_id("lot_22f_final").with_depth(10)).await?;
 
 for node in lineage.nodes() {
-    if node.external_id.starts_with("lot_raw_") {
-        println!("raw material: {}", node.external_id);
+    if node.external_id().starts_with("lot_raw_") {
+        println!("raw material: {}", node.external_id());
     }
 }
 ```

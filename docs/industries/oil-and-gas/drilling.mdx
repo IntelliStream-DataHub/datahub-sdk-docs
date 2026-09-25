@@ -100,13 +100,14 @@ use chrono::Utc;
 let mut listener = api.subscriptions.listen(&["rig_deepwater_1"]).await?;
 while let Some(Ok(msg)) = listener.next().await {
     if influx_detected(&msg.payload) {             // flow_out > flow_in & pit rising
-        let mut kick = Event::new(format!("kick_detected_a12_{}", Utc::now().timestamp()));
-        kick.r#type = Some("kick_detected".into());
+        let mut kick = Event::new(
+            format!("kick_detected_a12_{}", Utc::now().timestamp()),
+            "kick_detected".into(),
+            Utc::now());
         kick.status = Some("critical".into());
         kick.add_metadata("well".into(), "well_a12".into());
         kick.add_metadata("rig".into(), "rig_deepwater_1".into());
         kick.add_metadata("flow_delta_gpm".into(), "18".into());
-        kick.set_event_time(Utc::now());
         api.events.create(&vec![kick]).await?;
     }
     listener.ack(&[msg.message_id.as_str()]).await?;

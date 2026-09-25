@@ -134,12 +134,13 @@ use chrono::Utc;
 let mut listener = api.subscriptions.listen(&["reefer_fleet"]).await?;
 while let Some(Ok(msg)) = listener.next().await {
     if out_of_band(&msg.payload) {                // |supply - setpoint| > tolerance
-        let mut excursion = Event::new(format!("reefer_excursion_1182_{}", Utc::now().timestamp()));
-        excursion.r#type = Some("reefer_excursion".into());
+        let mut excursion = Event::new(
+            format!("reefer_excursion_1182_{}", Utc::now().timestamp()),
+            "reefer_excursion".into(),
+            Utc::now());
         excursion.status = Some("open".into());
         excursion.add_metadata("reefer".into(), "reefer_msc_1182".into());
         excursion.add_metadata("vessel".into(), "vessel_nordic_star".into());
-        excursion.set_event_time(Utc::now());
         api.events.create(&vec![excursion]).await?;
     }
     listener.ack(&[msg.message_id.as_str()]).await?;

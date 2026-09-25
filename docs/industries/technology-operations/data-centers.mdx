@@ -94,12 +94,13 @@ use chrono::Utc;
 let mut listener = api.subscriptions.listen(&["hall_2_thermal"]).await?;
 while let Some(Ok(msg)) = listener.next().await {
     if inlet_above(&msg.payload, 27.0) {              // °C — above ASHRAE band
-        let mut warning = Event::new(format!("thermal_warning_r14_{}", Utc::now().timestamp()));
-        warning.r#type = Some("thermal_warning".into());
+        let mut warning = Event::new(
+            format!("thermal_warning_r14_{}", Utc::now().timestamp()),
+            "thermal_warning".into(),
+            Utc::now());
         warning.status = Some("open".into());
         warning.add_metadata("rack".into(), "rack_r14".into());
         warning.add_metadata("inlet_c".into(), "29.4".into());
-        warning.set_event_time(Utc::now());
         api.events.create(&vec![warning]).await?;
     }
     listener.ack(&[msg.message_id.as_str()]).await?;
@@ -156,9 +157,9 @@ let a = api.resources.fetch_related(
     &RelatedResourcesForm::from_external_id("rack_r14").with_depth(3)).await?;
 let b = api.resources.fetch_related(
     &RelatedResourcesForm::from_external_id("rack_r15").with_depth(3)).await?;
-let an: HashSet<&str> = a.nodes().iter().map(|n| n.external_id.as_str()).collect();
+let an: HashSet<&str> = a.nodes().iter().map(|n| n.external_id()).collect();
 let shared: Vec<&str> = b.nodes().iter()
-    .map(|n| n.external_id.as_str()).filter(|id| an.contains(id)).collect();
+    .map(|n| n.external_id()).filter(|id| an.contains(id)).collect();
 // shared contains "crac_unit_2"
 ```
 
