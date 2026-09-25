@@ -103,7 +103,13 @@ def sdk_provenance(repo: Path, lang: str) -> str:
     if not ref:
         return f"{repo.name} @ {head} ({where}; no remote for {slug}, so drift is unchecked)"
     behind = _git(repo, "rev-list", "--count", f"HEAD..{ref}")
-    return f"{repo.name} @ {head} ({where}, {behind or '?'} behind {slug} {branch})"
+    # The remote-tracking ref's own date, because "0 behind" is only as current as the last
+    # fetch: a checkout level with a three-week-old `main` is not level with `main`. Fetching
+    # here would put the network in every test run, so the line says how fresh the answer is
+    # and leaves the judgement to the reader.
+    asof = _git(repo, "log", "-1", "--format=%cs", ref)
+    return f"{repo.name} @ {head} ({where}, {behind or '?'} behind {slug} {branch}, " \
+           f"{branch} @ {asof or 'unknown date'} as last fetched)"
 
 
 def _upstream_ref(repo: Path, slug: str, branch: str) -> str:
@@ -111,7 +117,7 @@ def _upstream_ref(repo: Path, slug: str, branch: str) -> str:
     for line in _git(repo, "remote", "-v").splitlines():
         name, _, rest = line.partition("\t")
         url = rest.split(" ")[0]
-        if slug in url.replace(":", "/") and _git(repo, "rev-parse", "--verify", f"{name}/{branch}"):
+        if slug.lower() in url.lower().replace(":", "/") and _git(repo, "rev-parse", "--verify", f"{name}/{branch}"):
             return f"{name}/{branch}"
     return ""
 
@@ -125,6 +131,15 @@ def assert_sdk_current(repo: Path, lang: str) -> None:
     """
     if os.environ.get("DOCTEST_ALLOW_SDK_DRIFT"):
         return
+    if not repo.exists():
+        # The venv outliving the checkout it was built from is the stale-SDK case again, and
+        # the quietest form of it: every git question below would answer "" and the guard
+        # would wave it through.
+        raise SdkDrift(
+            f"The installed SDK was built from {repo}, which no longer exists.\n"
+            f"  What the suite imports cannot be identified, so it cannot be trusted.\n"
+            f"  Fix: `bash doctests/setup.sh` against a current checkout."
+        )
     slug, branch = UPSTREAM[lang]
     ref = _upstream_ref(repo, slug, branch)
     if not ref:

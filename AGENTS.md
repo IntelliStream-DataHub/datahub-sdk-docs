@@ -119,9 +119,14 @@ A snapshot is changed only where it was wrong for its own release, a patch relea
 behaviour included. A new feature goes into `docs/`, never back into a snapshot.
 
 **Where this stands.** No snapshot exists yet, so the published site describes `main`, and a
-reader on 0.2.0 can meet calls their version lacks; the quick start note warns them. Nothing
-checks these rules automatically yet. The doc tests being added under `doctests/` are meant to,
-by building against pinned SDK and platform commits.
+reader on 0.2.0 can meet calls their version lacks; the quick start note warns them. The doc
+tests under `doctests/` hold the first of these rules: each tier refuses to run against an SDK
+checkout behind the branch the table above says it describes, and names the commit it compiled
+against in every failure. Until that guard existed the suite tested whatever a contributor had
+checked out — on one machine a platform branch 445 commits behind, which reported eight correct
+reference pages as broken and passed edits written against an SDK nobody ships. **The stack the
+live tier runs against is not covered**: compare the API image's build date against the SDK's
+commit yourself before trusting a live failure. The release rules below are still unchecked.
 
 ## Every example has to be runnable
 

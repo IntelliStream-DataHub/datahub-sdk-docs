@@ -195,7 +195,11 @@ def test_tutorial_runs_end_to_end(slug, lang, langs, cli, env, seed, pytestconfi
     # A quota is the stack's policy, not the page's mistake. The seeding pages alone make
     # hundreds of requests, so a suite run against a stack someone else is also using can trip
     # the per-user limit, and every page after it would be reported as broken documentation.
-    if not result.ok and _RATE_LIMITED.search(result.stderr):
+    # Both streams: the bindings echo every response body to stdout, so a page that *swallows*
+    # the 429 — an empty `items` list, then `[0]` — raises `IndexError: list index out of range`
+    # on stderr and leaves the only evidence of the quota on stdout. Reading stderr alone
+    # reported five rate-limited pages as broken documentation.
+    if not result.ok and _RATE_LIMITED.search(result.stderr + result.stdout):
         pytest.skip(f"{plan.page} [{lang}]: the stack rate-limited this run "
                     "(429, datahub.limits rate-limit-exceeded), so nothing here is a statement "
                     "about the page. Re-run when the window resets, or raise the tenant's limit.")
@@ -211,6 +215,14 @@ def test_tutorial_runs_end_to_end(slug, lang, langs, cli, env, seed, pytestconfi
             )
 
         missing = backend.missing_entities(cli, plan.expect_exists, plan.settle_secs)
+        # The same quota, one step later. A page whose writes were refused can still exit 0 —
+        # the SDK reports the 429 in the body it echoes, the page never looks — and then the
+        # only symptom is that the backend does not hold what the page promised. That is the
+        # stack's policy showing up as a missing entity, not the page being wrong.
+        if missing and _RATE_LIMITED.search(result.stdout + result.stderr):
+            pytest.skip(f"{plan.page} [{lang}]: the stack rate-limited this run, and what the page "
+                        f"promises to create is absent ({', '.join(missing)}). The page exited 0, so "
+                        "this is about the quota, not the documentation. Re-run when the window resets.")
         # A lookup that errored is not an entity that is missing. The page ran and exited 0;
         # what failed is the harness asking the backend about it — typically an SDK newer
         # than the stack it talks to. Still a failure, because nothing was verified, but

@@ -25,6 +25,17 @@ $EDITOR doctests/.env        # point it at a stack (see .env.example)
 (override with `DOCTEST_RUST_SDK_PATH`), so the docs are tested against the SDK you
 actually have — re-run it after an SDK change to see what that change did to the docs.
 
+**Your SDK checkouts have to be on upstream `main`.** The docs describe the default branch
+of each SDK repository, so that is the only thing a result here means anything against. Every
+tier refuses to run from a checkout behind it, names the commit and the distance, and says so
+rather than reporting the pages as broken — which is what it used to do, silently, for eight
+reference pages whose Java examples were correct all along. The checkouts are matched to
+upstream by repository URL, not by remote name: a fork whose default branch is an old `master`
+would otherwise look current. To test an SDK change that is not merged yet, say so with
+`DOCTEST_ALLOW_SDK_DRIFT=1`. The Python bindings are checked the same way, through the
+checkout their editable install records, because a venv keeps what was compiled into it long
+after that checkout has moved on.
+
 **Never point `BASE_URL` at production.** Each run creates and deletes entities under
 the docs' own external ids (`engine_temperature`, `plant_oslo`, …). With no backend
 configured the suite skips rather than fails.
