@@ -249,6 +249,38 @@ def _delete_with_stranded(delete, value: str, exc: Exception, depth: int = 4) ->
     return 0
 
 
+_BLOCKING_SUBSCRIPTION = re.compile(r'"subscriptionExternalId"\s*:\s*"([^"]+)"')
+
+
+def _delete_freeing_subscriptions(cli, delete, value: str, exc: Exception) -> int:
+    """Retry a timeseries delete that a subscription is holding open.
+
+    The same shape as `_delete_with_stranded`, for the other thing that pins a node. The
+    backend refuses to delete a series a subscription still references and names the
+    subscription in `blockedBy`. That subscription usually belongs to a *different* page —
+    the subscriptions reference page keeps one on `engine_temperature`, which the quickstart
+    and several guides also create — so no plan can name it in its own `owns`, and a sweep
+    that gives up here leaves the series behind for every page that follows. The next run
+    meets a 409 partway through a tutorial, which reads exactly like a broken page.
+
+    Found the hard way: one skipped subscriptions test (its listener timed out, so its own
+    sweep never ran) left `engine_temps` behind, and two unrelated pages failed on it.
+    """
+    blocking = _BLOCKING_SUBSCRIPTION.findall(str(exc))
+    if not blocking:
+        return 0
+    for external_id in blocking:
+        try:
+            cli.subscriptions.delete([external_id])
+        except Exception:
+            continue  # already gone, or held by something a later pass reaches
+    try:
+        delete([value])
+        return 1
+    except Exception:
+        return 0
+
+
 def sweep(cli, owns: dict[str, list[str]]) -> None:
     """Delete every entity a page declares it owns, before and after a run.
 
@@ -295,6 +327,8 @@ def sweep(cli, owns: dict[str, list[str]]) -> None:
                     except Exception as exc:
                         if name == "resources":
                             deleted += _delete_with_stranded(delete, value, exc)
+                        elif name == "timeseries":
+                            deleted += _delete_freeing_subscriptions(cli, delete, value, exc)
             if deleted == 0 or deleted == remaining:
                 break
             remaining = deleted
