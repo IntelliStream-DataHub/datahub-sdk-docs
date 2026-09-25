@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import ast
 import functools
+import json
 import os
 import re
 import shutil
@@ -31,6 +32,113 @@ REPO = HERE.parent
 
 class ToolchainMissing(Exception):
     """A language's compiler or SDK build is absent — skip, don't fail."""
+
+
+class SdkDrift(Exception):
+    """The SDK checkout is not the version the docs describe — fail, don't skip.
+
+    Deliberately not a `ToolchainMissing`: that one skips, and a silent skip is how this
+    went unnoticed. A checkout on the wrong branch answers every question confidently and
+    wrongly — it reported eight reference pages as broken when they were right, and passed
+    edits made against an SDK nobody ships.
+    """
+
+
+# The repositories the docs describe, by URL rather than by remote name: on a working
+# checkout `origin` was a personal mirror whose default branch was an old `master`, so a
+# guard that trusted `origin/HEAD` would have called a 445-commit drift current.
+UPSTREAM = {
+    "java": ("IntelliStream-DataHub/datahub-platform", "main"),
+    "rust": ("IntelliStream-DataHub/dataplatform-rust-sdk", "main"),
+}
+
+
+def sdk_repo(lang: str) -> Path:
+    """The checkout a tier compiles against — one place, so the guard and the runners agree."""
+    if lang == "java":
+        return Path(os.environ.get("DOCTEST_JAVA_REPO", REPO.parent / "datahub-platform"))
+    return Path(os.environ.get("DOCTEST_RUST_SDK_PATH", REPO.parent / "dataplatform-rust-sdk"))
+
+
+def python_sdk_source() -> Path | None:
+    """The checkout the installed Python bindings were built from, or None for a released wheel.
+
+    The bindings are a maturin build of the Rust SDK, so they drift the same way — and more
+    quietly, because a venv keeps whatever was compiled into it long after the checkout it
+    came from has moved. `direct_url.json` is what an editable install leaves behind.
+    """
+    try:
+        from importlib.metadata import distribution
+        raw = distribution("intellistream-datahub-sdk").read_text("direct_url.json")
+    except Exception:
+        return None
+    if not raw:
+        return None
+    try:
+        url = json.loads(raw).get("url", "")
+    except json.JSONDecodeError:
+        return None
+    if not url.startswith("file://"):
+        return None  # a real wheel: it has a version, not a commit
+    built_from = Path(url[len("file://"):])
+    return built_from.parent if built_from.name == "datahub_python_bindings" else built_from
+
+
+def _git(repo: Path, *args: str) -> str:
+    proc = subprocess.run(["git", "-C", str(repo), *args],
+                          capture_output=True, text=True, timeout=60)
+    return proc.stdout.strip() if proc.returncode == 0 else ""
+
+
+def sdk_provenance(repo: Path, lang: str) -> str:
+    """One line naming the commit a tier compiled against, and its distance from upstream.
+
+    Every compile failure carries this. The question a failure raises first is "is the page
+    wrong, or am I holding the wrong SDK?", and the answer should not take a source dive.
+    """
+    slug, branch = UPSTREAM[lang]
+    head = _git(repo, "rev-parse", "--short", "HEAD") or "unknown"
+    where = _git(repo, "rev-parse", "--abbrev-ref", "HEAD") or "detached"
+    ref = _upstream_ref(repo, slug, branch)
+    if not ref:
+        return f"{repo.name} @ {head} ({where}; no remote for {slug}, so drift is unchecked)"
+    behind = _git(repo, "rev-list", "--count", f"HEAD..{ref}")
+    return f"{repo.name} @ {head} ({where}, {behind or '?'} behind {slug} {branch})"
+
+
+def _upstream_ref(repo: Path, slug: str, branch: str) -> str:
+    """`<remote>/<branch>` for the remote whose URL is `slug`, or "" if none is configured."""
+    for line in _git(repo, "remote", "-v").splitlines():
+        name, _, rest = line.partition("\t")
+        url = rest.split(" ")[0]
+        if slug in url.replace(":", "/") and _git(repo, "rev-parse", "--verify", f"{name}/{branch}"):
+            return f"{name}/{branch}"
+    return ""
+
+
+def assert_sdk_current(repo: Path, lang: str) -> None:
+    """Refuse to judge the docs against an SDK behind the branch they describe.
+
+    AGENTS.md pins the target: the docs describe the default branch of each SDK repo, not
+    whatever a contributor has checked out. Testing an unmerged SDK change is legitimate,
+    so `DOCTEST_ALLOW_SDK_DRIFT=1` says "I mean this checkout" — but it has to be said.
+    """
+    if os.environ.get("DOCTEST_ALLOW_SDK_DRIFT"):
+        return
+    slug, branch = UPSTREAM[lang]
+    ref = _upstream_ref(repo, slug, branch)
+    if not ref:
+        return  # nothing to compare against; sdk_provenance says so on any failure
+    behind = _git(repo, "rev-list", "--count", f"HEAD..{ref}")
+    if behind and behind != "0":
+        raise SdkDrift(
+            f"{repo} is {behind} commits behind {ref}, and the docs describe {slug} {branch}.\n"
+            f"  {sdk_provenance(repo, lang)}\n"
+            f"  Every {lang} result from this checkout is about an SDK nobody ships: it reports\n"
+            f"  pages as broken that are not, and passes pages that are.\n"
+            f"  Fix: `git -C {repo} fetch && git -C {repo} checkout {ref}` (a detached checkout is\n"
+            f"  fine), or set DOCTEST_ALLOW_SDK_DRIFT=1 to test this checkout on purpose."
+        )
 
 
 @dataclass
@@ -250,13 +358,14 @@ def java_classpath() -> str:
     compiles every snippet against the wrong SDK, which reads as every page being broken.
     Gradle's own up-to-date check makes asking cheap.
     """
-    platform = Path(os.environ.get("DOCTEST_JAVA_REPO", REPO.parent / "datahub-platform"))
+    platform = sdk_repo("java")
     init = HERE / "java-classpath.gradle"
     if not (platform / "gradlew").exists() or not init.exists():
         raise ToolchainMissing(
             f"Java SDK repo not found at {platform}. Set DOCTEST_JAVA_REPO to the "
             "datahub-platform checkout, or leave Java out of DOCTEST_LANGS."
         )
+    assert_sdk_current(platform, "java")
     try:
         # Both jars: the SDK's runtime classpath names the api-model *jar*, and `:datahub-java-sdk:jar`
         # alone compiles against api-model's classes directory without ever writing it.
@@ -306,13 +415,14 @@ def rust_project() -> Path:
     Kept outside the temp dir on purpose: a fresh target/ per test would mean a
     full SDK rebuild per page, which is minutes rather than seconds.
     """
-    sdk = Path(os.environ.get("DOCTEST_RUST_SDK_PATH", REPO.parent / "dataplatform-rust-sdk"))
+    sdk = sdk_repo("rust")
     if not (sdk / "Cargo.toml").exists():
         raise ToolchainMissing(
             f"Rust SDK not found at {sdk}. Set DOCTEST_RUST_SDK_PATH, or leave Rust out of DOCTEST_LANGS."
         )
     if not shutil.which("cargo"):
         raise ToolchainMissing("`cargo` is not on PATH.")
+    assert_sdk_current(sdk, "rust")
 
     # Read the crate name rather than assuming it: the crate has been renamed once
     # already (dataplatform-rust-sdk -> intellistream-datahub-sdk), and a runner that

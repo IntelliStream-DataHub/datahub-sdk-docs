@@ -29,6 +29,7 @@ import pytest
 
 import compile_check as cc
 import docblocks
+import runners
 
 REPO = Path(__file__).parent.parent
 
@@ -146,6 +147,12 @@ def test_examples_compile_against_the_sdk(lang, page, compiled):
         "  what the page calls (fix the page); the page never had it right (fix the page); two",
         "  blocks are alternatives that one program cannot hold (say so in the plan, with",
         "  `independent`, `only` or `exclude` under [" + lang + "]).",
+        "",
+        # The fourth cause, and the one that reads exactly like the first three: the SDK
+        # being compiled against is not the one the docs describe. `assert_sdk_current`
+        # refuses an out-of-date checkout, but a fork, a local edit or an override can
+        # still put you somewhere else, so every failure says where it stood.
+        f"  Compiled against {runners.sdk_provenance(runners.sdk_repo(lang), lang)}.",
     ]
     if supplied:
         lines += ["", f"  Left to the reader, and not counted: {', '.join(supplied)}"]

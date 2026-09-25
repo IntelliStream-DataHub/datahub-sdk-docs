@@ -85,6 +85,23 @@ def cli(env):
 
 
 @pytest.fixture(scope="session", autouse=True)
+def _python_sdk_is_current():
+    """Refuse to report on the documentation when the bindings are not the ones it describes.
+
+    The Java and Rust tiers check this where they resolve their checkout; Python cannot, because
+    what it imports was compiled into the venv at some earlier point. A venv built from a branch
+    that has since moved keeps answering — the pages it blesses are blessed against an SDK nobody
+    ships, and the live tutorial runs are the ones that matter most here.
+
+    A released wheel has a version rather than a commit, so there is nothing to compare and the
+    check stands aside.
+    """
+    source = runners.python_sdk_source()
+    if source is not None:
+        runners.assert_sdk_current(source, "rust")
+
+
+@pytest.fixture(scope="session", autouse=True)
 def _backend_is_healthy(request):
     """Refuse to report on the documentation when the backend is sick.
 
