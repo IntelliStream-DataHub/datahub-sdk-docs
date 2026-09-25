@@ -63,7 +63,7 @@ filter.setGranularity("1h");
 var request = new DataRetriever<RetrieveFilter>();
 request.setItems(List.of(filter));
 
-client.timeseries().retrieve(request).getItems().get(0).getDatapoints()
+client.timeseries().retrieve(request).getItems().iterator().next().getDatapoints()
     .forEach(p -> flagIfSaturated(p.getTimestamp(), p.getValue()));   // PRB utilisation %
 ```
 
@@ -122,8 +122,8 @@ field team at the one link to fix instead of a dozen cells to chase.
 ResourceNetwork c1 = client.resources().fetchRelated("cell_oslo_4412", 4);
 ResourceNetwork c2 = client.resources().fetchRelated("cell_oslo_4418", 4);
 
-Set<String> n1 = c1.nodes().stream().map(Resource::getExternalId).collect(Collectors.toSet());
-Set<String> shared = c2.nodes().stream().map(Resource::getExternalId)
+Set<String> n1 = c1.nodes().stream().map(NodeModel::getExternalId).collect(Collectors.toSet());
+Set<String> shared = c2.nodes().stream().map(NodeModel::getExternalId)
     .filter(n1::contains).collect(Collectors.toSet());
 // shared contains "backhaul_link_88" → fix the link, not the cells
 ```

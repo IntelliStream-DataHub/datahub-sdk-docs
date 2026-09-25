@@ -76,7 +76,7 @@ filter.setGranularity("7d");
 
 var request = new DataRetriever<RetrieveFilter>();
 request.setItems(List.of(filter));
-var agg = client.timeseries().retrieve(request).getItems().get(0).getDatapoints();
+var agg = client.timeseries().retrieve(request).getItems().iterator().next().getDatapoints();
 ```
 
 </TabItem>

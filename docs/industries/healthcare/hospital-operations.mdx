@@ -45,12 +45,12 @@ for any physical estate, which lets a ward-level alert roll up to the whole site
 <TabItem value="java" label="Java">
 
 ```java
-ResourceForm hospital = new ResourceForm();
+Asset hospital = new Asset();
 hospital.setExternalId("hospital_central");
 hospital.setName("Central Hospital");
 hospital.setLabels(List.of("Hospital"));
 
-ResourceForm ward = new ResourceForm();
+Asset ward = new Asset();
 ward.setExternalId("ward_icu");
 ward.setName("Intensive care");
 ward.setLabels(List.of("Ward"));

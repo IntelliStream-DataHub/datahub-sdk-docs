@@ -46,9 +46,10 @@ A bioreactor's pH, temperature and dissolved oxygen are the batch record. Use th
 <TabItem value="java" label="Java">
 
 ```java
-var ph = Timeseries.of("batch_22f_ph")
-    .name("Batch 22F — pH")
-    .setValueType("numeric");
+var ph = new Timeseries();
+ph.setExternalId("batch_22f_ph");
+ph.setName("Batch 22F — pH");
+ph.setValueType("numeric");
 ph.setUnit("ph");
 client.timeseries().create(ph);
 

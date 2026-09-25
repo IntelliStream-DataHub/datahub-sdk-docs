@@ -43,12 +43,12 @@ A region *contains* substations, a substation *contains* transformers, a transfo
 <TabItem value="java" label="Java">
 
 ```java
-ResourceForm region = new ResourceForm();
+Asset region = new Asset();
 region.setExternalId("grid_region_east");
 region.setName("Eastern region");
 region.setLabels(List.of("Region"));
 
-ResourceForm substation = new ResourceForm();
+Asset substation = new Asset();
 substation.setExternalId("substation_oslo_1");
 substation.setName("Oslo substation 1");
 substation.setLabels(List.of("Substation"));
@@ -122,7 +122,7 @@ filter.setGranularity("1h");
 var request = new DataRetriever<RetrieveFilter>();
 request.setItems(List.of(filter));
 
-client.timeseries().retrieve(request).getItems().get(0).getDatapoints()
+client.timeseries().retrieve(request).getItems().iterator().next().getDatapoints()
     .forEach(p -> chart(p.getTimestamp(), p.getValue()));  // hourly load
 ```
 

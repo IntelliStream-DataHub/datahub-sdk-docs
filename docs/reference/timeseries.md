@@ -19,9 +19,9 @@ exactly as you send it. [External ids & naming →](./external-ids)
 <TabItem value="java" label="Java">
 
 ```java
-Timeseries series = new Timeseries()
-        .setExternalId("engine_temperature")
-        .setName("Engine temperature");
+Timeseries series = new Timeseries();
+series.setExternalId("engine_temperature");
+series.setName("Engine temperature");
 series.setUnit("celsius");
 
 client.timeseries().create(List.of(series));
@@ -121,9 +121,9 @@ For a value that must reconcile exactly, use `numeric`:
 <TabItem value="java" label="Java">
 
 ```java
-Timeseries price = new Timeseries()
-        .setExternalId("book_value_usd")
-        .setName("Book value (USD)");
+Timeseries price = new Timeseries();
+price.setExternalId("book_value_usd");
+price.setName("Book value (USD)");
 price.setUnit("usd");
 price.setValueType("numeric");        // exact decimals, no float rounding
 

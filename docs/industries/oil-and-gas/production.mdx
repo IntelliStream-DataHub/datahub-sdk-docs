@@ -58,17 +58,17 @@ Modeling it as a graph lets you walk from a field down to any individual sensor.
 <TabItem value="java" label="Java">
 
 ```java
-ResourceForm field = new ResourceForm();
+Asset field = new Asset();
 field.setExternalId("field_north_sea");
 field.setName("North Sea field");
 field.setLabels(List.of("Field"));
 
-ResourceForm well = new ResourceForm();
+Asset well = new Asset();
 well.setExternalId("well_a12");
 well.setName("Well A-12");
 well.setLabels(List.of("Well"));
 
-ResourceForm pump = new ResourceForm();
+Asset pump = new Asset();
 pump.setExternalId("pump_esp_a12");
 pump.setName("ESP — Well A-12");
 pump.setLabels(List.of("Pump"));
@@ -199,7 +199,7 @@ queries open events for the field, and the event references the well it concerns
 
 ```java
 var series = client.timeseries().retrieve(lastHourOf("pump_intake_pressure_bar"))
-    .getItems().get(0);
+    .getItems().iterator().next();
 
 if (series.getDatapoints().stream().anyMatch(p -> Double.parseDouble(p.getValue()) < 80.0)) {
     EventModel event = new EventModel();
@@ -266,9 +266,9 @@ ResourceNetwork na = client.resources().fetchRelated("wellhead_temp_a12", 5);
 ResourceNetwork nb = client.resources().fetchRelated("pump_temp_a12", 5);
 
 Set<String> aNodes = na.nodes().stream()
-    .map(Resource::getExternalId).collect(Collectors.toSet());
+    .map(NodeModel::getExternalId).collect(Collectors.toSet());
 Set<String> shared = nb.nodes().stream()
-    .map(Resource::getExternalId).filter(aNodes::contains).collect(Collectors.toSet());
+    .map(NodeModel::getExternalId).filter(aNodes::contains).collect(Collectors.toSet());
 
 // shared contains "cooling_system" → one root cause, not two
 ```

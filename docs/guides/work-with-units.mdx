@@ -54,7 +54,9 @@ and Rust examples set `float`); it describes what the numbers mean.
 <TabItem value="java" label="Java">
 
 ```java
-var series = Timeseries.of("wellhead_pressure_bar").name("Wellhead pressure");
+var series = new Timeseries();
+series.setExternalId("wellhead_pressure_bar");
+series.setName("Wellhead pressure");
 series.setUnit("bar");
 series.setUnitExternalId("pressure_bar");
 client.timeseries().create(series);

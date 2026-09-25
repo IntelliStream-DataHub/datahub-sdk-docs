@@ -96,10 +96,10 @@ subsystem both alarms belong to, the likely common cause.
 
 ```java
 Set<String> aNodes = na.nodes().stream()
-    .map(Resource::getExternalId).collect(Collectors.toSet());
+    .map(NodeModel::getExternalId).collect(Collectors.toSet());
 
 Set<String> shared = nb.nodes().stream()
-    .map(Resource::getExternalId)
+    .map(NodeModel::getExternalId)
     .filter(aNodes::contains)
     .collect(Collectors.toSet());
 shared.remove("sensor_a");

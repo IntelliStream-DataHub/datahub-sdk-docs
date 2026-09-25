@@ -85,10 +85,11 @@ so currency amounts store faithfully.
 <TabItem value="java" label="Java">
 
 ```java
-var mtm = Timeseries.of("portfolio_growth_mtm_usd")
-    .name("Growth portfolio — mark-to-market (USD)")
-    .setValueType("numeric")
-    .setDataSetId(deskId);
+var mtm = new Timeseries();
+mtm.setExternalId("portfolio_growth_mtm_usd");
+mtm.setName("Growth portfolio — mark-to-market (USD)");
+mtm.setValueType("numeric");
+mtm.setDataSetId(deskId);
 mtm.setUnit("usd");
 client.timeseries().create(mtm);
 

@@ -130,8 +130,8 @@ rack to the unit they share — the exact
 ResourceNetwork a = client.resources().fetchRelated("rack_r14", 3);
 ResourceNetwork b = client.resources().fetchRelated("rack_r15", 3);
 
-Set<String> aNodes = a.nodes().stream().map(Resource::getExternalId).collect(Collectors.toSet());
-Set<String> shared = b.nodes().stream().map(Resource::getExternalId)
+Set<String> aNodes = a.nodes().stream().map(NodeModel::getExternalId).collect(Collectors.toSet());
+Set<String> shared = b.nodes().stream().map(NodeModel::getExternalId)
     .filter(aNodes::contains).collect(Collectors.toSet());
 // shared contains "crac_unit_2" → one failing unit, not two hot racks
 ```

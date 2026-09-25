@@ -47,7 +47,7 @@ scrambled. See [Turn readings into events](/guides/detect-events).
 
 ```java
 var series = client.timeseries().retrieve(lastHourOf("truck_785_oil_pressure_kpa"))
-    .getItems().get(0);
+    .getItems().iterator().next();
 
 if (series.getDatapoints().stream().anyMatch(p -> Double.parseDouble(p.getValue()) < 250.0)) {
     EventModel warning = new EventModel();
@@ -119,7 +119,7 @@ filter.setGranularity("1h");
 var request = new DataRetriever<RetrieveFilter>();
 request.setItems(List.of(filter));
 
-client.timeseries().retrieve(request).getItems().get(0).getDatapoints()
+client.timeseries().retrieve(request).getItems().iterator().next().getDatapoints()
     .forEach(p -> compareToPlan(p.getTimestamp(), p.getValue()));
 ```
 

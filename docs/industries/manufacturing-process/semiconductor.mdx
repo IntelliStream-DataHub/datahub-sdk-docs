@@ -47,9 +47,10 @@ exact — use the `NUMERIC` value type so values store without floating-point dr
 <TabItem value="java" label="Java">
 
 ```java
-var pressure = Timeseries.of("tool_etch_07_chamber_pressure_mtorr")
-    .name("Etch-07 chamber pressure")
-    .setValueType("numeric");
+var pressure = new Timeseries();
+pressure.setExternalId("tool_etch_07_chamber_pressure_mtorr");
+pressure.setName("Etch-07 chamber pressure");
+pressure.setValueType("numeric");
 pressure.setUnit("mtorr");
 client.timeseries().create(pressure);
 
@@ -107,9 +108,9 @@ ResourceNetwork lotA = client.resources().fetchRelated("lot_22841", 6);
 ResourceNetwork lotB = client.resources().fetchRelated("lot_22863", 6);
 
 Set<String> toolsA = lotA.nodes().stream()
-    .map(Resource::getExternalId).filter(id -> id.startsWith("tool_")).collect(Collectors.toSet());
+    .map(NodeModel::getExternalId).filter(id -> id.startsWith("tool_")).collect(Collectors.toSet());
 Set<String> suspect = lotB.nodes().stream()
-    .map(Resource::getExternalId).filter(toolsA::contains).collect(Collectors.toSet());
+    .map(NodeModel::getExternalId).filter(toolsA::contains).collect(Collectors.toSet());
 
 // suspect contains "tool_etch_07" → the chamber to pull and check
 ```

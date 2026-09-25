@@ -70,7 +70,7 @@ filter.setLimit(100);
 
 var request = new DataRetriever<RetrieveFilter>();
 request.setItems(List.of(filter));
-var pts = client.timeseries().retrieve(request).getItems().get(0).getDatapoints();
+var pts = client.timeseries().retrieve(request).getItems().iterator().next().getDatapoints();
 double bearingTemp = Double.parseDouble(pts.get(pts.size() - 1).getValue());
 ```
 

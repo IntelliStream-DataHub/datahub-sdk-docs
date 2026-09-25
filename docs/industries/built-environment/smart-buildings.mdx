@@ -128,7 +128,7 @@ filter.setGranularity("1d");
 var request = new DataRetriever<RetrieveFilter>();
 request.setItems(List.of(filter));
 
-client.timeseries().retrieve(request).getItems().get(0).getDatapoints()
+client.timeseries().retrieve(request).getItems().iterator().next().getDatapoints()
     .forEach(p -> chartDailyKwh(p.getTimestamp(), p.getValue()));
 ```
 

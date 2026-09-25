@@ -42,9 +42,13 @@ series: `station_07_cycle_time_s`, `station_07_units`, `station_07_scrap`.
 <TabItem value="java" label="Java">
 
 ```java
-var cycleTime = Timeseries.of("station_07_cycle_time_s").name("Station 07 cycle time");
+var cycleTime = new Timeseries();
+cycleTime.setExternalId("station_07_cycle_time_s");
+cycleTime.setName("Station 07 cycle time");
 cycleTime.setUnit("s");
-var scrap = Timeseries.of("station_07_scrap").name("Station 07 scrap count");
+var scrap = new Timeseries();
+scrap.setExternalId("station_07_scrap");
+scrap.setName("Station 07 scrap count");
 scrap.setUnit("count");
 client.timeseries().create(cycleTime, scrap);
 
@@ -113,7 +117,7 @@ filter.setGranularity("1h");
 var request = new DataRetriever<RetrieveFilter>();
 request.setItems(List.of(filter));
 
-client.timeseries().retrieve(request).getItems().get(0).getDatapoints()
+client.timeseries().retrieve(request).getItems().iterator().next().getDatapoints()
     .forEach(p -> recordHourlyPerformance(p.getTimestamp(), p.getValue()));
 ```
 

@@ -266,12 +266,12 @@ retarget a relationship or change its type):
 <TabItem value="java" label="Java">
 
 ```java
-ResourceForm plant = new ResourceForm();
+Asset plant = new Asset();
 plant.setExternalId("plant_oslo");
 plant.setName("Oslo Plant");
 plant.setLabels(List.of("Plant"));
 
-ResourceForm pump = new ResourceForm();
+Asset pump = new Asset();
 pump.setExternalId("pump_1");
 pump.setName("Pump 1");
 pump.setLabels(List.of("Pump"));
@@ -281,7 +281,7 @@ contains.setName("contains");
 contains.setFromExternalId("plant_oslo");
 contains.setToExternalId("pump_1");
 
-GraphDataWrapper<Resource, EdgeProxy> created = client.resources()
+GraphDataWrapper<NodeModel, EdgeProxy> created = client.resources()
         .create(List.of(plant, pump), List.of(contains));
 
 System.out.println(created.getNodes().size() + " resources, "

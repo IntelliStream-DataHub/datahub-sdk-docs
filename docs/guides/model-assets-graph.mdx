@@ -26,17 +26,17 @@ well in code, not because the server requires it.
 <TabItem value="java" label="Java">
 
 ```java
-ResourceForm plant = new ResourceForm();
+Asset plant = new Asset();
 plant.setExternalId("plant_oslo");
 plant.setName("Oslo Plant");
 plant.setLabels(List.of("Plant"));       // at least one label is required
 
-ResourceForm line = new ResourceForm();
+Asset line = new Asset();
 line.setExternalId("line_a");
 line.setName("Assembly line A");
 line.setLabels(List.of("Line"));
 
-ResourceForm press = new ResourceForm();
+Asset press = new Asset();
 press.setExternalId("press_07");
 press.setName("Hydraulic press 07");
 press.setLabels(List.of("Machine"));
@@ -126,9 +126,9 @@ it with a relationship (`press_07` → `PRODUCES` → `press_07_oil_temp`), then
 <TabItem value="java" label="Java">
 
 ```java
-Timeseries oilTemp = new Timeseries()
-        .setExternalId("press_07_oil_temp")
-        .setName("Press 07 oil temperature");
+Timeseries oilTemp = new Timeseries();
+oilTemp.setExternalId("press_07_oil_temp");
+oilTemp.setName("Press 07 oil temperature");
 oilTemp.setUnit("celsius");
 oilTemp.setUnitExternalId("temperature_deg_c");
 client.timeseries().create(List.of(oilTemp));

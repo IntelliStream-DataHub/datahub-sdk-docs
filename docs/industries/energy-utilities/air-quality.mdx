@@ -80,11 +80,17 @@ every value is self-describing and a chart can label its axis correctly.
 <TabItem value="java" label="Java">
 
 ```java
-var pm25 = Timeseries.of("station_kirkeveien_pm25").name("Kirkeveien PM2.5");
+var pm25 = new Timeseries();
+pm25.setExternalId("station_kirkeveien_pm25");
+pm25.setName("Kirkeveien PM2.5");
 pm25.setUnit("ug_m3");
-var no2 = Timeseries.of("station_kirkeveien_no2").name("Kirkeveien NO2");
+var no2 = new Timeseries();
+no2.setExternalId("station_kirkeveien_no2");
+no2.setName("Kirkeveien NO2");
 no2.setUnit("ppb");
-var co = Timeseries.of("station_kirkeveien_co").name("Kirkeveien CO");
+var co = new Timeseries();
+co.setExternalId("station_kirkeveien_co");
+co.setName("Kirkeveien CO");
 co.setUnit("ppm");
 client.timeseries().create(pm25, no2, co);
 ```

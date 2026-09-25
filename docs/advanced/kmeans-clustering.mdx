@@ -78,7 +78,7 @@ filter.setGranularity("30d");
 
 var request = new DataRetriever<RetrieveFilter>();
 request.setItems(List.of(filter));
-var sig = client.timeseries().retrieve(request).getItems().get(0).getDatapoints();
+var sig = client.timeseries().retrieve(request).getItems().iterator().next().getDatapoints();
 ```
 
 </TabItem>

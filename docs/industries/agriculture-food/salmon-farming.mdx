@@ -118,9 +118,13 @@ See [Query & aggregate](/guides/query-and-aggregate).
 <TabItem value="java" label="Java">
 
 ```java
-var feed = Timeseries.of("pen_h_07_feed_kg").name("Pen H-07 feed");
+var feed = new Timeseries();
+feed.setExternalId("pen_h_07_feed_kg");
+feed.setName("Pen H-07 feed");
 feed.setUnit("kg");
-var biomass = Timeseries.of("pen_h_07_biomass_kg").name("Pen H-07 biomass");
+var biomass = new Timeseries();
+biomass.setExternalId("pen_h_07_biomass_kg");
+biomass.setName("Pen H-07 biomass");
 biomass.setUnit("kg");
 client.timeseries().create(feed, biomass);
 

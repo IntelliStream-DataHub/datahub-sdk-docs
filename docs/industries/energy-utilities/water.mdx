@@ -101,9 +101,9 @@ ResourceNetwork west = client.resources().fetchRelated("zone_west_12", 20);
 ResourceNetwork east = client.resources().fetchRelated("zone_east_07", 20);
 
 Set<String> westUpstream = west.nodes().stream()
-    .map(Resource::getExternalId).collect(Collectors.toSet());
+    .map(NodeModel::getExternalId).collect(Collectors.toSet());
 Set<String> common = east.nodes().stream()
-    .map(Resource::getExternalId).filter(westUpstream::contains).collect(Collectors.toSet());
+    .map(NodeModel::getExternalId).filter(westUpstream::contains).collect(Collectors.toSet());
 
 // common holds main_trunk_north (and source_lake_a) → isolate there
 ```

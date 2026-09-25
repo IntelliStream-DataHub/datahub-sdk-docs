@@ -51,12 +51,12 @@ on a host fan out to the services it affects.
 <TabItem value="java" label="Java">
 
 ```java
-ResourceForm service = new ResourceForm();
+Asset service = new Asset();
 service.setExternalId("service_checkout");
 service.setName("Checkout service");
 service.setLabels(List.of("Service"));
 
-ResourceForm host = new ResourceForm();
+Asset host = new Asset();
 host.setExternalId("host_web_01");
 host.setName("web-01");
 host.setLabels(List.of("Host"));
@@ -236,9 +236,9 @@ ResourceNetwork checkout = client.resources().fetchRelated("service_checkout", 4
 ResourceNetwork payments = client.resources().fetchRelated("service_payments", 4);
 
 Set<String> checkoutDeps = checkout.nodes().stream()
-    .map(Resource::getExternalId).collect(Collectors.toSet());
+    .map(NodeModel::getExternalId).collect(Collectors.toSet());
 Set<String> shared = payments.nodes().stream()
-    .map(Resource::getExternalId).filter(checkoutDeps::contains).collect(Collectors.toSet());
+    .map(NodeModel::getExternalId).filter(checkoutDeps::contains).collect(Collectors.toSet());
 
 // shared contains "order_db" → one failing dependency, not two outages
 ```

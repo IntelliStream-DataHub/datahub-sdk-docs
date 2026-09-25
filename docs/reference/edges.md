@@ -156,7 +156,7 @@ The MCP `edge_get` tool follows the same rule.
 ```java
 DataWrapper<EdgeProxy> one = client.edges().findById(341);
 
-GraphDataWrapper<Resource, EdgeProxy> many = client.edges()
+GraphDataWrapper<NodeModel, EdgeProxy> many = client.edges()
         .byIds(List.of(IdCollection.createFromId(341), IdCollection.createFromId(342)));
 
 for (Resource endpoint : many.getNodes()) {

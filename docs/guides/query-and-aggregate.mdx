@@ -181,7 +181,7 @@ do {
     var request = new DataRetriever<RetrieveFilter>();
     request.setItems(List.of(filter));
 
-    var page = client.timeseries().retrieve(request).getItems().get(0);
+    var page = client.timeseries().retrieve(request).getItems().iterator().next();
     page.getDatapoints().forEach(p -> handle(p));
     cursor = page.getNextCursor();
 } while (cursor != null);
