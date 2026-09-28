@@ -999,10 +999,89 @@ because an update may touch a relation whose other end is not an asset.
 
 ## The `/functions` endpoints {#functions}
 
-A **function** is a plain node distinguished by its `FUNCTION` label. 
+A **function** is a plain node distinguished by its `FUNCTION` label. Like
+[`/assets`](#assets), every call is the shared pipeline with the `FUNCTION` type pinned: the same
+ACLs, naming policy and status codes. The type is fixed in the query itself, so nothing in the
+body can widen a call to other node types.
 
-`GET /functions/{id}` returns the one function wrapped in `items`, and reports a function
-you may not read as missing (`404`) rather than forbidden, exactly as `GET /assets/{id}` does.
+| Endpoint | Behaves as | Worth knowing |
+| --- | --- | --- |
+| `POST /functions/create` | [create](#create-resources-and-relations) | Nodes only, no `relations` array. `201`, and the echo is function-shaped. |
+| `GET /functions/{id}` | [look up](#look-up) | One function, wrapped in `items`. |
+| `POST /functions/byids` | [look up](#look-up) | Ids that are missing, are not functions, or are not readable are omitted rather than failing the call. |
+| `GET /functions?limit=` | [filter](#filter) | The first `limit` functions, newest first, no criteria and no `nextCursor`. `limit` defaults to 1000 and caps at 10 000. |
+| `POST /functions/filter` | [filter](#filter) | The criteria every node type shares plus `dataSetId` ([`FunctionFilter`](./filters)), with `sort`, `limit` and `cursor` paging. |
+| `POST /functions/search` | [search](#search) | Free text, with an optional `filter` block of the same criteria ANDed on. |
+| `POST /functions/update` | [update](#update) | `nodes` and `relations`. An entry naming a node of another type is a `404`, and nothing in the batch is written. |
+| `POST` or `DELETE /functions/delete` | [delete](#delete) | `204`. Ids that are not functions are skipped, not deleted. |
+
+```http
+POST /functions/filter
+{
+  "limit": 100,
+  "filter": {
+    "name": ["rolling*"],
+    "labels": ["AGGREGATION"],
+    "dataSetId": [{ "externalId": "plant_a" }]
+  }
+}
+```
+
+`GET /functions/{id}` reports a function you may not read as missing (`404`) rather than
+forbidden, exactly as `GET /assets/{id}` does.
+
+Each client has a typed `functions` service whose reads come back as `Function`:
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+import ai.intellistream.datahub.function.Function;
+import ai.intellistream.datahub.models.datafilters.FunctionFilter;
+
+DataWrapper<Function> some = client.functions().byIds(List.of(
+        IdCollection.createFromExternalId("fn_rolling_average")));
+
+FunctionFilter criteria = new FunctionFilter();
+criteria.setLabels(List.of("AGGREGATION"));
+DataWrapper<Function> page = client.functions().filter(criteria);
+```
+
+`filter` also takes a `FunctionRetreiver` for `limit`, `sort` and `cursor`, and `search` takes a
+`SearchBody<FunctionFilter>`, the same forms as their `assets()` counterparts.
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+# entity objects, external-id strings, or numeric ids
+some = client.functions.by_ids(["fn_rolling_average"])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use intellistream_datahub_sdk::generic::IdAndExtId;
+
+let some = api.functions.by_ids(&vec![
+    IdAndExtId::from_external_id("fn_rolling_average"),
+]).await?;
+```
+
+</TabItem>
+</Tabs>
+
+:::note Python and Rust are catching up
+`filter` and `search` on functions are in the Java client today. Python and Rust will get them
+under the names their `assets` service already uses: `functions.filter(...)` taking keyword
+criteria in Python and a filter form in Rust, and `functions.search(query, ...)`. Until then, ask
+[`resources.filter`](#filter) narrowed to the `function` node type.
+
+In those two clients `functions.by_ids` still reads the listing and matches on the client, so it
+only sees the newest 10 000 functions. It moves to `POST /functions/byids` in the same change;
+the call itself stays as it is.
+:::
 
 ## What each client covers {#client-coverage}
 
