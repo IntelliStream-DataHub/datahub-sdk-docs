@@ -103,7 +103,7 @@ ResourceNetwork ring = client.resources().fetchRelated("claim_88421", 4);
 
 // other claims reachable through shared parties/phones/shops
 ring.nodes().stream()
-    .map(Resource::getExternalId)
+    .map(NodeModel::getExternalId)
     .filter(id -> id.startsWith("claim_") && !id.equals("claim_88421"))
     .forEach(c -> System.out.println("linked claim: " + c));
 ```

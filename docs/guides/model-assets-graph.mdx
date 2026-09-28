@@ -26,17 +26,17 @@ well in code, not because the server requires it.
 <TabItem value="java" label="Java">
 
 ```java
-ResourceForm plant = new ResourceForm();
+Resource plant = new Resource();
 plant.setExternalId("plant_oslo");
 plant.setName("Oslo Plant");
 plant.setLabels(List.of("Plant"));       // at least one label is required
 
-ResourceForm line = new ResourceForm();
+Resource line = new Resource();
 line.setExternalId("line_a");
 line.setName("Assembly line A");
 line.setLabels(List.of("Line"));
 
-ResourceForm press = new ResourceForm();
+Resource press = new Resource();
 press.setExternalId("press_07");
 press.setName("Hydraulic press 07");
 press.setLabels(List.of("Machine"));

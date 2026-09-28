@@ -266,12 +266,12 @@ retarget a relationship or change its type):
 <TabItem value="java" label="Java">
 
 ```java
-ResourceForm plant = new ResourceForm();
+Resource plant = new Resource();
 plant.setExternalId("plant_oslo");
 plant.setName("Oslo Plant");
 plant.setLabels(List.of("Plant"));
 
-ResourceForm pump = new ResourceForm();
+Resource pump = new Resource();
 pump.setExternalId("pump_1");
 pump.setName("Pump 1");
 pump.setLabels(List.of("Pump"));
