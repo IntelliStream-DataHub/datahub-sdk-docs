@@ -68,6 +68,12 @@ CONTROLS = {
                 placeholders=frozenset({"readerValue", "recordReading"})),
         Control("missing_method_with_reader_argument", "client.timeseries().noSuchMethodForDoctest(readerValue);",
                 hard_lines=(1,), placeholders=frozenset({"readerValue"})),
+        # `ingest` is overloaded (List<DatapointsCollection> and Map<String, List<Datapoint>>),
+        # so javac reports the unresolved argument *and* an overload failure on the call. The
+        # call is the page's own and compiles once the reader's value has a type; only the
+        # argument is left to the reader. See `_typing_failed`.
+        Control("overload_with_reader_argument", 'client.timeseries().ingest(Map.of("x", readerReadings));',
+                placeholders=frozenset({"readerReadings"})),
     ],
     "rust": [
         Control("compiles", "use intellistream_datahub_sdk::timeseries::TimeSeries;\n"
