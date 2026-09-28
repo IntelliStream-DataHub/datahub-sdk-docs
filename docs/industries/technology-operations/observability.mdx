@@ -207,13 +207,13 @@ breaches = client.events.filter(intellistream_datahub_sdk.EventFilter(
 <TabItem value="rust" label="Rust">
 
 ```rust
-use intellistream_datahub_sdk::filters::{BasicEventFilter, EventFilter};
+use intellistream_datahub_sdk::filters::{EventFilter, EventFilterForm};
 
-let mut basic = BasicEventFilter::default();
-basic.set_type(&["slo_breach"]);
-let mut filter = EventFilter::default();
-filter.set_filter(basic);
-filter.set_limit(200);
+let filter = EventFilterForm::default()
+    .set_filter(EventFilter {
+        r#type: Some(vec!["slo_breach".into()]), ..Default::default() })
+    .set_limit(200)
+    .build();
 let breaches = api.events.filter(&filter).await?;
 ```
 

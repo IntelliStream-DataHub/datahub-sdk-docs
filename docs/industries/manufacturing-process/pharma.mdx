@@ -79,7 +79,7 @@ use chrono::Utc;
 
 let mut ph = TimeSeries::new("batch_22f_ph", "Batch 22F — pH");
 ph.unit = Some("ph".into());
-ph.value_type = "numeric".into();
+ph.value_type = Some("numeric".into());
 api.time_series.create_one(&ph).await?;
 
 api.time_series

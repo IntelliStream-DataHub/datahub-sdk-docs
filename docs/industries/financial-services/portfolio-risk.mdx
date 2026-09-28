@@ -121,7 +121,7 @@ use chrono::Utc;
 
 let mut ts = TimeSeries::new("portfolio_growth_mtm_usd", "Growth portfolio — mark-to-market (USD)");
 ts.unit = Some("usd".into());
-ts.value_type = "numeric".into();
+ts.value_type = Some("numeric".into());
 ts.data_set_id = desk_id;          // desk_id is already Option<u64>
 api.time_series.create_one(&ts).await?;
 
