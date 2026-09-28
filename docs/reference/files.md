@@ -48,6 +48,13 @@ and Rust clients take a `destination_path` folder plus a `name` (defaulting to t
 file's name) and join the two into that same full path. The Java client uploads raw `content`
 bytes; the Python and Rust clients read a local file.
 
+The external id (`X-Datahub-External-Id`) is stored exactly as sent, within the
+[charset floor](./external-ids#the-charset-floor). Leave it out and it defaults to the file
+name as-is: `Report-2026.pdf`, not a slug. Uniqueness and every lookup by external id ignore
+case, so `Report.pdf` and `report.pdf` are the same file. Files uploaded before external ids
+were kept verbatim still carry the lowercase snake_case id they were given (`report_pdf`), so
+look those up by that id, not by their file name.
+
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
 
@@ -134,9 +141,10 @@ for node in api.files.list_directory_by_path("/reports/2026").await?.get_items()
 
 | Status | Means |
 | --- | --- |
+| `400` | The external id has a character outside the [charset floor](./external-ids#the-charset-floor), such as `/` or a space. |
 | `403` | You lack write access to the data set named in `dataSetId`, or to the parent folder's data set. |
 | `404` | On download: no file with that id, or a file in a data set you may not read. The two are not distinguished, so a hidden file's existence is not leaked. |
-| `409` | A file with that path, or that `externalId`, already exists. Uniqueness is tenant-wide, not per data set. |
+| `409` | A file with that path, or that `externalId`, already exists. Uniqueness is tenant-wide, not per data set, and ignores the case of the external id. |
 
 There is no size cap on `PUT /files`: the upload streams to disk and is exempt from the
 [request-body limit](./limits#request-body-size).
@@ -221,8 +229,8 @@ file index, so none of them moves bytes.
 | `files().getById(id)` | `GET /files?id=` | One file or folder by numeric id. `404` when there is none. |
 | `files().getByExternalId(extId)` | `GET /files?externalId=` | The same by external id. |
 | `files().search(q, limit)` | `GET /files/search` | Full-text over names, paths and metadata. Crosses folders, so it finds a file whose location you do not know. Pass `null` for `limit` to take the server default. |
-| `files().trash()` | `GET /files/trash` | The soft-deleted files you can read. |
-| `files().restore(ids)` | `POST /files/restore` | Puts them back at the path they were deleted from. |
+| `files().trash()` | `GET /files/trash` | The soft-deleted files you can read, each with a `deletedAt` timestamp. |
+| `files().restore(ids)` | `POST /files/restore` | Puts them back at the path they were deleted from. Identify each by `id` or `externalId`. |
 | `files().update(fileUpdate)` | `POST /files/update` | Rename, move, or edit metadata on one node. |
 
 ```java
@@ -243,10 +251,22 @@ client.files().restore(List.of(IdCollection.createFromExternalId("report_2026_q1
 Identify the node by `externalId` or `id`; every other field is optional and null means "leave
 unchanged". `metadata` and `relatedResources` **replace** rather than merge.
 
-A restore is not a force-overwrite. If something else already occupies the path, you get a
-`409`, so move or rename the occupant first. Names and paths in the trash listing are the
-pre-deletion values, and the deletion time is encoded in the external id as
-`DELETED_..._<epochMillis>`.
+A deleted file keeps its external id, name and path, and the trash listing shows those
+pre-deletion values plus `deletedAt`, when it was deleted. While a file is in the trash its
+external id is free, so a new live file can take it, and several deleted copies can share one
+id. Restoring by `externalId` brings back the most recently deleted copy; restore an older one
+by its numeric `id`. An item with neither is a `400`.
+
+A restore is not a force-overwrite. When a file cannot go back, you get a `409` whose `reason`
+says why:
+
+| `reason` | Means |
+| --- | --- |
+| `path-taken` | Something else now occupies the path. Move or rename it first. |
+| `external-id-taken` | A live file now uses the external id. |
+| `folder-missing` | The folder it was deleted from no longer exists. |
+| `not-a-file` | The item is a folder; only files can be restored. |
+| `trash-entry-missing` | The file has no entry in the trash. |
 
 ## Delete
 
