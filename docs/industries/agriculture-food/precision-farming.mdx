@@ -134,7 +134,7 @@ client.files.upload_file(intellistream_datahub_sdk.FileUpload(
 use intellistream_datahub_sdk::files::FileUpload;
 
 let mut upload = FileUpload::new_with_destination_path(
-    "north_40_2026_06_28.tif", "/fields/north_40/scans/");
+    "north_40_2026_06_28.tif", "/fields/north_40/scans/")?;
 upload.external_id = "scan_north_40_2026_06_28".into();
 upload.name = "2026_06_28.tif".into();
 api.files.upload_file(upload).await?;

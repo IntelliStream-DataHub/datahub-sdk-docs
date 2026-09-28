@@ -167,7 +167,7 @@ let filter = RetrieveFilter {
 };
 let series = api.time_series
     .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?
-    .get_items().remove(0);
+    .get_items_mut().remove(0);
 let rated = 3500.0;
 for p in &series.datapoints {
     if let Some(avg) = p.average { record_capacity_factor(&p.timestamp, avg / rated); }

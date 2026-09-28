@@ -81,7 +81,7 @@ use intellistream_datahub_sdk::events::Event;
 use chrono::Utc;
 
 let points = api.time_series.retrieve_datapoints(&last_hour("truck_785_oil_pressure_kpa")).await?
-    .get_items().remove(0);
+    .get_items_mut().remove(0);
 let low = points.datapoints.iter()
     .any(|p| p.value.as_deref().and_then(|v| v.parse::<f64>().ok()).unwrap_or(999.0) < 250.0);
 if low {
@@ -156,7 +156,7 @@ let filter = RetrieveFilter {
 };
 let series = api.time_series
     .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?
-    .get_items().remove(0);
+    .get_items_mut().remove(0);
 for p in &series.datapoints { compare_to_plan(&p.timestamp, p.average); }
 ```
 

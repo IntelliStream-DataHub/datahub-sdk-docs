@@ -63,7 +63,7 @@ use intellistream_datahub_sdk::files::FileUpload;
 
 // MIME type is inferred from the file content
 let mut upload = FileUpload::new_with_destination_path(
-    "calibration_a12.pdf", "/certificates/2026/");
+    "calibration_a12.pdf", "/certificates/2026/")?;
 upload.set_external_id("calibration_pump_esp_a12".into());
 upload.set_file_name("calibration_a12.pdf".into());
 upload.set_data_set_id(42);

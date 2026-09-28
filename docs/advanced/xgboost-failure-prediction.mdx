@@ -97,7 +97,7 @@ let filter = RetrieveFilter {
 };
 let agg = api.time_series
     .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?
-    .get_items().remove(0);
+    .get_items_mut().remove(0);
 ```
 
 </TabItem>

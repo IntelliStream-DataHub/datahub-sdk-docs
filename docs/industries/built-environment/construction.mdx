@@ -113,7 +113,7 @@ api.resources.create(
     vec![RelForm::by_external_ids("site_harbour_tower", "zone_level_12", "contains")]).await?;
 
 let mut upload = FileUpload::new_with_destination_path(
-    "level_12_rev_c.pdf", "/harbour_tower/level_12/drawings/");
+    "level_12_rev_c.pdf", "/harbour_tower/level_12/drawings/")?;
 upload.external_id = "drawing_level_12_structural_rev_c".into();
 upload.name = "structural_rev_c.pdf".into();
 api.files.upload_file(upload).await?;
