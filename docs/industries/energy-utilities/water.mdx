@@ -131,9 +131,9 @@ let west = api.resources.fetch_related(
 let east = api.resources.fetch_related(
     &RelatedResourcesForm::from_external_id("zone_east_07").with_depth(20)).await?;
 
-let w: HashSet<&str> = west.nodes().iter().map(|n| n.external_id.as_str()).collect();
+let w: HashSet<&str> = west.nodes().iter().map(|n| n.external_id()).collect();
 let common: Vec<&str> = east.nodes().iter()
-    .map(|n| n.external_id.as_str()).filter(|id| w.contains(id)).collect();
+    .map(|n| n.external_id()).filter(|id| w.contains(id)).collect();
 // common holds "main_trunk_north" → isolate there
 ```
 

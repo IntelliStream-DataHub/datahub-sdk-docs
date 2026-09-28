@@ -164,12 +164,13 @@ use chrono::Utc;
 let mut listener = api.subscriptions.listen(&["checkout_slo"]).await?;
 while let Some(Ok(msg)) = listener.next().await {
     if breaches_slo(&msg.payload) {           // e.g. p99 latency > 300 ms
-        let mut event = Event::new(format!("slo_breach_checkout_{}", Utc::now().timestamp()));
-        event.r#type = Some("slo_breach".into());
+        let mut event = Event::new(
+            format!("slo_breach_checkout_{}", Utc::now().timestamp()),
+            "slo_breach".into(),
+            Utc::now());
         event.status = Some("firing".into());
         event.add_metadata("service".into(), "service_checkout".into());
         event.add_metadata("slo".into(), "latency_p99".into());
-        event.set_event_time(Utc::now());
         api.events.create(&vec![event]).await?;
     }
     listener.ack(&[msg.message_id.as_str()]).await?;
@@ -266,9 +267,9 @@ let checkout = api.resources.fetch_related(
 let payments = api.resources.fetch_related(
     &RelatedResourcesForm::from_external_id("service_payments").with_depth(4)).await?;
 
-let deps: HashSet<&str> = checkout.nodes().iter().map(|n| n.external_id.as_str()).collect();
+let deps: HashSet<&str> = checkout.nodes().iter().map(|n| n.external_id()).collect();
 let shared: Vec<&str> = payments.nodes().iter()
-    .map(|n| n.external_id.as_str()).filter(|id| deps.contains(id)).collect();
+    .map(|n| n.external_id()).filter(|id| deps.contains(id)).collect();
 // shared contains "order_db" → one failing dependency, not two outages
 ```
 

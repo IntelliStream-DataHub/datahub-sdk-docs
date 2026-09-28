@@ -138,8 +138,8 @@ let affected = api.resources.fetch_related(
     &RelatedResourcesForm::from_external_id("model_acme_x200").with_depth(3)).await?;
 
 for node in affected.nodes() {
-    if node.external_id.starts_with("pump_") {
-        println!("pull from service: {}", node.external_id);
+    if node.external_id().starts_with("pump_") {
+        println!("pull from service: {}", node.external_id());
     }
 }
 ```

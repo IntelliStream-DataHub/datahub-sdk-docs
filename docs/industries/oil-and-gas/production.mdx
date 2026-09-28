@@ -236,12 +236,13 @@ let points = api.time_series.retrieve_datapoints(&last_hour("pump_intake_pressur
 let low = points.datapoints.iter()
     .any(|p| p.value.as_deref().and_then(|v| v.parse::<f64>().ok()).unwrap_or(99.0) < 80.0);
 if low {
-    let mut event = Event::new(format!("esp_anomaly_a12_{}", Utc::now().timestamp()));
-    event.r#type = Some("esp_anomaly".into());
+    let mut event = Event::new(
+        format!("esp_anomaly_a12_{}", Utc::now().timestamp()),
+        "esp_anomaly".into(),
+        Utc::now());
     event.status = Some("open".into());
     event.add_metadata("well".into(), "well_a12".into());
     event.add_metadata("pump".into(), "pump_esp_a12".into());
-    event.set_event_time(Utc::now());
     api.events.create(&vec![event]).await?;
 }
 ```
@@ -295,9 +296,9 @@ let na = api.resources.fetch_related(
 let nb = api.resources.fetch_related(
     &RelatedResourcesForm::from_external_id("pump_temp_a12").with_depth(5)).await?;
 
-let a: HashSet<&str> = na.nodes().iter().map(|n| n.external_id.as_str()).collect();
+let a: HashSet<&str> = na.nodes().iter().map(|n| n.external_id()).collect();
 let shared: Vec<&str> = nb.nodes().iter()
-    .map(|n| n.external_id.as_str()).filter(|id| a.contains(id)).collect();
+    .map(|n| n.external_id()).filter(|id| a.contains(id)).collect();
 // shared contains "cooling_system" → one root cause, not two
 ```
 

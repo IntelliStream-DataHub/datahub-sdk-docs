@@ -85,12 +85,13 @@ let points = api.time_series.retrieve_datapoints(&last_hour("truck_785_oil_press
 let low = points.datapoints.iter()
     .any(|p| p.value.as_deref().and_then(|v| v.parse::<f64>().ok()).unwrap_or(999.0) < 250.0);
 if low {
-    let mut warning = Event::new(format!("equipment_warning_785_{}", Utc::now().timestamp()));
-    warning.r#type = Some("equipment_warning".into());
+    let mut warning = Event::new(
+        format!("equipment_warning_785_{}", Utc::now().timestamp()),
+        "equipment_warning".into(),
+        Utc::now());
     warning.status = Some("open".into());
     warning.add_metadata("unit".into(), "truck_785".into());
     warning.add_metadata("signal".into(), "oil_pressure".into());
-    warning.set_event_time(Utc::now());
     api.events.create(&vec![warning]).await?;
 }
 ```

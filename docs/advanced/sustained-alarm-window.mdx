@@ -213,10 +213,10 @@ impl SustainedHigh {
         let peak = self.recent.iter().map(|(_, v)| *v).fold(f64::MIN, f64::max);
 
         let mut event = Event::new(
-            format!("sustained_high_{}_{}", self.series_id, at.timestamp()));
-        event.r#type = Some("sustained_high".into());
+            format!("sustained_high_{}_{}", self.series_id, at.timestamp()),
+            "sustained_high".into(),
+            at);
         event.status = Some("open".into());
-        event.set_event_time(at);
         event.add_metadata("series".into(), self.series_id.clone());
         event.add_metadata("limit".into(), LIMIT.to_string());
         event.add_metadata("window_minutes".into(), "20".into());

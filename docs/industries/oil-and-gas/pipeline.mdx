@@ -96,12 +96,13 @@ let inflow  = latest("segment_pn_07_flow_in_m3h").await?;
 let outflow = latest("segment_pn_07_flow_out_m3h").await?;
 
 if inflow - outflow > tolerance(inflow) {
-    let mut leak = Event::new(format!("leak_suspected_pn07_{}", Utc::now().timestamp()));
-    leak.r#type = Some("leak_suspected".into());
+    let mut leak = Event::new(
+        format!("leak_suspected_pn07_{}", Utc::now().timestamp()),
+        "leak_suspected".into(),
+        Utc::now());
     leak.status = Some("critical".into());
     leak.add_metadata("segment".into(), "segment_pn_07".into());
     leak.add_metadata("imbalance_m3h".into(), (inflow - outflow).to_string());
-    leak.set_event_time(Utc::now());
     api.events.create(&vec![leak]).await?;
 }
 ```
@@ -155,8 +156,8 @@ let around = api.resources.fetch_related(
         .with_relationship_types(vec!["connects_to".into(), "isolated_by".into()])).await?;
 
 for node in around.nodes() {
-    if node.external_id.starts_with("valve_") {
-        println!("close: {}", node.external_id);
+    if node.external_id().starts_with("valve_") {
+        println!("close: {}", node.external_id());
     }
 }
 ```
