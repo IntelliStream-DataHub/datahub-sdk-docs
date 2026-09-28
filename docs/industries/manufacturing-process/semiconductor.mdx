@@ -47,9 +47,10 @@ exact — use the `NUMERIC` value type so values store without floating-point dr
 <TabItem value="java" label="Java">
 
 ```java
-var pressure = Timeseries.of("tool_etch_07_chamber_pressure_mtorr")
-    .name("Etch-07 chamber pressure")
-    .setValueType("numeric");
+var pressure = new Timeseries();
+pressure.setExternalId("tool_etch_07_chamber_pressure_mtorr");
+pressure.setName("Etch-07 chamber pressure");
+pressure.setValueType("numeric");
 pressure.setUnit("mtorr");
 client.timeseries().create(pressure);
 

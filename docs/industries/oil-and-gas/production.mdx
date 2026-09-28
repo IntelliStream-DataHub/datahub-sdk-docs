@@ -199,7 +199,7 @@ queries open events for the field, and the event references the well it concerns
 
 ```java
 var series = client.timeseries().retrieve(lastHourOf("pump_intake_pressure_bar"))
-    .getItems().get(0);
+    .getItems().iterator().next();
 
 if (series.getDatapoints().stream().anyMatch(p -> Double.parseDouble(p.getValue()) < 80.0)) {
     EventModel event = new EventModel();

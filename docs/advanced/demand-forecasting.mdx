@@ -68,7 +68,7 @@ filter.setLimit(100000);
 
 var request = new DataRetriever<RetrieveFilter>();
 request.setItems(List.of(filter));
-var history = client.timeseries().retrieve(request).getItems().get(0).getDatapoints();
+var history = client.timeseries().retrieve(request).getItems().iterator().next().getDatapoints();
 ```
 
 </TabItem>

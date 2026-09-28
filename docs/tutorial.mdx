@@ -262,9 +262,10 @@ Set<String> existing = client.timeseries().byIds(lookups).getItems().stream()
 List<Timeseries> missing = METRICS.stream()
         .filter(m -> !existing.contains(m.baseId() + "_" + host))
         .map(m -> {
-            Timeseries ts = Timeseries.of(m.baseId() + "_" + host)
-                    .name(m.name() + " (" + host + ")")
-                    .setValueType("BIGINT");
+            Timeseries ts = new Timeseries();
+            ts.setExternalId(m.baseId() + "_" + host);
+            ts.setName(m.name() + " (" + host + ")");
+            ts.setValueType("BIGINT");
             ts.setUnit("bytes");
             return ts;
         })
@@ -742,9 +743,10 @@ public final class MemoryIngestTutorial {
         List<Timeseries> missing = METRICS.stream()
                 .filter(m -> !existing.contains(m.baseId() + "_" + host))
                 .map(m -> {
-                    Timeseries ts = Timeseries.of(m.baseId() + "_" + host)
-                            .name(m.name() + " (" + host + ")")
-                            .setValueType("BIGINT");
+                    Timeseries ts = new Timeseries();
+                    ts.setExternalId(m.baseId() + "_" + host);
+                    ts.setName(m.name() + " (" + host + ")");
+                    ts.setValueType("BIGINT");
                     ts.setUnit("bytes");
                     return ts;
                 })

@@ -63,7 +63,7 @@ filter.setGranularity("1h");
 var request = new DataRetriever<RetrieveFilter>();
 request.setItems(List.of(filter));
 
-client.timeseries().retrieve(request).getItems().get(0).getDatapoints()
+client.timeseries().retrieve(request).getItems().iterator().next().getDatapoints()
     .forEach(p -> flagIfSaturated(p.getTimestamp(), p.getValue()));   // PRB utilisation %
 ```
 
