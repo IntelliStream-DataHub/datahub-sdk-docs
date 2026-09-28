@@ -252,6 +252,13 @@ that's expected, not a bug.
 <TabItem value="java" label="Java">
 
 ```java
+record Metric(String baseId, String name) {}
+
+List<Metric> METRICS = List.of(
+        new Metric("system_memory_used", "System memory used"),
+        new Metric("system_memory_available", "System memory available"),
+        new Metric("system_swap_used", "System swap used"));
+
 List<IdCollection> lookups = METRICS.stream()
         .map(m -> IdCollection.createFromExternalId(m.baseId() + "_" + host))
         .toList();

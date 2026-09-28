@@ -102,9 +102,11 @@ replenishment. See [Datasets reference](/reference/datasets) and
 <TabItem value="java" label="Java">
 
 ```java
-DataSetRetreiver retriever = new DataSetRetreiver();
-retriever.getFilter().setExternalIdPrefix("region_nordics");   // scope to the region's dataset
-DataWrapper<DataSetModel> regional = client.datasets().filter(retriever);
+import ai.intellistream.datahub.models.IdCollection;
+
+// scope to the region's dataset
+DataWrapper<DataSetModel> regional = client.datasets().byIds(
+        List.of(IdCollection.createFromExternalId("region_nordics")));
 ```
 
 </TabItem>

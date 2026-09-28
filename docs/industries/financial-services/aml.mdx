@@ -97,7 +97,7 @@ through. Other flagged accounts in the same cluster are the ring.
 ResourceNetwork ring = client.resources().fetchRelated("account_77310", 5);
 
 ring.nodes().stream()
-    .map(Resource::getExternalId)
+    .map(NodeModel::getExternalId)
     .filter(id -> id.startsWith("account_"))
     .forEach(a -> System.out.println("linked account: " + a));
 ```
