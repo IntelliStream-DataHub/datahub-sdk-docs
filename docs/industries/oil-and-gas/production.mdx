@@ -230,6 +230,7 @@ if any(float(dp.value) < 80.0 for dp in points.get_datapoints()):
 
 ```rust
 use chrono::Utc;
+use intellistream_datahub_sdk::events::Event;
 
 let points = api.time_series.retrieve_datapoints(&last_hour("pump_intake_pressure_bar")).await?
     .get_items().remove(0);

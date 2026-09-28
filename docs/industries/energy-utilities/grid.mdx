@@ -145,6 +145,7 @@ for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
 
 ```rust
 use chrono::Utc;
+use intellistream_datahub_sdk::generic::{DataWrapper, RetrieveFilter};
 
 let filter = RetrieveFilter {
     external_id: Some("feeder_f12_load_mw".into()),
@@ -197,6 +198,7 @@ client.events.create([intellistream_datahub_sdk.Event(
 
 ```rust
 use chrono::Utc;
+use intellistream_datahub_sdk::events::Event;
 
 let mut event = Event::new(
     format!("feeder_overload_f12_{}", Utc::now().timestamp()),

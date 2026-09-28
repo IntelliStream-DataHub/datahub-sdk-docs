@@ -304,6 +304,9 @@ if missing:
 <TabItem value="rust" label="Rust (async)">
 
 ```rust
+use intellistream_datahub_sdk::generic::{DataWrapper, IdAndExtId};
+use intellistream_datahub_sdk::timeseries::TimeSeries;
+
 let lookups: Vec<IdAndExtId> = METRICS.iter()
     .map(|(base, _)| IdAndExtId::from_external_id(&format!("{base}_{host}")))
     .collect();
@@ -328,6 +331,9 @@ for (base, name) in METRICS {
 <TabItem value="rust-blocking" label="Rust (blocking)">
 
 ```rust
+use intellistream_datahub_sdk::generic::{DataWrapper, IdAndExtId};
+use intellistream_datahub_sdk::timeseries::TimeSeries;
+
 let lookups: Vec<IdAndExtId> = METRICS.iter()
     .map(|(base, _)| IdAndExtId::from_external_id(&format!("{base}_{host}")))
     .collect();
@@ -405,6 +411,9 @@ The sampler is plain synchronous code, identical in both Rust flavors. `sysinfo`
 exposes `used_memory()`/`available_memory()`/`used_swap()` directly:
 
 ```rust
+use std::collections::HashMap;
+use sysinfo::System;
+
 fn sample() -> HashMap<&'static str, i64> {
     let mut sys = System::new();
     sys.refresh_memory();
@@ -423,6 +432,9 @@ The sampler is plain synchronous code, identical in both Rust flavors. `sysinfo`
 exposes `used_memory()`/`available_memory()`/`used_swap()` directly:
 
 ```rust
+use std::collections::HashMap;
+use sysinfo::System;
+
 fn sample() -> HashMap<&'static str, i64> {
     let mut sys = System::new();
     sys.refresh_memory();
@@ -480,6 +492,8 @@ for base in METRICS:
 One `insert_datapoint` call per series:
 
 ```rust
+use chrono::Utc;
+
 let now = Utc::now();
 let values = sample();
 for (base, _) in METRICS {
@@ -495,6 +509,8 @@ for (base, _) in METRICS {
 One `insert_datapoint` call per series:
 
 ```rust
+use chrono::Utc;
+
 let now = Utc::now();
 let values = sample();
 for (base, _) in METRICS {
