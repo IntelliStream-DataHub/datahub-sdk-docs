@@ -96,6 +96,9 @@ heuristic: small low-precision ranges map to `DECIMAL32`, wide-magnitude analog 
 `FLOAT32`, and a unit it does not know gets a compact default with `recognized` false. Use it to
 pre-select the type in a create form; it is advice, not a constraint.
 
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
 ```java
 import ai.intellistream.datahub.api.responses.ValueTypeRecommendation;
 
@@ -104,6 +107,29 @@ hint.getRecommendedValueType();   // the suggested type, upper case
 hint.getReason();                 // why, in a sentence you can show a user
 hint.isRecognized();              // false means you got the generic default
 ```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+hint = client.timeseries.recommend_value_type("temperature_deg_c")
+hint.recommended_value_type   # the suggested type, upper case
+hint.reason                   # why, in a sentence you can show a user
+hint.recognized               # False means you got the generic default
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+let hint = api.time_series.recommend_value_type("temperature_deg_c").await?;
+hint.recommended_value_type;   // the suggested type, upper case
+hint.reason;                   // why, in a sentence you can show a user
+hint.recognized;               // false means you got the generic default
+```
+
+</TabItem>
+</Tabs>
 
 Every value crosses the wire as a string, whatever the type. For an exact decimal, send the
 string form rather than a float: `Datapoint.of(ts, "12.34")` in Java, `DatapointString(ts,
@@ -360,6 +386,11 @@ loop {
 </Tabs>
 
 ## List and update series {#list-and-update}
+
+`GET /timeseries/{id}` reads one series by numeric id and answers `404` when there is none, or
+none you may read; `timeseries().getById` in Java, `timeseries.get_by_id` in Python and
+`time_series.get_by_id` in Rust. [Look up](#filter-series) by external id, or several at once,
+with `by_ids`, which leaves out what it cannot find rather than failing.
 
 `GET /timeseries?limit=` is the cheap "what have I got" read: the first `limit` series, newest
 created first, no criteria. Add `dataSetId` (an id or an external id) to restrict it to one data
@@ -922,10 +953,12 @@ if (!result.isComplete()) {
 | Operation | Java | Python | Rust |
 | --- | --- | --- | --- |
 | Create | `timeseries().create` | `timeseries.create` | `time_series.create` / `create_one` |
+| Get by numeric id | `timeseries().getById` | `timeseries.get_by_id` | `time_series.get_by_id` |
 | Look up by id / external id | `timeseries().byIds` | `timeseries.by_ids` | `time_series.by_ids` |
 | Filter | `timeseries().filter` | `timeseries.filter` | `time_series.filter` |
 | Search | `timeseries().search` | `timeseries.search` | `time_series.search` |
-| List | `timeseries().list` | `timeseries.list` | `time_series.list` / `list_with_limit` |
+| List | `timeseries().list` | `timeseries.list` | `time_series.list` |
+| [Value-type hint](#value-type-hint) | `timeseries().recommendValueType` | `timeseries.recommend_value_type` | `time_series.recommend_value_type` |
 | Update | `timeseries().update` | `timeseries.update` | `time_series.update` |
 | Delete | `timeseries().delete` | `timeseries.delete` | `time_series.delete` |
 | Write datapoints | `insertDatapoints` / `ingest` | `insert_datapoints` / `insert_from_lists` | `insert_datapoint` / `insert_datapoints` |
@@ -934,10 +967,11 @@ if (!result.isComplete()) {
 | Read datapoints (raw and [aggregated](#retrieve-datapoints)) | `retrieve` / `retrieveAggregated` | `retrieve_datapoints` | `retrieve_datapoints` |
 | [Latest datapoint](#latest-datapoints) | `timeseries().latest` | `retrieve_latest_datapoints` | `retrieve_latest_datapoint` |
 | Delete datapoints | `deleteDatapoints` | `timeseries.delete_datapoints` | `time_series.delete_datapoints` |
+| [Live datapoint tail](./subscriptions#live-tail) | — | `timeseries.listen_datapoints` | `time_series.listen_datapoints` |
 
 Java is the one with `ingest`, the chunking, parallelising, retrying path described above, and
 with `binaryBuffer`. Python and Rust chunk and send concurrently too, and retry through the
 durable spool when buffering is on; with it off, the first failed request is the call's error.
 All three have the [binary path](#binary-ingest), Python on its synchronous client only. Python
-can create a series of only three [value types](#value-types). Java also has
-`timeseries().recommendValueType`, the [value-type hint](#value-type-hint).
+can create a series of only three [value types](#value-types). Java has no
+[live datapoint tail](./subscriptions#live-tail); use `subscriptions().listen` there.

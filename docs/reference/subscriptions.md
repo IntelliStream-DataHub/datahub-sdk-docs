@@ -254,6 +254,60 @@ Ack a message only after you've durably handled it. If your process dies before 
 the server redelivers it, so make your handler idempotent.
 :::
 
+## A live tail without a subscription {#live-tail}
+
+`/timeseries/datapoints/listen` streams the datapoints written to a set of series with no
+subscription behind it: nothing to create first, nothing to ack, nothing left behind when the
+socket closes. It is the lighter tool and the weaker one. It starts at the latest point, keeps no
+cursor, and does not replay what was written while the socket was down, so a reader that must
+see every point uses [live delivery](#live-delivery) instead.
+
+The token travels as a WebSocket subprotocol, not a header, because a browser cannot set one on
+the handshake: offer `datahub.bearer.<jwt>` and `datahub.v1`, and the server echoes `datahub.v1`.
+An `externalIds=a,b,c` query parameter seeds the set, and
+`{"action": "set" | "subscribe" | "unsubscribe", "externalIds": [...]}` changes it. Every change
+is narrowed to the series whose data set you may read, silently: an id you cannot read, or that
+does not exist, is dropped rather than refused. A frame is
+`{"datapoints": [{"externalId", "valueType", "timestamp", "value"}, ...]}`, `value` a string.
+
+A bad token or a missing role is refused after the upgrade, with a **1008** close; a connection
+over the [WebSocket cap](./limits#websockets) gets the error frame described there first.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+The Java client does not wrap the tail. Use [live delivery](#live-delivery).
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+with client.timeseries.listen_datapoints(["engine_temperature"]) as tail:
+    for point in tail:
+        print(point.external_id, point.timestamp, point.value)
+```
+
+`subscribe`, `unsubscribe` and `set_timeseries` change the set while it runs. On an
+`AsyncDataHubClient` it returns a `DatapointListenerAsync`, driven with `async for`.
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+let mut tail = api.time_series.listen_datapoints(&["engine_temperature"]).await?;
+while let Some(point) = tail.next().await {
+    let point = point?;
+    println!("{} {} {}", point.external_id, point.timestamp, point.value);
+}
+```
+
+`subscribe`, `unsubscribe` and `set_timeseries` change the set while it runs. A dropped
+connection is reopened with a fresh token and the current set; a refusal is returned as an
+error instead of retried.
+
+</TabItem>
+</Tabs>
+
 ## What each client covers {#client-coverage}
 
 | Operation | Java | Python | Rust |
@@ -263,5 +317,6 @@ the server redelivers it, so make your handler idempotent.
 | Filter | `subscriptions().filter` | `subscriptions.filter(form=None, *, timeseries=, limit=, sort=)` | `subscriptions.filter` |
 | Delete | `subscriptions().delete` | `subscriptions.delete` | `subscriptions.delete` |
 | Live delivery | `subscriptions().listen` | `subscriptions.listen` (`SubscriptionListenerAsync` with `async for` on the async client) | `subscriptions.listen` |
+| [Live tail](#live-tail), no subscription | — | `timeseries.listen_datapoints` | `time_series.listen_datapoints` |
 
 

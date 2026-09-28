@@ -71,12 +71,16 @@ api.datasets.create(&vec![dataset]).await?;
 
 ## Look up & delete
 
+`by_ids` takes ids and external ids together and leaves out what it cannot find rather than
+failing. `GET /datasets/{id}` reads one data set by numeric id and answers `404` for a miss.
+
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
 
 ```java
 DataWrapper<DataSetModel> some = client.datasets()
         .byIds(List.of(IdCollection.createFromExternalId("plant_a")));
+DataWrapper<DataSetModel> one = client.datasets().getById(5677892L);
 
 client.datasets().delete(List.of(IdCollection.createFromExternalId("plant_a")));
 ```
@@ -86,6 +90,7 @@ client.datasets().delete(List.of(IdCollection.createFromExternalId("plant_a")));
 
 ```python
 some = client.datasets.by_ids(["plant_a"])
+one = client.datasets.get_by_id(5677892)
 client.datasets.delete(["plant_a"])
 ```
 
@@ -96,6 +101,7 @@ client.datasets.delete(["plant_a"])
 use intellistream_datahub_sdk::generic::IdAndExtId;
 
 let some = api.datasets.by_ids(&vec![IdAndExtId::from_external_id("plant_a")]).await?;
+let one = api.datasets.get_by_id(5677892).await?;
 api.datasets.delete(&vec![IdAndExtId::from_external_id("plant_a")]).await?;
 ```
 
@@ -241,6 +247,7 @@ A changed grant therefore takes effect within about a minute, without a new toke
 | Operation | Java | Python | Rust |
 | --- | --- | --- | --- |
 | Create | `datasets().create` | `datasets.create` | `datasets.create` |
+| Get by numeric id | `datasets().getById` | `datasets.get_by_id` | `datasets.get_by_id` |
 | Look up by id / external id | `datasets().byIds` | `datasets.by_ids` | `datasets.by_ids` |
 | List (`GET /datasets`) | `datasets().list(limit)` | `datasets.list(limit=None)` | `datasets.list(limit)` |
 | Filter | `datasets().filter` | `datasets.filter` | `datasets.filter` |
