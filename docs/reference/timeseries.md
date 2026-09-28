@@ -799,7 +799,7 @@ It is much cheaper than [retrieve](#retrieve-datapoints) with a limit of one: th
 is served from the cache the ingest path writes, not from a range scan.
 
 ```java
-DataWrapper<DataCollection<DatapointDTO>> now = client.timeseries().latest(List.of(
+DataWrapper<DataCollection<DatapointString>> now = client.timeseries().latest(List.of(
         IdCollection.createFromExternalId("engine_temperature"),
         IdCollection.createFromExternalId("engine_pressure")));
 ```

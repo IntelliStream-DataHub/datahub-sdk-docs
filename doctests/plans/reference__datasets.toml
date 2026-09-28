@@ -10,7 +10,7 @@ page = "docs/reference/datasets.md"
 
 [blocks]
 python = 3
-java = 3
+java = 4
 rust = 3
 
 [python]

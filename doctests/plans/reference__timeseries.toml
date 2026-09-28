@@ -35,9 +35,9 @@ page = "docs/reference/timeseries.md"
 #   java   #14  L734   IngestResult
 
 [blocks]
-python = 9
-java = 14
-rust = 9
+python = 10
+java = 17
+rust = 10
 
 [python]
 timeout = 600
@@ -58,10 +58,10 @@ client = intellistream_datahub_sdk.DataHubClient.from_env()
 
 [java]
 disabled = "Java scenario not written yet."
-# Independent examples, as for Python. #13 is a list of IngestResult's method signatures,
+# Independent examples, as for Python. #16 is a list of IngestResult's method signatures,
 # not code.
 independent = true
-exclude = [13]
+exclude = [16]
 
 [owns]
 timeseries = ["book_value_usd", "engine_temperature"]
