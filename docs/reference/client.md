@@ -86,6 +86,8 @@ hands you the async service for those.
 | Service | Java | Python | Rust |
 | --- | --- | --- | --- |
 | Resources | `client.resources()` | `client.resources` | `api.resources` |
+| [Assets](./resources#assets) | `client.assets()` | `client.assets` | `api.assets` |
+| [Functions](./resources#functions) | `client.functions()` | `client.functions` | `api.functions` |
 | Time series | `client.timeseries()` | `client.timeseries` | `api.time_series` |
 | Datasets | `client.datasets()` | `client.datasets` | `api.datasets` |
 | Events | `client.events()` | `client.events` | `api.events` |
@@ -93,14 +95,16 @@ hands you the async service for those.
 | Files | `client.files()` | `client.files` | `api.files` |
 | Subscriptions | `client.subscriptions()` | `client.subscriptions` | `api.subscriptions` |
 | Edges | `client.edges()` | `client.edges` | `api.edges` |
+| [Labels](./labels) | `client.labels()` | `client.labels` | `api.labels` |
 
-The Java client adds six more services:
+Assets and functions are the `ASSET`- and `FUNCTION`-labelled resources, typed. A service being
+in a client does not mean every call is: each reference page has a "What each client covers"
+table.
+
+The Java client adds three more services:
 
 | Service | Java | Covers |
 | --- | --- | --- |
-| [Assets](./resources#assets) | `client.assets()` | `/assets`, the `ASSET`-labelled resources, typed |
-| [Functions](./resources#functions) | `client.functions()` | `/functions`, the `FUNCTION`-labelled resources, typed |
-| [Labels](./labels) | `client.labels()` | `/labels`, the tenant's label vocabulary |
 | [Policies](./policies) | `client.policies()` | `/policies`, including the naming dry-run |
 | [Governance templates](./policies#governance-templates) | `client.governance()` | `/governance/templates` |
 | [Tenant](./tenant) | `client.tenant()` | `/tenant/features` and `/tenant/settings` |
