@@ -41,7 +41,7 @@ Each bin reports its fill level. When a bin crosses its collection threshold, ra
 
 ```java
 var series = client.timeseries().retrieve(lastReadingOf("bin_grunerlokka_114_fill_pct"))
-    .getItems().get(0);
+    .getItems().iterator().next();
 
 double fill = Double.parseDouble(series.getDatapoints().get(0).getValue());
 if (fill >= 80.0) {

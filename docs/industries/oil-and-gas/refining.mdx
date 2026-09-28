@@ -53,7 +53,7 @@ var request = new DataRetriever<RetrieveFilter>();
 request.setItems(List.of(filter));
 
 // divide hourly energy by hourly throughput for energy-per-barrel
-client.timeseries().retrieve(request).getItems().get(0).getDatapoints()
+client.timeseries().retrieve(request).getItems().iterator().next().getDatapoints()
     .forEach(p -> recordEnergyIntensity(p.getTimestamp(), p.getValue()));
 ```
 

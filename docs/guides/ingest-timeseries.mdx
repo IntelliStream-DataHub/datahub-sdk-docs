@@ -210,7 +210,7 @@ firstHour.setLimit(10_000);
 DataRetriever<RetrieveFilter> request = new DataRetriever<>();
 request.setItems(List.of(firstHour));
 
-int n = client.timeseries().retrieve(request).getItems().get(0).getDatapoints().size();
+int n = client.timeseries().retrieve(request).getItems().iterator().next().getDatapoints().size();
 System.out.printf("%d readings in the first hour%n", n);
 if (n < 3600) throw new IllegalStateException("expected 3600 readings, got " + n);
 ```

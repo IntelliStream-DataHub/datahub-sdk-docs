@@ -48,9 +48,10 @@ region.setName("Nordics region");
 long regionId = client.datasets().create(List.of(region))
     .getItems().iterator().next().getId();
 
-var salesSeries = Timeseries.of("store_oslo_01_sku_4471_sales")
-    .name("Oslo 01 — SKU 4471 units sold")
-    .setDataSetId(regionId);
+var salesSeries = new Timeseries();
+salesSeries.setExternalId("store_oslo_01_sku_4471_sales");
+salesSeries.setName("Oslo 01 — SKU 4471 units sold");
+salesSeries.setDataSetId(regionId);
 salesSeries.setUnit("units");
 client.timeseries().create(salesSeries);
 ```

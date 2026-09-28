@@ -36,7 +36,7 @@ filter.setEnd(ZonedDateTime.now());
 var request = new DataRetriever<RetrieveFilter>();
 request.setItems(List.of(filter));
 
-var series = client.timeseries().retrieve(request).getItems().get(0);
+var series = client.timeseries().retrieve(request).getItems().iterator().next();
 boolean tooHot = series.getDatapoints().stream()
     .anyMatch(p -> Double.parseDouble(p.getValue()) > 110.0);
 

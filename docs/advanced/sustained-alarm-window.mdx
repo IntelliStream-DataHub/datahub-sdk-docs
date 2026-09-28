@@ -257,7 +257,7 @@ filter.setLimit(10000);
 DataRetriever<RetrieveFilter> request = new DataRetriever<>();
 request.setItems(List.of(filter));
 var points = client.timeseries().retrieve(request)
-        .getItems().get(0).getDatapoints();
+        .getItems().iterator().next().getDatapoints();
 
 SustainedHigh detector = new SustainedHigh(SERIES);
 final double LIMIT = SustainedHigh.LIMIT;
