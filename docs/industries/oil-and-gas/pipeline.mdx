@@ -92,8 +92,8 @@ if inflow - outflow > tolerance(inflow):
 use intellistream_datahub_sdk::events::Event;
 use chrono::Utc;
 
-let inflow  = latest("segment_pn_07_flow_in_m3h").await?;
-let outflow = latest("segment_pn_07_flow_out_m3h").await?;
+let inflow:  f64 = latest("segment_pn_07_flow_in_m3h").await?;
+let outflow: f64 = latest("segment_pn_07_flow_out_m3h").await?;
 
 if inflow - outflow > tolerance(inflow) {
     let mut leak = Event::new(

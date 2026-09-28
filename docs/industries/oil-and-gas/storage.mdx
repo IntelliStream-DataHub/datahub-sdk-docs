@@ -96,9 +96,9 @@ if abs(unexplained) > tolerance(closing):
 use intellistream_datahub_sdk::events::Event;
 use chrono::Utc;
 
-let measured_change = latest("tank_t_12_volume_bbl").await?
+let measured_change: f64 = latest("tank_t_12_volume_bbl").await?
     - first_value("tank_t_12_volume_bbl", shift_start).await?;
-let metered = sum_over("tank_t_12_receipts_bbl", shift_start).await?
+let metered: f64 = sum_over("tank_t_12_receipts_bbl", shift_start).await?
     - sum_over("tank_t_12_deliveries_bbl", shift_start).await?;
 
 let unexplained = measured_change - metered;
