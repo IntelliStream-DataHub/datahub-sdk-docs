@@ -199,8 +199,7 @@ DataWrapper<EventModel> breaches = client.events().filter(retriever);
 <TabItem value="python" label="Python">
 
 ```python
-breaches = client.events.filter(intellistream_datahub_sdk.EventFilter(
-    basic_filter=intellistream_datahub_sdk.BasicEventFilter(type="slo_breach"), limit=200))
+breaches = client.events.filter(type="slo_breach", limit=200)
 ```
 
 </TabItem>

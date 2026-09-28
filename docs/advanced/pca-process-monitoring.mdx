@@ -154,8 +154,7 @@ if t2(znew)[-1] > T2_LIMIT or spe(znew)[-1] > SPE_LIMIT:
                   "top_contributor": culprit})])
 
 # the seeded fault sits in the last ten hours, so the deviation must be on record
-found = list(client.events.filter(intellistream_datahub_sdk.EventFilter(
-    basic_filter=intellistream_datahub_sdk.BasicEventFilter(type="process_deviation"), limit=10)))
+found = list(client.events.filter(type="process_deviation", limit=10))
 assert found, "the seeded fault should have raised a process_deviation event"
 print(f"{len(found)} process deviation(s) on record, latest names {found[-1].metadata['top_contributor']}")
 ```

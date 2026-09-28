@@ -370,8 +370,7 @@ if (found.getItems().size() != 1) {
 <TabItem value="python" label="Python">
 
 ```python
-found = list(client.events.filter(intellistream_datahub_sdk.EventFilter(
-    basic_filter=intellistream_datahub_sdk.BasicEventFilter(type="sustained_high"), limit=100)))
+found = list(client.events.filter(type="sustained_high", limit=100))
 
 for e in found:
     print(e.external_id, e.metadata)
