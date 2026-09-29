@@ -35,9 +35,9 @@ page = "docs/reference/timeseries.md"
 #   java   #14  L734   IngestResult
 
 [blocks]
-python = 10
+python = 11
 java = 17
-rust = 10
+rust = 11
 
 [python]
 timeout = 600

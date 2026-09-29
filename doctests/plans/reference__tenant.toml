@@ -1,16 +1,30 @@
 page = "docs/reference/tenant.md"
 
 # Blocks on this page:
-#   java   #1   L16    Feature flags {#features}
-#   java   #2   L46    What you may change {#settings-permissions}
-#   java   #3   L61    Model configuration {#llm-settings}
+#   java   #1   L23    Feature flags {#features}
+#   python #1   L35    Feature flags {#features}
+#   rust   #1   L44    Feature flags {#features}
+#   java   #2   L78    What you may change {#settings-permissions}
+#   python #2   L90    What you may change {#settings-permissions}
+#   rust   #2   L99    What you may change {#settings-permissions}
+#   java   #3   L117   Model configuration {#llm-settings}
+#   python #3   L137   Model configuration {#llm-settings}
+#   rust   #3   L155   Model configuration {#llm-settings}
 
 # Pinned so an edit to the page fails this plan instead of silently
 # re-pointing its block selections. Update deliberately, after re-reading.
 [blocks]
+python = 3
 java = 3
+rust = 3
+
+[python]
+# A reference page, not a tutorial: three unrelated reads of tenant settings, each
+# self-contained. Every tab is compiled or run one block at a time; the Java and Rust
+# sections inherit this when they do not say otherwise.
+independent = true
+disabled = "Python scenario not written yet."
 
 [java]
 disabled = "Java scenario not written yet; compiled by test_compile.py."
-# A reference page, not a tutorial: three unrelated reads of tenant settings.
 independent = true
