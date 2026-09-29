@@ -55,7 +55,7 @@ client.units().list().getItems().forEach(u ->
 for u in client.units.list():
     print(u.external_id, u.name, u.symbol)
 
-ugm3 = client.units.by_external_ids("ug_m3")     # confirm the one you'll use
+ugm3 = client.units.by_external_id("ug_m3")     # confirm the one you'll use
 ```
 
 </TabItem>
