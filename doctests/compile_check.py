@@ -334,6 +334,23 @@ def check_rust(units: list[Unit], workdir: Path, sdk: Path, timeout: int = 1800)
                                          rust_placeholder(code, m["message"])))
     if proc.returncode != 0 and not reached:
         raise ToolchainMissing(f"cargo check failed before it reached the docs:\n{proc.stderr[-3000:]}")
+
+    # "Type annotations needed", on a page that leaves something to the reader, is rustc saying it
+    # lacks information the reader supplies — not a claim about the SDK. There is no Rust
+    # equivalent of the Java stubbed pass to prove it: a stub would need a type of its own, and
+    # every constraint on the value is another call the page does not show, so rustc has nowhere to
+    # infer from either way. It cannot be narrowed by line, because an annotation does not survive
+    # being destructured: `if let Some(level) = reader_fn(..)` reports E0282 at the *use* of
+    # `level`, and no annotation the page could write reaches it.
+    #
+    # Dropping it costs one thing worth naming: a page whose own code is genuinely ambiguous stops
+    # being caught, if it also leaves a name to the reader. That is accepted, because the
+    # alternative was contorting the prose — the tailings page had `unwrap_or("")` and an
+    # `is_empty()` test in place of a plain `if let Some(..)` purely to satisfy this. A removed or
+    # renamed SDK symbol is E0425, E0433, E0412 or E0599, none of which this touches.
+    for name, found in out.items():
+        if any(d.placeholder for d in found):
+            out[name] = [d for d in found if d.placeholder or not d.message.startswith("E0282")]
     return out
 
 

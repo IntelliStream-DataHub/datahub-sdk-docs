@@ -86,6 +86,14 @@ CONTROLS = {
         Control("missing_method_with_reader_argument",
                 "api.time_series.no_such_method_for_doctest(reader_value).await?;",
                 hard_lines=(1,), placeholders=frozenset({"reader_value"})),
+        # rustc reports E0282 at the *use* of a value destructured out of a reader-supplied call,
+        # where no annotation the page could write reaches it. The page is what a reader needs;
+        # only the function is theirs to write. See the note at the end of `check_rust`.
+        Control("reader_supplied_destructured",
+                'if let Some(level) = reader_trigger(&payload) {\n'
+                '    let owned: String = level.into();\n'
+                '    println!("{owned}");\n}',
+                placeholders=frozenset({"reader_trigger", "payload"})),
     ],
 }
 
