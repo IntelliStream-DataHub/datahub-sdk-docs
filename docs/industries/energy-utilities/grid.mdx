@@ -43,12 +43,12 @@ A region *contains* substations, a substation *contains* transformers, a transfo
 <TabItem value="java" label="Java">
 
 ```java
-ResourceForm region = new ResourceForm();
+Resource region = new Resource();
 region.setExternalId("grid_region_east");
 region.setName("Eastern region");
 region.setLabels(List.of("Region"));
 
-ResourceForm substation = new ResourceForm();
+Resource substation = new Resource();
 substation.setExternalId("substation_oslo_1");
 substation.setName("Oslo substation 1");
 substation.setLabels(List.of("Substation"));
@@ -145,6 +145,7 @@ for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
 
 ```rust
 use chrono::Utc;
+use intellistream_datahub_sdk::generic::{DataWrapper, RetrieveFilter};
 
 let filter = RetrieveFilter {
     external_id: Some("feeder_f12_load_mw".into()),
@@ -154,9 +155,9 @@ let filter = RetrieveFilter {
     granularity: Some("1h".into()),
     ..Default::default()
 };
-let series = api.time_series
-    .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?
-    .get_items().remove(0);
+let page = api.time_series
+    .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?;
+let series = &page.get_items()[0];
 for p in &series.datapoints { chart(&p.timestamp, p.average, p.max); }
 ```
 
@@ -197,14 +198,16 @@ client.events.create([intellistream_datahub_sdk.Event(
 
 ```rust
 use chrono::Utc;
+use intellistream_datahub_sdk::events::Event;
 
-let mut event = Event::new(format!("feeder_overload_f12_{}", Utc::now().timestamp()));
-event.r#type = Some("feeder_overload".into());
+let mut event = Event::new(
+    format!("feeder_overload_f12_{}", Utc::now().timestamp()),
+    "feeder_overload".into(),
+    Utc::now());
 event.status = Some("open".into());
 event.add_metadata("feeder".into(), "feeder_f12".into());
 event.add_metadata("peak_mw".into(), "14.8".into());
 event.add_metadata("rating_mw".into(), "12.0".into());
-event.set_event_time(Utc::now());
 api.events.create(&vec![event]).await?;
 ```
 
