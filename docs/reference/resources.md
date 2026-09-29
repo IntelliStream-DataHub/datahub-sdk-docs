@@ -168,7 +168,7 @@ compare the returned items against what you asked for when a miss matters.
 ```java
 import ai.intellistream.datahub.models.IdCollection;
 
-NodeModel pump = client.resources().getById(5677892).getItems().iterator().next();
+NodeModel pump = client.resources().getById(5677892).getItems().get(0);
 
 DataWrapper<NodeModel> some = client.resources().byIds(List.of(
         IdCollection.createFromExternalId("pump_1"),
@@ -266,12 +266,12 @@ retarget a relationship or change its type):
 <TabItem value="java" label="Java">
 
 ```java
-ResourceForm plant = new ResourceForm();
+Resource plant = new Resource();
 plant.setExternalId("plant_oslo");
 plant.setName("Oslo Plant");
 plant.setLabels(List.of("Plant"));
 
-ResourceForm pump = new ResourceForm();
+Resource pump = new Resource();
 pump.setExternalId("pump_1");
 pump.setName("Pump 1");
 pump.setLabels(List.of("Pump"));
@@ -281,7 +281,7 @@ contains.setName("contains");
 contains.setFromExternalId("plant_oslo");
 contains.setToExternalId("pump_1");
 
-GraphDataWrapper<Resource, EdgeProxy> created = client.resources()
+GraphDataWrapper<NodeModel, EdgeProxy> created = client.resources()
         .create(List.of(plant, pump), List.of(contains));
 
 System.out.println(created.getNodes().size() + " resources, "
@@ -518,7 +518,7 @@ search query itself, everything else is applied to the hits afterwards.
 <TabItem value="java" label="Java">
 
 ```java
-ResourceSearch search = new ResourceSearch();
+SearchBody<ResourceFilter> search = new SearchBody<>();
 search.setLimit(10);
 search.getSearch().setQuery("pump");
 DataWrapper<NodeModel> matches = client.resources().search(search);

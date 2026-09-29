@@ -45,12 +45,12 @@ a crew can find the current revision instantly. See [Attach files](/guides/attac
 <TabItem value="java" label="Java">
 
 ```java
-ResourceForm site = new ResourceForm();
+Resource site = new Resource();
 site.setExternalId("site_harbour_tower");
 site.setName("Harbour Tower");
 site.setLabels(List.of("Site"));
 
-ResourceForm zone = new ResourceForm();
+Resource zone = new Resource();
 zone.setExternalId("zone_level_12");
 zone.setName("Level 12");
 zone.setLabels(List.of("Zone"));
@@ -113,7 +113,7 @@ api.resources.create(
     vec![RelForm::by_external_ids("site_harbour_tower", "zone_level_12", "contains")]).await?;
 
 let mut upload = FileUpload::new_with_destination_path(
-    "level_12_rev_c.pdf", "/harbour_tower/level_12/drawings/");
+    "level_12_rev_c.pdf", "/harbour_tower/level_12/drawings/")?;
 upload.external_id = "drawing_level_12_structural_rev_c".into();
 upload.name = "structural_rev_c.pdf".into();
 api.files.upload_file(upload).await?;
@@ -159,13 +159,14 @@ client.events.create([intellistream_datahub_sdk.Event(
 use intellistream_datahub_sdk::events::Event;
 use chrono::Utc;
 
-let mut incident = Event::new(format!("safety_incident_l12_{}", Utc::now().timestamp()));
-incident.r#type = Some("safety_incident".into());
+let mut incident = Event::new(
+    format!("safety_incident_l12_{}", Utc::now().timestamp()),
+    "safety_incident".into(),
+    Utc::now());
 incident.sub_type = Some("near_miss".into());
 incident.status = Some("open".into());
 incident.add_metadata("zone".into(), "zone_level_12".into());
 incident.add_metadata("category".into(), "dropped_object".into());
-incident.set_event_time(Utc::now());
 api.events.create(&vec![incident]).await?;
 ```
 

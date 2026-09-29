@@ -14,7 +14,7 @@ page = "docs/reference/files.md"
 
 [blocks]
 python = 5
-java = 5
+java = 6
 rust = 5
 
 [python]

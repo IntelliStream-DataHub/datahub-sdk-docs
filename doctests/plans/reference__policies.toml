@@ -1,0 +1,21 @@
+page = "docs/reference/policies.md"
+
+# Blocks on this page:
+#   java   #1   L25    Policy types {#types}
+#   java   #2   L46    Read, create, update, delete
+#   java   #3   L64    Read, create, update, delete
+#   java   #4   L75    Read, create, update, delete
+#   java   #5   L84    Dry-run a name against the naming policy {#naming-check}
+#   java   #6   L116   Governance templates {#governance-templates}
+
+# Pinned so an edit to the page fails this plan instead of silently
+# re-pointing its block selections. Update deliberately, after re-reading.
+[blocks]
+java = 6
+
+[java]
+disabled = "Java scenario not written yet; compiled by test_compile.py."
+# A reference page, not a tutorial: each block is a separate example, and the
+# create/update/delete trio walks the same policy through its life. Compiled one
+# at a time, so the name each reuses is not a redeclaration.
+independent = true

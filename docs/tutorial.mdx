@@ -252,6 +252,13 @@ that's expected, not a bug.
 <TabItem value="java" label="Java">
 
 ```java
+record Metric(String baseId, String name) {}
+
+List<Metric> METRICS = List.of(
+        new Metric("system_memory_used", "System memory used"),
+        new Metric("system_memory_available", "System memory available"),
+        new Metric("system_swap_used", "System swap used"));
+
 List<IdCollection> lookups = METRICS.stream()
         .map(m -> IdCollection.createFromExternalId(m.baseId() + "_" + host))
         .toList();
@@ -262,9 +269,10 @@ Set<String> existing = client.timeseries().byIds(lookups).getItems().stream()
 List<Timeseries> missing = METRICS.stream()
         .filter(m -> !existing.contains(m.baseId() + "_" + host))
         .map(m -> {
-            Timeseries ts = Timeseries.of(m.baseId() + "_" + host)
-                    .name(m.name() + " (" + host + ")")
-                    .setValueType("BIGINT");
+            Timeseries ts = new Timeseries();
+            ts.setExternalId(m.baseId() + "_" + host);
+            ts.setName(m.name() + " (" + host + ")");
+            ts.setValueType("BIGINT");
             ts.setUnit("bytes");
             return ts;
         })
@@ -296,6 +304,9 @@ if missing:
 <TabItem value="rust" label="Rust (async)">
 
 ```rust
+use intellistream_datahub_sdk::generic::{DataWrapper, IdAndExtId};
+use intellistream_datahub_sdk::timeseries::TimeSeries;
+
 let lookups: Vec<IdAndExtId> = METRICS.iter()
     .map(|(base, _)| IdAndExtId::from_external_id(&format!("{base}_{host}")))
     .collect();
@@ -320,6 +331,9 @@ for (base, name) in METRICS {
 <TabItem value="rust-blocking" label="Rust (blocking)">
 
 ```rust
+use intellistream_datahub_sdk::generic::{DataWrapper, IdAndExtId};
+use intellistream_datahub_sdk::timeseries::TimeSeries;
+
 let lookups: Vec<IdAndExtId> = METRICS.iter()
     .map(|(base, _)| IdAndExtId::from_external_id(&format!("{base}_{host}")))
     .collect();
@@ -397,6 +411,9 @@ The sampler is plain synchronous code, identical in both Rust flavors. `sysinfo`
 exposes `used_memory()`/`available_memory()`/`used_swap()` directly:
 
 ```rust
+use std::collections::HashMap;
+use sysinfo::System;
+
 fn sample() -> HashMap<&'static str, i64> {
     let mut sys = System::new();
     sys.refresh_memory();
@@ -415,6 +432,9 @@ The sampler is plain synchronous code, identical in both Rust flavors. `sysinfo`
 exposes `used_memory()`/`available_memory()`/`used_swap()` directly:
 
 ```rust
+use std::collections::HashMap;
+use sysinfo::System;
+
 fn sample() -> HashMap<&'static str, i64> {
     let mut sys = System::new();
     sys.refresh_memory();
@@ -472,6 +492,8 @@ for base in METRICS:
 One `insert_datapoint` call per series:
 
 ```rust
+use chrono::Utc;
+
 let now = Utc::now();
 let values = sample();
 for (base, _) in METRICS {
@@ -487,6 +509,8 @@ for (base, _) in METRICS {
 One `insert_datapoint` call per series:
 
 ```rust
+use chrono::Utc;
+
 let now = Utc::now();
 let values = sample();
 for (base, _) in METRICS {
@@ -742,9 +766,10 @@ public final class MemoryIngestTutorial {
         List<Timeseries> missing = METRICS.stream()
                 .filter(m -> !existing.contains(m.baseId() + "_" + host))
                 .map(m -> {
-                    Timeseries ts = Timeseries.of(m.baseId() + "_" + host)
-                            .name(m.name() + " (" + host + ")")
-                            .setValueType("BIGINT");
+                    Timeseries ts = new Timeseries();
+                    ts.setExternalId(m.baseId() + "_" + host);
+                    ts.setName(m.name() + " (" + host + ")");
+                    ts.setValueType("BIGINT");
                     ts.setUnit("bytes");
                     return ts;
                 })

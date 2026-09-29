@@ -420,7 +420,8 @@ response surfaces as an exception/error carrying the HTTP status, the raw body, 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
 
-Methods return `DataWrapper<T>`: `getItems()` holds the results. Non-2xx throws
+Methods return `DataWrapper<T>`: `getItems()` holds the results, as a `List` in the order the
+API returned them, so a single result is `getItems().get(0)`. Non-2xx throws
 `DatahubApiException`:
 
 ```java

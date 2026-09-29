@@ -76,12 +76,12 @@ DataWrapper<UnitModel> byId = client.units().byIds(List.of(IdCollection.createFr
 ```python
 import intellistream_datahub_sdk
 
-by_ext = client.units.by_external_ids("temperature_deg_c")
+by_ext = client.units.by_external_id("temperature_deg_c")
 by_id = client.units.by_ids([intellistream_datahub_sdk.IdCollection(id=7)])
 ```
 
-`by_external_ids` takes one external id and returns a list, empty when no unit has it. The
-`AsyncDataHubClient` spells the same call in the singular:
+`by_external_id` takes one external id and returns a list, empty when no unit has it. The
+`AsyncDataHubClient` awaits the same call:
 
 ```python
 by_ext = await client.units.by_external_id("temperature_deg_c")
@@ -109,6 +109,6 @@ An external id no unit has is an error here, not an empty result: `by_external_i
 | --- | --- | --- | --- |
 | List all | `units().list` | `units.list` | `units.list` |
 | Look up by id | `units().byIds` | `units.by_ids` | `units.by_ids` |
-| Look up by external id | `units().byIds` | `units.by_external_ids` (sync), `units.by_external_id` (async) | `units.by_external_id` |
+| Look up by external id | `units().byIds` | `units.by_external_id` | `units.by_external_id` |
 
 The unit catalogue is read-only in every client: units are platform-managed, not tenant data.

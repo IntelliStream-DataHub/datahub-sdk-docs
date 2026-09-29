@@ -80,17 +80,18 @@ if any(float(dp.value) < 250.0 for dp in points.get_datapoints()):
 use intellistream_datahub_sdk::events::Event;
 use chrono::Utc;
 
-let points = api.time_series.retrieve_datapoints(&last_hour("truck_785_oil_pressure_kpa")).await?
-    .get_items().remove(0);
+let page = api.time_series.retrieve_datapoints(&last_hour("truck_785_oil_pressure_kpa")).await?;
+let points = &page.get_items()[0];
 let low = points.datapoints.iter()
-    .any(|p| p.value.as_deref().and_then(|v| v.parse::<f64>().ok()).unwrap_or(999.0) < 250.0);
+    .any(|p| p.value.unwrap_or(999.0) < 250.0);
 if low {
-    let mut warning = Event::new(format!("equipment_warning_785_{}", Utc::now().timestamp()));
-    warning.r#type = Some("equipment_warning".into());
+    let mut warning = Event::new(
+        format!("equipment_warning_785_{}", Utc::now().timestamp()),
+        "equipment_warning".into(),
+        Utc::now());
     warning.status = Some("open".into());
     warning.add_metadata("unit".into(), "truck_785".into());
     warning.add_metadata("signal".into(), "oil_pressure".into());
-    warning.set_event_time(Utc::now());
     api.events.create(&vec![warning]).await?;
 }
 ```
@@ -153,9 +154,9 @@ let filter = RetrieveFilter {
     end: Some(Utc::now()),
     ..Default::default()
 };
-let series = api.time_series
-    .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?
-    .get_items().remove(0);
+let page = api.time_series
+    .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?;
+let series = &page.get_items()[0];
 for p in &series.datapoints { compare_to_plan(&p.timestamp, p.average); }
 ```
 
