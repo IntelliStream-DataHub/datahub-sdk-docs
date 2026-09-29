@@ -46,7 +46,7 @@ DataSetModel region = new DataSetModel();
 region.setExternalId("region_nordics");
 region.setName("Nordics region");
 long regionId = client.datasets().create(List.of(region))
-    .getItems().iterator().next().getId();
+    .getItems().get(0).getId();
 
 var salesSeries = new Timeseries();
 salesSeries.setExternalId("store_oslo_01_sku_4471_sales");

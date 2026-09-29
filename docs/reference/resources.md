@@ -168,7 +168,7 @@ compare the returned items against what you asked for when a miss matters.
 ```java
 import ai.intellistream.datahub.models.IdCollection;
 
-NodeModel pump = client.resources().getById(5677892).getItems().iterator().next();
+NodeModel pump = client.resources().getById(5677892).getItems().get(0);
 
 DataWrapper<NodeModel> some = client.resources().byIds(List.of(
         IdCollection.createFromExternalId("pump_1"),

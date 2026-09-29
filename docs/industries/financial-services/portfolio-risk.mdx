@@ -46,7 +46,7 @@ DataSetModel desk = new DataSetModel();
 desk.setExternalId("desk_equities");
 desk.setName("Equities desk");
 var created = client.datasets().create(List.of(desk));
-long deskId = created.getItems().iterator().next().getId();
+long deskId = created.getItems().get(0).getId();
 ```
 
 </TabItem>

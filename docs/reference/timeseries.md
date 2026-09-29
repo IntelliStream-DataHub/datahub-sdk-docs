@@ -375,7 +375,11 @@ because the stored points would no longer parse; create a new series instead.
 import ai.intellistream.datahub.timeseries.UpdateTimeseries;
 
 DataWrapper<Timeseries> newest = client.timeseries().list(100);
-DataWrapper<Timeseries> inSet = client.timeseries().list(100, 43L);   // Java takes the numeric dataSetId
+
+// Java takes the numeric dataSetId, so look the data set up by external id first.
+long engineData = client.datasets().byIds(List.of(
+        IdCollection.createFromExternalId("engine_data"))).getItems().get(0).getId();
+DataWrapper<Timeseries> inSet = client.timeseries().list(100, engineData);
 
 UpdateTimeseries change = new UpdateTimeseries().setExternalId("engine_temperature");
 change.getUpdate().getDescription().set("Engine block temperature, port side");

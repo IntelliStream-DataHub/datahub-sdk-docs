@@ -37,7 +37,7 @@ var uploaded = client.files().upload(
         .description("ESP A-12 calibration certificate")
         .build());
 
-System.out.println("stored as id " + uploaded.getItems().iterator().next().getId());
+System.out.println("stored as id " + uploaded.getItems().get(0).getId());
 ```
 
 </TabItem>
@@ -139,7 +139,7 @@ string (the endpoint also accepts an external id in that position).
 <TabItem value="java" label="Java">
 
 ```java
-long id = uploaded.getItems().iterator().next().getId();
+long id = uploaded.getItems().get(0).getId();
 byte[] bytes = client.files().download(String.valueOf(id));
 Files.write(Path.of("calibration_a12.pdf"), bytes);
 ```
