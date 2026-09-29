@@ -41,7 +41,7 @@ Each bin reports its fill level. When a bin crosses its collection threshold, ra
 
 ```java
 var series = client.timeseries().retrieve(lastReadingOf("bin_grunerlokka_114_fill_pct"))
-    .getItems().iterator().next();
+    .getItems().get(0);
 
 double fill = Double.parseDouble(series.getDatapoints().get(0).getValue());
 if (fill >= 80.0) {
@@ -76,8 +76,8 @@ if fill >= 80.0:
 use chrono::Utc;
 use intellistream_datahub_sdk::events::Event;
 
-let points = api.time_series.retrieve_datapoints(&last_reading("bin_grunerlokka_114_fill_pct")).await?
-    .get_items_mut().remove(0);
+let page = api.time_series.retrieve_datapoints(&last_reading("bin_grunerlokka_114_fill_pct")).await?;
+let points = &page.get_items()[0];
 let fill: f64 = points.datapoints[0].value.unwrap_or(0.0);
 if fill >= 80.0 {
     let mut due = Event::new(

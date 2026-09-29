@@ -122,7 +122,7 @@ filter.setGranularity("1h");
 var request = new DataRetriever<RetrieveFilter>();
 request.setItems(List.of(filter));
 
-client.timeseries().retrieve(request).getItems().iterator().next().getDatapoints()
+client.timeseries().retrieve(request).getItems().get(0).getDatapoints()
     .forEach(p -> chart(p.getTimestamp(), p.getValue()));  // hourly load
 ```
 
@@ -155,9 +155,9 @@ let filter = RetrieveFilter {
     granularity: Some("1h".into()),
     ..Default::default()
 };
-let series = api.time_series
-    .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?
-    .get_items_mut().remove(0);
+let page = api.time_series
+    .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?;
+let series = &page.get_items()[0];
 for p in &series.datapoints { chart(&p.timestamp, p.average, p.max); }
 ```
 

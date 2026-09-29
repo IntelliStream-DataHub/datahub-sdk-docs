@@ -128,7 +128,7 @@ var request = new DataRetriever<RetrieveFilter>();
 request.setItems(List.of(filter));
 
 double rated = 3500.0;   // kW
-client.timeseries().retrieve(request).getItems().iterator().next().getDatapoints()
+client.timeseries().retrieve(request).getItems().get(0).getDatapoints()
     .forEach(p -> recordCapacityFactor(
         p.getTimestamp(), Double.parseDouble(p.getValue()) / rated));
 ```
@@ -165,9 +165,9 @@ let filter = RetrieveFilter {
     granularity: Some("1h".into()),
     ..Default::default()
 };
-let series = api.time_series
-    .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?
-    .get_items_mut().remove(0);
+let page = api.time_series
+    .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?;
+let series = &page.get_items()[0];
 let rated = 3500.0;
 for p in &series.datapoints {
     if let Some(avg) = p.average { record_capacity_factor(&p.timestamp, avg / rated); }

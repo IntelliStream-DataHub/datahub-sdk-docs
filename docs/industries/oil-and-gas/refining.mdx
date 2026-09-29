@@ -53,7 +53,7 @@ var request = new DataRetriever<RetrieveFilter>();
 request.setItems(List.of(filter));
 
 // divide hourly energy by hourly throughput for energy-per-barrel
-client.timeseries().retrieve(request).getItems().iterator().next().getDatapoints()
+client.timeseries().retrieve(request).getItems().get(0).getDatapoints()
     .forEach(p -> recordEnergyIntensity(p.getTimestamp(), p.getValue()));
 ```
 
@@ -88,9 +88,9 @@ let filter = RetrieveFilter {
     granularity: Some("1h".into()),
     ..Default::default()
 };
-let series = api.time_series
-    .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?
-    .get_items_mut().remove(0);
+let page = api.time_series
+    .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?;
+let series = &page.get_items()[0];
 for p in &series.datapoints { record_energy_intensity(&p.timestamp, p.sum); }
 ```
 

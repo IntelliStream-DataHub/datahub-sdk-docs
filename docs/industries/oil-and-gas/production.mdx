@@ -199,7 +199,7 @@ queries open events for the field, and the event references the well it concerns
 
 ```java
 var series = client.timeseries().retrieve(lastHourOf("pump_intake_pressure_bar"))
-    .getItems().iterator().next();
+    .getItems().get(0);
 
 if (series.getDatapoints().stream().anyMatch(p -> Double.parseDouble(p.getValue()) < 80.0)) {
     EventModel event = new EventModel();
@@ -232,8 +232,8 @@ if any(float(dp.value) < 80.0 for dp in points.get_datapoints()):
 use chrono::Utc;
 use intellistream_datahub_sdk::events::Event;
 
-let points = api.time_series.retrieve_datapoints(&last_hour("pump_intake_pressure_bar")).await?
-    .get_items_mut().remove(0);
+let page = api.time_series.retrieve_datapoints(&last_hour("pump_intake_pressure_bar")).await?;
+let points = &page.get_items()[0];
 let low = points.datapoints.iter()
     .any(|p| p.value.unwrap_or(99.0) < 80.0);
 if low {
