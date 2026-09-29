@@ -3,9 +3,9 @@ page = "docs/guides/ingest-timeseries.mdx"
 # java   #1 L46  · python #1 L79 · rust #1 L106 — Ingest a million readings
 # java   #2 L170 · java   #3 L208               — Binary ingest (Java)
 [blocks]
-python = 1
+python = 2
 java = 3
-rust = 1
+rust = 2
 
 # The page opens on a reader who already has a series. Rather than conjuring one,
 # the quickstart runs first: this tests that the two pages compose, which is how

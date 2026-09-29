@@ -89,7 +89,7 @@ uploaded = client.files.upload_file(upload)   # -> list[INode]
 use intellistream_datahub_sdk::files::FileUpload;
 
 // mime type is inferred from the file content
-let mut upload = FileUpload::new_with_destination_path("report.csv", "/reports/2026/");
+let mut upload = FileUpload::new_with_destination_path("report.csv", "/reports/2026/")?;
 upload.set_external_id("report_2026_q2".into());
 upload.set_file_name("q2.csv".into());
 upload.set_data_set_id(42);

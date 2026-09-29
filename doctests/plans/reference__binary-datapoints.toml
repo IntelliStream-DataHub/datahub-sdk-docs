@@ -5,6 +5,7 @@ page = "docs/reference/binary-datapoints.md"
 
 [blocks]
 python = 1
+rust = 1
 
 [python]
 # The page's banner: it writes into `engine_temperature`, which section A of the

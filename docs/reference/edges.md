@@ -70,7 +70,7 @@ contains.setToExternalId("pump_1");
 contains.setRelationshipType("CONTAINS");
 
 DataWrapper<EdgeProxy> created = client.edges().create(List.of(contains));
-System.out.println(created.getItems().iterator().next().getId());
+System.out.println(created.getItems().get(0).getId());
 ```
 
 `setName("Flows To")` is the alternative to `setRelationshipType`: it normalises the name to

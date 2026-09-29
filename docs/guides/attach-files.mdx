@@ -37,7 +37,7 @@ var uploaded = client.files().upload(
         .description("ESP A-12 calibration certificate")
         .build());
 
-System.out.println("stored as id " + uploaded.getItems().iterator().next().getId());
+System.out.println("stored as id " + uploaded.getItems().get(0).getId());
 ```
 
 </TabItem>
@@ -63,7 +63,7 @@ use intellistream_datahub_sdk::files::FileUpload;
 
 // MIME type is inferred from the file content
 let mut upload = FileUpload::new_with_destination_path(
-    "calibration_a12.pdf", "/certificates/2026/");
+    "calibration_a12.pdf", "/certificates/2026/")?;
 upload.set_external_id("calibration_pump_esp_a12".into());
 upload.set_file_name("calibration_a12.pdf".into());
 upload.set_data_set_id(42);
@@ -139,7 +139,7 @@ string (the endpoint also accepts an external id in that position).
 <TabItem value="java" label="Java">
 
 ```java
-long id = uploaded.getItems().iterator().next().getId();
+long id = uploaded.getItems().get(0).getId();
 byte[] bytes = client.files().download(String.valueOf(id));
 Files.write(Path.of("calibration_a12.pdf"), bytes);
 ```

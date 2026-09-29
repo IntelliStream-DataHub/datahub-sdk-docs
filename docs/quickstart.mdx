@@ -102,7 +102,9 @@ TOKEN=eyJhbGciOi...          # or CLIENT_ID / CLIENT_SECRET / TOKEN_URI
 ```java
 var client = DatahubClient.fromEnv();
 
-var series = Timeseries.of("engine_temperature").name("Engine temperature");
+var series = new Timeseries();
+series.setExternalId("engine_temperature");
+series.setName("Engine temperature");
 series.setUnit("celsius");
 series.setValueType("float");
 client.timeseries().create(series);

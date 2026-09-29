@@ -51,12 +51,12 @@ on a host fan out to the services it affects.
 <TabItem value="java" label="Java">
 
 ```java
-ResourceForm service = new ResourceForm();
+Resource service = new Resource();
 service.setExternalId("service_checkout");
 service.setName("Checkout service");
 service.setLabels(List.of("Service"));
 
-ResourceForm host = new ResourceForm();
+Resource host = new Resource();
 host.setExternalId("host_web_01");
 host.setName("web-01");
 host.setLabels(List.of("Host"));
@@ -164,12 +164,13 @@ use chrono::Utc;
 let mut listener = api.subscriptions.listen(&["checkout_slo"]).await?;
 while let Some(Ok(msg)) = listener.next().await {
     if breaches_slo(&msg.payload) {           // e.g. p99 latency > 300 ms
-        let mut event = Event::new(format!("slo_breach_checkout_{}", Utc::now().timestamp()));
-        event.r#type = Some("slo_breach".into());
+        let mut event = Event::new(
+            format!("slo_breach_checkout_{}", Utc::now().timestamp()),
+            "slo_breach".into(),
+            Utc::now());
         event.status = Some("firing".into());
         event.add_metadata("service".into(), "service_checkout".into());
         event.add_metadata("slo".into(), "latency_p99".into());
-        event.set_event_time(Utc::now());
         api.events.create(&vec![event]).await?;
     }
     listener.ack(&[msg.message_id.as_str()]).await?;
@@ -198,21 +199,20 @@ DataWrapper<EventModel> breaches = client.events().filter(retriever);
 <TabItem value="python" label="Python">
 
 ```python
-breaches = client.events.filter(intellistream_datahub_sdk.EventFilter(
-    basic_filter=intellistream_datahub_sdk.BasicEventFilter(type="slo_breach"), limit=200))
+breaches = client.events.filter(type="slo_breach", limit=200)
 ```
 
 </TabItem>
 <TabItem value="rust" label="Rust">
 
 ```rust
-use intellistream_datahub_sdk::filters::{BasicEventFilter, EventFilter};
+use intellistream_datahub_sdk::filters::{EventFilter, EventFilterForm};
 
-let mut basic = BasicEventFilter::default();
-basic.set_type(&["slo_breach"]);
-let mut filter = EventFilter::default();
-filter.set_filter(basic);
-filter.set_limit(200);
+let filter = EventFilterForm::default()
+    .set_filter(EventFilter {
+        r#type: Some(vec!["slo_breach".into()]), ..Default::default() })
+    .set_limit(200)
+    .build();
 let breaches = api.events.filter(&filter).await?;
 ```
 
@@ -235,9 +235,9 @@ ResourceNetwork checkout = client.resources().fetchRelated("service_checkout", 4
 ResourceNetwork payments = client.resources().fetchRelated("service_payments", 4);
 
 Set<String> checkoutDeps = checkout.nodes().stream()
-    .map(Resource::getExternalId).collect(Collectors.toSet());
+    .map(NodeModel::getExternalId).collect(Collectors.toSet());
 Set<String> shared = payments.nodes().stream()
-    .map(Resource::getExternalId).filter(checkoutDeps::contains).collect(Collectors.toSet());
+    .map(NodeModel::getExternalId).filter(checkoutDeps::contains).collect(Collectors.toSet());
 
 // shared contains "order_db" → one failing dependency, not two outages
 ```
@@ -266,9 +266,9 @@ let checkout = api.resources.fetch_related(
 let payments = api.resources.fetch_related(
     &RelatedResourcesForm::from_external_id("service_payments").with_depth(4)).await?;
 
-let deps: HashSet<&str> = checkout.nodes().iter().map(|n| n.external_id.as_str()).collect();
+let deps: HashSet<&str> = checkout.nodes().iter().map(|n| n.external_id()).collect();
 let shared: Vec<&str> = payments.nodes().iter()
-    .map(|n| n.external_id.as_str()).filter(|id| deps.contains(id)).collect();
+    .map(|n| n.external_id()).filter(|id| deps.contains(id)).collect();
 // shared contains "order_db" → one failing dependency, not two outages
 ```
 
