@@ -42,9 +42,13 @@ A farm *contains* fields; each field's sensors are series.
 <TabItem value="java" label="Java">
 
 ```java
-var moisture = Timeseries.of("field_north_40_soil_moisture").name("North 40 soil moisture");
+var moisture = new Timeseries();
+moisture.setExternalId("field_north_40_soil_moisture");
+moisture.setName("North 40 soil moisture");
 moisture.setUnit("pct");
-var soilTemp = Timeseries.of("field_north_40_soil_temp_c").name("North 40 soil temperature");
+var soilTemp = new Timeseries();
+soilTemp.setExternalId("field_north_40_soil_temp_c");
+soilTemp.setName("North 40 soil temperature");
 soilTemp.setUnit("deg_c");
 client.timeseries().create(moisture, soilTemp);
 
@@ -130,7 +134,7 @@ client.files.upload_file(intellistream_datahub_sdk.FileUpload(
 use intellistream_datahub_sdk::files::FileUpload;
 
 let mut upload = FileUpload::new_with_destination_path(
-    "north_40_2026_06_28.tif", "/fields/north_40/scans/");
+    "north_40_2026_06_28.tif", "/fields/north_40/scans/")?;
 upload.external_id = "scan_north_40_2026_06_28".into();
 upload.name = "2026_06_28.tif".into();
 api.files.upload_file(upload).await?;

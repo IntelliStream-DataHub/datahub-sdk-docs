@@ -47,9 +47,10 @@ exact — use the `NUMERIC` value type so values store without floating-point dr
 <TabItem value="java" label="Java">
 
 ```java
-var pressure = Timeseries.of("tool_etch_07_chamber_pressure_mtorr")
-    .name("Etch-07 chamber pressure")
-    .setValueType("numeric");
+var pressure = new Timeseries();
+pressure.setExternalId("tool_etch_07_chamber_pressure_mtorr");
+pressure.setName("Etch-07 chamber pressure");
+pressure.setValueType("numeric");
 pressure.setUnit("mtorr");
 client.timeseries().create(pressure);
 
@@ -81,7 +82,7 @@ use chrono::Utc;
 
 let mut p = TimeSeries::new("tool_etch_07_chamber_pressure_mtorr", "Etch-07 chamber pressure");
 p.unit = Some("mtorr".into());
-p.value_type = "numeric".into();
+p.value_type = Some("numeric".into());
 api.time_series.create_one(&p).await?;
 
 api.time_series
@@ -107,9 +108,9 @@ ResourceNetwork lotA = client.resources().fetchRelated("lot_22841", 6);
 ResourceNetwork lotB = client.resources().fetchRelated("lot_22863", 6);
 
 Set<String> toolsA = lotA.nodes().stream()
-    .map(Resource::getExternalId).filter(id -> id.startsWith("tool_")).collect(Collectors.toSet());
+    .map(NodeModel::getExternalId).filter(id -> id.startsWith("tool_")).collect(Collectors.toSet());
 Set<String> suspect = lotB.nodes().stream()
-    .map(Resource::getExternalId).filter(toolsA::contains).collect(Collectors.toSet());
+    .map(NodeModel::getExternalId).filter(toolsA::contains).collect(Collectors.toSet());
 
 // suspect contains "tool_etch_07" → the chamber to pull and check
 ```
@@ -139,9 +140,9 @@ let lot_b = api.resources.fetch_related(
     &RelatedResourcesForm::from_external_id("lot_22863").with_depth(6)).await?;
 
 let tools_a: HashSet<&str> = lot_a.nodes().iter()
-    .map(|n| n.external_id.as_str()).filter(|id| id.starts_with("tool_")).collect();
+    .map(|n| n.external_id()).filter(|id| id.starts_with("tool_")).collect();
 let suspect: Vec<&str> = lot_b.nodes().iter()
-    .map(|n| n.external_id.as_str()).filter(|id| tools_a.contains(id)).collect();
+    .map(|n| n.external_id()).filter(|id| tools_a.contains(id)).collect();
 // suspect contains "tool_etch_07"
 ```
 

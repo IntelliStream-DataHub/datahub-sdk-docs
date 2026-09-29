@@ -127,7 +127,7 @@ let reachable = api.resources.fetch_related(
         .with_relationship_types(vec!["connects_to".into()])).await?;
 
 let still_connected = reachable.nodes().iter()
-    .any(|n| n.external_id == "station_bergen_n");
+    .any(|n| n.external_id() == "station_bergen_n");
 println!("{}", if still_connected { "route open" } else { "SEVERED — reroute required" });
 ```
 

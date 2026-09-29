@@ -334,6 +334,23 @@ def check_rust(units: list[Unit], workdir: Path, sdk: Path, timeout: int = 1800)
                                          rust_placeholder(code, m["message"])))
     if proc.returncode != 0 and not reached:
         raise ToolchainMissing(f"cargo check failed before it reached the docs:\n{proc.stderr[-3000:]}")
+
+    # "Type annotations needed", on a page that leaves something to the reader, is rustc saying it
+    # lacks information the reader supplies — not a claim about the SDK. There is no Rust
+    # equivalent of the Java stubbed pass to prove it: a stub would need a type of its own, and
+    # every constraint on the value is another call the page does not show, so rustc has nowhere to
+    # infer from either way. It cannot be narrowed by line, because an annotation does not survive
+    # being destructured: `if let Some(level) = reader_fn(..)` reports E0282 at the *use* of
+    # `level`, and no annotation the page could write reaches it.
+    #
+    # Dropping it costs one thing worth naming: a page whose own code is genuinely ambiguous stops
+    # being caught, if it also leaves a name to the reader. That is accepted, because the
+    # alternative was contorting the prose — the tailings page had `unwrap_or("")` and an
+    # `is_empty()` test in place of a plain `if let Some(..)` purely to satisfy this. A removed or
+    # renamed SDK symbol is E0425, E0433, E0412 or E0599, none of which this touches.
+    for name, found in out.items():
+        if any(d.placeholder for d in found):
+            out[name] = [d for d in found if d.placeholder or not d.message.startswith("E0282")]
     return out
 
 
@@ -555,12 +572,16 @@ def check_java(units: list[Unit], workdir: Path, classpath: str, timeout: int = 
             u.segments = [replace(s, first_line=s.first_line + shift) for s in u.segments]
 
     out: dict[str, list[Diagnostic]] = {u.name: [] for u in units}
+    # line and "could a stub's type have caused this", so the second pass can retract it.
+    first: dict[str, list[tuple[int, Diagnostic, bool]]] = {u.name: [] for u in units}
     stubs: dict[str, dict[int, list[tuple[str, str]]]] = {}  # unit -> line -> (kind, name)
     for e in _javac({f"{u.name}.java": u for u in units}, workdir, classpath, timeout):
         symbol, location = e.field("symbol"), e.field("location")
         text = e.message + (f": {symbol}" if symbol else "") + (f" (in {location})" if symbol and location else "")
         name = java_placeholder(e.message, symbol, location, e.unit.name)
-        out[e.unit.name].append(Diagnostic(e.unit.page, "java", e.unit.locate(e.line), text, name))
+        diag = Diagnostic(e.unit.page, "java", e.unit.locate(e.line), text, name)
+        out[e.unit.name].append(diag)
+        first[e.unit.name].append((e.line, diag, name is None and _typing_failed(e)))
         if name and e.unit.program is None:
             kind = symbol.split()[0]
             stubs.setdefault(e.unit.name, {}).setdefault(e.line, []).append((kind, name))
@@ -590,7 +611,8 @@ def check_java(units: list[Unit], workdir: Path, classpath: str, timeout: int = 
                  if ln.startswith(f"public class {u.name} {{") else ln for ln in lines]
         stubbed[f"{u.name}.java"] = replace(u, source="\n".join(lines))
     if stubbed:
-        for e in _javac(stubbed, workdir / "stubbed", classpath, timeout):
+        second = _javac(stubbed, workdir / "stubbed", classpath, timeout)
+        for e in second:
             if e.line not in stubs[e.unit.name] or not _lookup_failed(e):
                 continue
             symbol, location = e.field("symbol"), e.field("location")
@@ -599,6 +621,21 @@ def check_java(units: list[Unit], workdir: Path, classpath: str, timeout: int = 
             diag = Diagnostic(e.unit.page, "java", e.unit.locate(e.line), text)
             if all((d.where, d.message) != (diag.where, diag.message) for d in out[e.unit.name]):
                 out[e.unit.name].append(diag)
+
+        # …and the same pass retracts, which the first one cannot do for itself. javac
+        # resolves neither an overload nor a target type through an argument it could not
+        # resolve, so an unresolved reader-supplied name shows up a second time as a type
+        # error — on the *enclosing call*, which is a different line from the name itself.
+        # Once every such name has a type, a type error that disappears was the name's and
+        # not the page's. Only typing errors are dropped this way; a missing method or type
+        # still fails however the reader's values are typed.
+        still: dict[str, set[int]] = {}
+        for e in second:
+            still.setdefault(e.unit.name, set()).add(e.line)
+        for unit_name in stubs:
+            resolved = [d for line, d, droppable in first[unit_name]
+                        if droppable and line not in still.get(unit_name, set())]
+            out[unit_name] = [d for d in out[unit_name] if d not in resolved]
     return out
 
 
@@ -619,6 +656,24 @@ def _lookup_failed(e: _JavacError) -> bool:
         reasons = [d for d in e.detail if d.startswith(("method ", "constructor "))]
         return bool(reasons) and all("differ in length" in d for d in reasons)
     return False
+
+
+def _typing_failed(e: _JavacError) -> bool:
+    """An error about argument or target *types* — the kind an unresolved name also produces.
+
+    The mirror of `_lookup_failed`, and used only to retract: a diagnostic of this kind that
+    the stubbed pass no longer reports came from a name the reader supplies, because javac
+    gives up on overload resolution and on inference as soon as one argument is erroneous.
+
+    `invalid method reference` is deliberately not here. A method reference names its
+    receiver type outright, so it is a claim about the SDK's shape rather than about what
+    flows into a call, and it stays hard whatever the reader passes.
+    """
+    if "invalid method reference" in e.message:
+        return False
+    return (e.message.startswith("incompatible types")
+            or e.message.startswith("no suitable method")
+            or "cannot be applied to given types" in e.message)
 
 
 def java_placeholder(msg: str, symbol: str | None, location: str | None, cls: str) -> str | None:

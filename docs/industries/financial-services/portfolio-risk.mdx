@@ -46,7 +46,7 @@ DataSetModel desk = new DataSetModel();
 desk.setExternalId("desk_equities");
 desk.setName("Equities desk");
 var created = client.datasets().create(List.of(desk));
-long deskId = created.getItems().iterator().next().getId();
+long deskId = created.getItems().get(0).getId();
 ```
 
 </TabItem>
@@ -85,10 +85,11 @@ so currency amounts store faithfully.
 <TabItem value="java" label="Java">
 
 ```java
-var mtm = Timeseries.of("portfolio_growth_mtm_usd")
-    .name("Growth portfolio — mark-to-market (USD)")
-    .setValueType("numeric")
-    .setDataSetId(deskId);
+var mtm = new Timeseries();
+mtm.setExternalId("portfolio_growth_mtm_usd");
+mtm.setName("Growth portfolio — mark-to-market (USD)");
+mtm.setValueType("numeric");
+mtm.setDataSetId(deskId);
 mtm.setUnit("usd");
 client.timeseries().create(mtm);
 
@@ -120,7 +121,7 @@ use chrono::Utc;
 
 let mut ts = TimeSeries::new("portfolio_growth_mtm_usd", "Growth portfolio — mark-to-market (USD)");
 ts.unit = Some("usd".into());
-ts.value_type = "numeric".into();
+ts.value_type = Some("numeric".into());
 ts.data_set_id = desk_id;          // desk_id is already Option<u64>
 api.time_series.create_one(&ts).await?;
 
@@ -173,14 +174,15 @@ client.events.create([intellistream_datahub_sdk.Event(
 use intellistream_datahub_sdk::events::Event;
 use chrono::Utc;
 
-let mut breach = Event::new(format!("var_limit_breach_growth_{}", Utc::now().timestamp()));
-breach.r#type = Some("var_limit_breach".into());
+let mut breach = Event::new(
+    format!("var_limit_breach_growth_{}", Utc::now().timestamp()),
+    "var_limit_breach".into(),
+    Utc::now());
 breach.status = Some("open".into());
 breach.data_set_id = desk_id;
 breach.add_metadata("portfolio".into(), "portfolio_growth".into());
 breach.add_metadata("var_1d_usd".into(), "512340".into());
 breach.add_metadata("limit_usd".into(), "500000".into());
-breach.set_event_time(Utc::now());
 api.events.create(&vec![breach]).await?;
 ```
 

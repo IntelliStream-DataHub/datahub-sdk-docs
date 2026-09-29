@@ -18,9 +18,9 @@ page = "docs/reference/resources.md"
 #   rust   #5   L264   Traverse the graph
 
 [blocks]
-python = 9
-java = 8
-rust = 8
+python = 10
+java = 11
+rust = 9
 
 [python]
 timeout = 600
