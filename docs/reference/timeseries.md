@@ -57,6 +57,11 @@ api.time_series.create_one(&ts).await?;
 </TabItem>
 </Tabs>
 
+A create needs a `unit` (free text), a `unitExternalId` from the [unit catalogue](./units), or
+both. Given only `unitExternalId`, the series gets its `unit` from the catalogue entry; a
+`unitExternalId` the catalogue does not have is a `400` on that field.
+[Tag a series with a unit →](../guides/work-with-units#tag-a-series-with-a-unit)
+
 ## Value types
 
 Every series has a **value type** that decides how its datapoints are stored. A create that
@@ -369,7 +374,9 @@ set and everything beneath it in the `BELONGS_TO` hierarchy. Anything narrower b
 `POST /timeseries/update` changes fields on series that already exist. It is a partial update:
 only the fields named in each entry's `update` block change, and the series is identified by
 `id` or `externalId`. Changing `valueType` on a series that already holds data is refused,
-because the stored points would no longer parse; create a new series instead.
+because the stored points would no longer parse; create a new series instead. Setting
+`unitExternalId` to a blank value or one the [unit catalogue](./units) does not have is a `400`
+on `unitExternalId`, before anything is written; `setNull` still clears it.
 
 ```java
 import ai.intellistream.datahub.timeseries.UpdateTimeseries;
