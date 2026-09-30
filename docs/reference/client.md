@@ -74,8 +74,9 @@ let api = blocking::create_api_service();
 ```
 
 The blocking client covers most of the async one, not all of it. It has no `subscriptions`, and
-it lacks `time_series.filter`, `resources.filter`, `resources.get_by_id`,
-`resources.fetch_nearest`, `events.get`, `events.update` and `events.count`. `api.async_api()`
+it lacks `time_series.filter`, `time_series.listen_datapoints`, `resources.filter`,
+`resources.get_by_id`, `resources.fetch_nearest`, `events.get`, `events.update` and
+`events.count`. `api.async_api()`
 hands you the async service for those.
 
 </TabItem>
@@ -96,26 +97,22 @@ hands you the async service for those.
 | Subscriptions | `client.subscriptions()` | `client.subscriptions` | `api.subscriptions` |
 | Edges | `client.edges()` | `client.edges` | `api.edges` |
 | [Labels](./labels) | `client.labels()` | `client.labels` | `api.labels` |
+| [Tenant](./tenant) | `client.tenant()` | `client.tenant` | `api.tenant` |
 
 Assets and functions are the `ASSET`- and `FUNCTION`-labelled resources, typed. A service being
 in a client does not mean every call is: each reference page has a "What each client covers"
 table.
 
-The Java client adds three more services:
+The Java client adds two more services:
 
 | Service | Java | Covers |
 | --- | --- | --- |
 | [Policies](./policies) | `client.policies()` | `/policies`, including the naming dry-run |
 | [Governance templates](./policies#governance-templates) | `client.governance()` | `/governance/templates` |
-| [Tenant](./tenant) | `client.tenant()` | `/tenant/features` and `/tenant/settings` |
 
-:::note Two endpoints no client wraps, on purpose
+:::note One endpoint no client wraps, on purpose
 `GET /stats` is internal to the console and marked hidden: it is not part of the published
-contract, so nothing should call it. The browser datapoint tail
-`/timeseries/datapoints/listen` authenticates with a `?token=` query parameter, which is for a
-page that cannot set a header. Server-side code wants the durable equivalent instead,
-[`subscriptions().listen`](./subscriptions#live-delivery), which authenticates the upgrade with
-the usual `Authorization` header and survives a reconnect.
+contract, so nothing should call it.
 :::
 
 ## Authentication

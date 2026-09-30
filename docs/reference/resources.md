@@ -896,9 +896,13 @@ The nodes and relationships it creates count against their own daily quotas thro
 ordinary create path. A reverse proxy in front of the API has to pass the upload through
 unbuffered and uncapped, as the shipped nginx examples do for `/resources/import`.
 
-The Java client wraps the pair. `export` hands back the file as bytes and `importGraph` takes
-the same bytes, so moving a sub-graph between two tenants is two calls and no temporary file
-unless you want one:
+Every client wraps the pair. Export hands back the file as bytes and import takes the same
+bytes, so moving a sub-graph between two tenants is two calls and no temporary file unless you
+want one. Python and Rust also stream either end to or from a path, for a file too large to hold
+in memory.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
 
 ```java
 import ai.intellistream.datahub.api.graphtransfer.GraphImportResult;
@@ -914,7 +918,45 @@ System.out.println(result.nodesCreated() + " created, "
 `GraphImportResult` is a record, so its fields read as `result.nodesCreated()` and so on, one
 per key of the JSON above.
 
-Python and Rust call the endpoints over HTTP with the bearer token the client already holds:
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+graph = source.resources.export_graph(5677892)          # bytes
+
+result = target.resources.import_graph(graph)
+print(result.nodes_created, "created,",
+      result.nodes_skipped_existing, "already there,",
+      result.nodes_skipped_timeseries, "to create as series first")
+
+# Or through a file, never held whole in memory:
+source.resources.export_graph_to_path(5677892, "plant_oslo.dhgraph")
+target.resources.import_graph_from_path("plant_oslo.dhgraph")
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+let graph: Vec<u8> = source.resources.export_graph(5677892).await?;
+
+let result = target.resources.import_graph(graph).await?;
+println!("{} created, {} already there, {:?} to create as series first",
+    result.nodes_created, result.nodes_skipped_existing, result.nodes_skipped_timeseries);
+
+// Or through a file, never held whole in memory:
+source.resources.export_graph_to_path(5677892, "plant_oslo.dhgraph").await?;
+target.resources.import_graph_from_path("plant_oslo.dhgraph").await?;
+```
+
+</TabItem>
+</Tabs>
+
+The export walks the graph, which settles a moment after a write. A component created and
+exported straight away can come back short; read it with `fetch_related` first when that
+matters.
+
+Over plain HTTP, send the bearer token the client already holds:
 
 ```bash
 curl -fsS -H "Authorization: Bearer $TOKEN" \
@@ -1056,32 +1098,40 @@ DataWrapper<Function> page = client.functions().filter(criteria);
 ```python
 # entity objects, external-id strings, or numeric ids
 some = client.functions.by_ids(["fn_rolling_average"])
+
+page = client.functions.filter(labels=["AGGREGATION"])   # a Page; page.next_cursor pages on
+hits = client.functions.search("rolling average")
 ```
+
+`filter` takes the criteria as keywords or a prepared `FunctionFilter` as `filter=`, never both,
+plus `limit`, `sort_by`, `sort_order` and `cursor`. `search` takes `query`, an optional
+`FunctionFilter` and `limit`.
 
 </TabItem>
 <TabItem value="rust" label="Rust">
 
 ```rust
+use intellistream_datahub_sdk::filters::NodeFilter;
+use intellistream_datahub_sdk::functions::{FunctionFilter, FunctionFilterForm};
 use intellistream_datahub_sdk::generic::IdAndExtId;
 
 let some = api.functions.by_ids(&vec![
     IdAndExtId::from_external_id("fn_rolling_average"),
 ]).await?;
+
+let criteria = FunctionFilter {
+    node: NodeFilter { labels: Some(vec!["AGGREGATION".into()]), ..Default::default() },
+    data_set_id: None,
+};
+let page = api.functions.filter(&FunctionFilterForm::new(criteria)).await?;
+let hits = api.functions.search_by_query("rolling average").await?;
 ```
+
+`FunctionFilterForm` carries `limit` and a `PageRequest` for `sort` and `cursor`; `search` takes a
+`SearchAndFilterForm<FunctionFilter>`, and `search_by_query` is the shorthand for a bare phrase.
 
 </TabItem>
 </Tabs>
-
-:::note Python and Rust are catching up
-`filter` and `search` on functions are in the Java client today. Python and Rust will get them
-under the names their `assets` service already uses: `functions.filter(...)` taking keyword
-criteria in Python and a filter form in Rust, and `functions.search(query, ...)`. Until then, ask
-[`resources.filter`](#filter) narrowed to the `function` node type.
-
-In those two clients `functions.by_ids` still reads the listing and matches on the client, so it
-only sees the newest 10 000 functions. It moves to `POST /functions/byids` in the same change;
-the call itself stays as it is.
-:::
 
 ## What each client covers {#client-coverage}
 
@@ -1097,7 +1147,7 @@ the call itself stays as it is.
 | Filter | `resources().filter` | `resources.filter` | `resources.filter` |
 | Traverse (`fetch-related`) | `resources().fetchRelated` | `resources.fetch_related` | `resources.fetch_related` |
 | Nearest N (`fetch-nearest`) | `resources().fetchNearest` | `resources.fetch_nearest` | `resources.fetch_nearest` |
-| [Export / import a graph](#graph-transfer) | `resources().export` / `importGraph` | HTTP only | HTTP only |
+| [Export / import a graph](#graph-transfer) | `resources().export` / `importGraph` | `resources.export_graph` / `import_graph`, plus `_to_path` / `_from_path` | `resources.export_graph` / `import_graph`, plus `_to_path` / `_from_path` |
 
 
 Relations have their own client surface in all three clients, `edges()` in Java, `edges` in
