@@ -151,9 +151,9 @@ update echo: `relatedResources` is left empty on purpose. The request touched on
 node's edges, and answering with those alone would be indistinguishable from answering with all
 of them. A delete has no echo at all, being a `204` with no body.
 
-The Python and Rust clients read the update echo as a flat `Resource` whatever the node's type,
-so a time series updated there comes back without its `unit`, and an asset without its
-`geoLocation`. Read the node again with `get_by_id` or `by_ids` when you need its typed shape.
+The Python and Rust clients read the update echo typed as well: Python's `GraphResult.nodes`
+holds each node as its own class, and Rust's `update` returns `GraphDataWrapper<Node>`, so a
+time series updated there comes back with its `unit` and an asset with its `geoLocation`.
 
 ## Look up
 
@@ -607,7 +607,8 @@ This is worth designing for rather than retrying blindly: two writers doing
 
 All three clients wrap this: `resources().update(nodes, relations)` in Java,
 `resources.update([...])` in Python, and `resources.update(&updates)` in Rust, each taking the
-per-entry update forms above.
+per-entry update forms above. The Python and Rust forms (`ResourceUpdate`) cover nodes only:
+neither client has a relation update form, so retarget or retype an edge from Java or over HTTP.
 
 ## Delete {#delete}
 
@@ -684,7 +685,7 @@ Nodes from `fetch-related` and `fetch-nearest` come back [typed by label](#typed
 carry the fields the graph mirror holds: `id`, `externalId`, `name`, `description`, `source`,
 `dataSetId`, `labels`, `metadata`, `createdTime` and `lastUpdatedTime`, plus `relatedResources`
 built from the edges of the network you fetched. By type: `isRoot` on resources and assets,
-`geoLocation` on assets, `unit`, `unitExternalId` and `valueType` on time series, and
+`geoLocation` on assets (a point only; other geometries are not carried), `unit`, `unitExternalId` and `valueType` on time series, and
 `deactivated` on policies. Fetch by id when you need a field outside that list.
 
 <Tabs groupId="lang">
@@ -1038,6 +1039,11 @@ DataWrapper<Asset> some = client.assets().byIds(List.of(
 `filter`, `search`, `update` and `delete` take the same forms as their `resources()`
 counterparts. The update echo is a `GraphDataWrapper<NodeModel, EdgeProxy>`, not an asset one,
 because an update may touch a relation whose other end is not an asset.
+
+Python and Rust have the same service as `assets` (`client.assets`, `api.assets`), with
+`create`, `get_by_id`, `by_ids`, `list`, `filter`, `search`, `update` and `delete`. Reads come
+back as `Asset`, and `update` echoes typed nodes as on `/resources`: a `GraphResult` in Python,
+a `GraphDataWrapper<Node>` in Rust.
 
 ## The `/functions` endpoints {#functions}
 

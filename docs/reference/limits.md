@@ -296,8 +296,8 @@ times; a `500` the API marks `needs-operator` is surfaced instead. Its backoff i
 rather than sleeping, so a spent daily quota reaches your code, or the spool, instead of holding
 a thread until 00:00 UTC.
 
-Rust and Python retry JSON ingest through the spool instead: with buffering on, a `429`, `5xx` or
-network failure is written to disk and the next ingest call sends it again, oldest first, before
+Rust and Python retry JSON ingest through the spool instead: with buffering on, a `408`, `429`, `5xx`
+or network failure is written to disk and the next ingest call sends it again, oldest first, before
 its own data; with it off, the error reaches your code. Their binary
 path, `insert_datapoints_binary`, retries `429`, `5xx` and network failures up to three times
 by default, 1, 2 and 3 seconds apart. Neither waits the `Retry-After`, so a rate limit that

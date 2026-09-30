@@ -107,7 +107,7 @@ let plants = plants.build();
 </Tabs>
 
 There is no Python `NodeFilter` class: the shared fields are inlined into each filter, so
-`DatasetFilter`, `ResourceFilter` and `TimeSeriesFilter` each declare them directly.
+`DatasetFilter`, `ResourceFilter`, `TimeSeriesFilter` and `FunctionFilter` each declare them directly.
 
 `dataSetId` is the one list where **null and empty mean opposite things**:
 
@@ -302,12 +302,12 @@ a filter sort — where nulls sit follows the direction. A `nulls` field did exi
 so sending one now is an unknown field and a `400`.
 
 Nodes default to `createdTime` descending and events to `eventTime` ascending. An unsortable
-property falls back to the default rather than failing, and any `order` that is not exactly
-`desc` sorts ascending.
+property falls back to the default rather than failing, and any `order` that is not `desc`
+(compared case-insensitively) sorts ascending.
 
-Subscriptions are the exception: their own sort type is separate and still carries `nulls`. It is
-not reachable from `events.filter`, `datasets.filter`, `timeseries.filter` or `resources.filter`,
-which take a sort property and direction and build the filter sort internally.
+Subscriptions take the same sort, without `nulls`, over `id`, `externalId`, `name`,
+`createdTime` and `lastUpdatedTime`, newest created first by default. In Python every `filter()`,
+`subscriptions.filter` included, takes `sort_by` and `sort_order` and builds the sort internally.
 
 ### Default sizes {#defaults}
 
@@ -319,9 +319,8 @@ which take a sort property and direction and build the filter sort internally.
 Asking for more than the maximum is a `400`. The cap is on one page, not on how much you can
 read — walk past it with a cursor.
 
-The SDKs do not rely on the server default: the Python and Rust clients send `limit` on every
-filter call and default it to **100**, so a call that says nothing about paging returns 100 rows
-rather than 1000.
+When you do not set a `limit`, the Python and Rust clients either omit it or send 1000, so a
+call that says nothing about paging returns up to 1000 rows either way.
 
 ## Paging with a cursor {#paging}
 
@@ -339,9 +338,9 @@ same `sort`. Three things are refused with a `400`
 
 None of them restarts the walk silently, which would loop a paging client or skip rows.
 
-Sorting by `subType` or `status` cannot be paged at all: neither is selective enough to order a
-keyset on, so a cursor carrying one is refused. Sort by something else if you need to walk the
-whole result.
+Sorting by `subType` or `status` pages like any other sort, although both are nullable: the
+null block is a position in the order, so the walk continues through it rather than stopping
+after the first page.
 
 A full page does not mean there is more — a walk ends with one request that comes back empty.
 [Events](./events#paging) has the walk.

@@ -647,8 +647,9 @@ exist and it goes straight to ingesting:
 ...
 ```
 
-Now simulate the outage: stop the API for a minute, watch the ticks report buffering
-(and `datahub-spool/` fill up), then start it again and watch the backlog flush. To see
+Now simulate the outage: stop the API for a minute, watch the ticks report buffering in Java
+(and `datahub-spool/` fill up in every language; the Python and Rust programs keep printing
+`ingested`, since a spooled call succeeds), then start it again and watch the backlog flush. To see
 the ingested data, read it back with a
 [retrieve filter](/reference/timeseries#retrieve-datapoints) or aggregate it as in
 [Query & aggregate](/guides/query-and-aggregate).

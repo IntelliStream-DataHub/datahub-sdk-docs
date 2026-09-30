@@ -244,9 +244,8 @@ Identify the node by `externalId` or `id`; every other field is optional and nul
 unchanged". `metadata` and `relatedResources` **replace** rather than merge.
 
 A restore is not a force-overwrite. If something else already occupies the path, you get a
-`409`, so move or rename the occupant first. Names and paths in the trash listing are the
-pre-deletion values, and the deletion time is encoded in the external id as
-`DELETED_..._<epochMillis>`.
+`409`, so move or rename the occupant first. Names, paths and external ids in the trash listing
+are the pre-deletion values, and the deletion time is in the node's `deletedAt` field.
 
 ## Delete
 

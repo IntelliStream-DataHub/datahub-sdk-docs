@@ -194,12 +194,13 @@ combined with AND, a series must match every criterion to be included.
 | `unit` | Pattern, case-insensitive. `*` and `%` are wildcards, `_` is literal (`"cel%"`). |
 | `unitExternalId` | Pattern on the unit-catalogue external id (e.g. `temperature_deg_c`), on the same rules. |
 | `valueType` | Exact, case-insensitive, against the closed catalogue: `BIGINT`, `FLOAT`, `FLOAT32`, `NUMERIC`, `DECIMAL32`, `TEXT`, `MIXED`. Not a pattern. |
-| `id`, `externalId`, `name`, `source` | The shared node criteria. Patterns, on the same rules as `unit`. |
+| `id` | The shared node criterion. Exact numeric ids, not patterns. |
+| `externalId`, `name`, `source` | The shared node criteria. Patterns, on the same rules as `unit`. |
 | `labels` | Series carrying **all** of these labels. |
 | `metadata` | Every key/value pair given must be present. **A null value matches the key alone**, whatever it holds. |
 | `createdTime`, `lastUpdatedTime` | `{ "min": …, "max": … }` bounds. |
 
-Each field above except `labels` and `metadata` takes **either a bare value or an array**, and the
+Each field above except `labels`, `metadata` and the two time windows takes **either a bare value or an array**, and the
 entries of an array are combined with **OR**. That is why they are named in the singular:
 `"unit": "celsius"` is the common case, and `"unit": ["celsius", "kelvin"]` asks for either.
 `labels` and `metadata` require **all** entries to match and keep their plural names for that
@@ -306,10 +307,10 @@ newest created first.
   "limit": 100 }
 ```
 
-Only the **first** `property` is used, and `id` is appended behind it: a sort column alone is not
+Only the **first** recognised `property` is used, and `id` is appended behind it: a sort column alone is not
 a position unless it is unique, and a page boundary inside a run of equal values repeats or drops
 exactly those rows. An unrecognised property falls back to the default rather than being
-rejected, and any `order` that is not exactly `desc` sorts ascending. Nulls sort last ascending,
+rejected, and any `order` that is not `desc`, compared without case, sorts ascending. Nulls sort last ascending,
 first descending, most of these columns are nullable, since every node type shares one table.
 
 A page that has a successor carries a `nextCursor`. Echo it back as `cursor` to continue:
@@ -317,11 +318,11 @@ A page that has a successor carries a `nextCursor`. Echo it back as `cursor` to 
 ```json
 { "filter": { "unit": "celsius" },
   "sort": { "property": ["name"], "order": "asc" },
-  "cursor": "djE6bmFtZXxhc2N8N3x2YQ",
+  "cursor": "bmFtZXxhc2N8N3x2YQ",
   "limit": 100 }
 ```
 
-The cursor is **opaque**, base64 of a versioned encoding carrying the sort, the boundary value
+The cursor is **opaque**, base64 of an encoding carrying the sort, the boundary value
 and the id, so do not build or parse one. Send it with the **same** sort that produced it; a
 cursor is a position in one particular order, and continuing it under another is refused. One
 that does not decode is refused with a `400` of `type: ".../errors/malformed-cursor"`.
@@ -394,7 +395,8 @@ with `by_ids`, which leaves out what it cannot find rather than failing.
 
 `GET /timeseries?limit=` is the cheap "what have I got" read: the first `limit` series, newest
 created first, no criteria. Add `dataSetId` (an id or an external id) to restrict it to one data
-set and everything beneath it in the `BELONGS_TO` hierarchy. Anything narrower belongs in
+set and everything beneath it in the `BELONGS_TO` hierarchy. Python's and Rust's `list` take `limit`
+alone. Anything narrower belongs in
 [filter](#filter-series).
 
 `POST /timeseries/update` changes fields on series that already exist. It is a partial update:
@@ -591,7 +593,7 @@ of at most 100 000 datapoints, and up to four are in flight at once. Change that
 `DATAPOINT_INSERT_PARALLELISM` in the environment, which `create_api_service()` and Python's
 `from_env()` read, or with `set_datapoint_insert_parallelism` on a Rust `DataHubConfig`. Retries
 go through the [durable spool](./client#durable-ingest-buffering): with buffering on, the requests
-go one at a time, a transient failure (429, 5xx, network, or a `401`/`403`) writes the input to
+go one at a time, a transient failure (408, 429, 5xx, network, or a `401`/`403`) writes the input to
 disk, and the next insert sends the spool again, oldest first, before its own data. With buffering
 off, the first request to fail ends the call with its error and the requests not yet sent are
 dropped, so part of the input may have landed. Sending all of it again is safe either way, since
@@ -755,7 +757,7 @@ window:
 | `limit` | Datapoints per page, default 100, at most 100 000. |
 | `aggregates` | Any of `avg`, `sum`, `min`, `max`, lower-case. A name outside that set is dropped, not rejected. `avg` comes back as `average`. |
 | `granularity` | A number and a unit: `s`, `m`, `h`, `d`, `w`, `mo`, `y`, or the words `sec`, `min`, `hour`, `day`, `week`, `month`, `year` and their plurals (`15m`, `1h`, `30 min`). Bare `m` is a minute; a month is `mo`. Required when `aggregates` is set. |
-| `includeOutsidePoints`, `mergeDuplicates` | Booleans, default `false`. |
+| `includeOutsidePoints`, `mergeDuplicates` | Booleans, default `false`. The Python and Rust `RetrieveFilter` do not carry them, so those clients always get the default. |
 | `cursor` | The previous page's `nextCursor`, carried on each returned collection. |
 
 A datapoint comes back with an ISO-8601 UTC `timestamp` and a `value`. Python reads the
