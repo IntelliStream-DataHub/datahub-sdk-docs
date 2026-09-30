@@ -47,6 +47,10 @@ sends the `path` you give it as-is, so include the file name and a leading `/`. 
 and Rust clients take a `destination_path` folder plus a `name` (defaulting to the local
 file's name) and join the two into that same full path. The Java client uploads raw `content`
 bytes; the Python and Rust clients read a local file.
+They also default the external id to the file name as-is, the same default the server
+applies. External ids are stored verbatim and allow only letters, digits and `. _ : + = -`, so a
+file whose name has a space or another character outside that set needs an explicit external
+id, or the upload is a `400` naming `externalId`.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -245,7 +249,8 @@ unchanged". `metadata` and `relatedResources` **replace** rather than merge.
 
 A restore is not a force-overwrite. If something else already occupies the path, you get a
 `409`, so move or rename the occupant first. Names, paths and external ids in the trash listing
-are the pre-deletion values, and the deletion time is in the node's `deletedAt` field.
+are the pre-deletion values, and the deletion time is in the node's `deletedAt` field
+(`deleted_at` in Python and Rust).
 
 ## Delete
 
