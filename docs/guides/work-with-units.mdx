@@ -44,11 +44,23 @@ for u in api.units.list().await?.get_items() {
 
 ## Tag a series with a unit
 
-A series carries two unit fields. `unit` is required free text of at most 64 characters, the
-label a chart shows (`bar`, `°C`); it is never checked against the catalogue. `unitExternalId`
-is optional and is the catalogue key (`pressure_bar`); set it when a consumer should be able to
-resolve the unit's symbol, quantity and conversion. The unit leaves the value type alone (the Python
-and Rust examples set `float`); it describes what the numbers mean.
+A series carries two unit fields. `unit` is free text of at most 64 characters, the label a
+chart shows (`bar`, `°C`). `unitExternalId` is the catalogue key (`pressure_bar`); set it when a
+consumer should be able to resolve the unit's symbol, quantity and conversion. A create needs at
+least one of them:
+
+| You send | Result |
+| --- | --- |
+| `unitExternalId` only | Accepted if the catalogue has it; `unit` is filled from the entry's symbol (its name if it has no symbol). |
+| `unit` and `unitExternalId` | Both kept as sent, as long as the catalogue has the `unitExternalId`. |
+| `unit` only | Accepted as is; the catalogue is not consulted. |
+| A blank `unitExternalId`, or one the catalogue does not have | `400`, with a field error on `unitExternalId`, whether or not `unit` is set. |
+| Neither | `400`. |
+
+The lookup normalises the id to lower snake_case first, so `Temperature_Deg_C` finds
+`temperature_deg_c`. An update that sets `unitExternalId` is checked the same way before
+anything is written; clearing it with `setNull` is still allowed. The unit leaves the value type
+alone (the Python and Rust examples set `float`); it describes what the numbers mean.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
