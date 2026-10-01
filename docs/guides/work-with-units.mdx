@@ -105,7 +105,7 @@ Resolve a unit you already know, by external id, or by numeric id.
 UnitModel celsius = client.units().byIds(List.of(
         IdCollection.createFromExternalId("temperature_deg_c"))).getItems().get(0);
 UnitModel byId = client.units().byIds(List.of(
-        IdCollection.createFromId(7))).getItems().get(0);
+        IdCollection.createFromId(celsius.getId()))).getItems().get(0);
 ```
 
 </TabItem>
@@ -115,7 +115,7 @@ UnitModel byId = client.units().byIds(List.of(
 import intellistream_datahub_sdk
 
 celsius = client.units.by_external_id("temperature_deg_c")
-by_id = client.units.by_ids([intellistream_datahub_sdk.IdCollection(id=7)])
+by_id = client.units.by_ids([intellistream_datahub_sdk.IdCollection(id=celsius[0].id)])
 ```
 
 </TabItem>
@@ -125,7 +125,7 @@ by_id = client.units.by_ids([intellistream_datahub_sdk.IdCollection(id=7)])
 use intellistream_datahub_sdk::generic::{DataWrapper, IdAndExtId};
 
 let celsius = api.units.by_external_id("temperature_deg_c").await?;
-let by_id = api.units.by_ids(&DataWrapper::from(vec![IdAndExtId::from_id(7)])).await?;
+let by_id = api.units.by_ids(&DataWrapper::from(vec![IdAndExtId::from_id(celsius.get_items()[0].id)])).await?;
 ```
 
 </TabItem>

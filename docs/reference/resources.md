@@ -168,19 +168,23 @@ compare the returned items against what you asked for when a miss matters.
 ```java
 import ai.intellistream.datahub.models.IdCollection;
 
-NodeModel pump = client.resources().getById(5677892).getItems().get(0);
+NodeModel pump = client.resources().byIds(List.of(
+        IdCollection.createFromExternalId("pump_1"))).getItems().get(0);
+NodeModel byId = client.resources().getById(pump.getId()).getItems().get(0);
 
 DataWrapper<NodeModel> some = client.resources().byIds(List.of(
-        IdCollection.createFromExternalId("pump_1"),
-        IdCollection.createFromId(5677892)));
+        IdCollection.createFromExternalId("plant_oslo"),
+        IdCollection.createFromId(pump.getId())));
 ```
 
 </TabItem>
 <TabItem value="python" label="Python">
 
 ```python
+pump = client.resources.by_ids(["pump_1"])[0]
+
 # pass entity objects, external-id strings, or numeric ids
-resources = client.resources.by_ids(["pump_1", 5677892])
+resources = client.resources.by_ids(["plant_oslo", pump.id])
 ```
 
 </TabItem>
@@ -189,9 +193,12 @@ resources = client.resources.by_ids(["pump_1", 5677892])
 ```rust
 use intellistream_datahub_sdk::generic::IdAndExtId;
 
+let found = api.resources.by_ids(&vec![IdAndExtId::from_external_id("pump_1")]).await?;
+let pump_id = found.nodes().unwrap_or_default()[0].id().unwrap();
+
 let resources = api.resources.by_ids(&vec![
-    IdAndExtId::from_external_id("pump_1"),
-    IdAndExtId::from_id(5677892),
+    IdAndExtId::from_external_id("plant_oslo"),
+    IdAndExtId::from_id(pump_id),
 ]).await?;
 ```
 
@@ -443,7 +450,7 @@ ResourceRetreiver retriever = new ResourceRetreiver();
 retriever.setLimit(100);
 retriever.getFilter().setName(List.of("pipe%"));
 retriever.getFilter().setMetadata(Map.of("work_order", "wo-sap-12344"));
-retriever.getFilter().setDataSetId(List.of(IdCollection.createFromId(12L)));
+retriever.getFilter().setDataSetId(List.of(IdCollection.createFromExternalId("plant_a")));
 
 DataWrapper<NodeModel> matches = client.resources().filter(retriever);
 ```
@@ -455,7 +462,7 @@ DataWrapper<NodeModel> matches = client.resources().filter(retriever);
 matches = client.resources.filter(
     name="pipe%",
     metadata={"work_order": "wo-sap-12344"},
-    data_set_id=[12],
+    data_set_id=["plant_a"],
     limit=100)
 ```
 
@@ -475,7 +482,7 @@ let form = ResourceFilterForm::new(ResourceFilter {
         metadata: Some([("work_order".into(), Some("wo-sap-12344".into()))].into()),
         ..Default::default()
     },
-    data_set_id: Some(vec![IdAndExtId::from_id(12)]),
+    data_set_id: Some(vec![IdAndExtId::from_external_id("plant_a")]),
     ..Default::default()
 }).with_limit(100);
 
@@ -766,7 +773,7 @@ clients build the request from a numeric `id` only, so there resolve an external
 
 ```java
 FetchNearestResourcesForm form = new FetchNearestResourcesForm();
-form.setExternalId("pump_1");               // or form.setId(5677892L)
+form.setExternalId("pump_1");               // or form.setId(a numeric id)
 form.setEndLabels(List.of("TIMESERIES"));
 form.setLimit(10);
 form.setExcludedLabels(List.of("POLICY"));
@@ -778,8 +785,9 @@ ResourceNetwork nearest = client.resources().fetchNearest(form);
 <TabItem value="python" label="Python">
 
 ```python
+pump = client.resources.by_ids(["pump_1"])[0]
 nearest = client.resources.fetch_nearest(
-    5677892,                       # the Python client takes the numeric id
+    pump.id,                       # the Python client takes the numeric id
     end_labels=["TIMESERIES"],
     limit=10,
     excluded_labels=["POLICY"])
@@ -789,10 +797,14 @@ nearest = client.resources.fetch_nearest(
 <TabItem value="rust" label="Rust">
 
 ```rust
+use intellistream_datahub_sdk::generic::IdAndExtId;
 use intellistream_datahub_sdk::resources::FetchNearestResourcesForm;
 
+let found = api.resources.by_ids(&vec![IdAndExtId::from_external_id("pump_1")]).await?;
+let pump_id = found.nodes().unwrap_or_default()[0].id().unwrap();
+
 let nearest = api.resources.fetch_nearest(
-    &FetchNearestResourcesForm::from_id(5677892)   // the Rust client takes the numeric id
+    &FetchNearestResourcesForm::from_id(pump_id)   // the Rust client takes the numeric id
         .with_end_labels(vec!["TIMESERIES".into()])
         .with_limit(10)
         .with_excluded_labels(vec!["POLICY".into()])).await?;
@@ -908,7 +920,9 @@ in memory.
 ```java
 import ai.intellistream.datahub.api.graphtransfer.GraphImportResult;
 
-byte[] graph = source.resources().export(5677892L);
+long plantId = source.resources().byIds(List.of(
+        IdCollection.createFromExternalId("plant_oslo"))).getItems().get(0).getId();
+byte[] graph = source.resources().export(plantId);
 
 GraphImportResult result = target.resources().importGraph(graph);
 System.out.println(result.nodesCreated() + " created, "
@@ -923,7 +937,8 @@ per key of the JSON above.
 <TabItem value="python" label="Python">
 
 ```python
-graph = source.resources.export_graph(5677892)          # bytes
+plant_id = source.resources.by_ids(["plant_oslo"])[0].id
+graph = source.resources.export_graph(plant_id)         # bytes
 
 result = target.resources.import_graph(graph)
 print(result.nodes_created, "created,",
@@ -931,7 +946,7 @@ print(result.nodes_created, "created,",
       result.nodes_skipped_timeseries, "to create as series first")
 
 # Or through a file, never held whole in memory:
-source.resources.export_graph_to_path(5677892, "plant_oslo.dhgraph")
+source.resources.export_graph_to_path(plant_id, "plant_oslo.dhgraph")
 target.resources.import_graph_from_path("plant_oslo.dhgraph")
 ```
 
@@ -939,14 +954,18 @@ target.resources.import_graph_from_path("plant_oslo.dhgraph")
 <TabItem value="rust" label="Rust">
 
 ```rust
-let graph: Vec<u8> = source.resources.export_graph(5677892).await?;
+use intellistream_datahub_sdk::generic::IdAndExtId;
+
+let found = source.resources.by_ids(&vec![IdAndExtId::from_external_id("plant_oslo")]).await?;
+let plant_id = found.nodes().unwrap_or_default()[0].id().unwrap();
+let graph: Vec<u8> = source.resources.export_graph(plant_id).await?;
 
 let result = target.resources.import_graph(graph).await?;
 println!("{} created, {} already there, {:?} to create as series first",
     result.nodes_created, result.nodes_skipped_existing, result.nodes_skipped_timeseries);
 
 // Or through a file, never held whole in memory:
-source.resources.export_graph_to_path(5677892, "plant_oslo.dhgraph").await?;
+source.resources.export_graph_to_path(plant_id, "plant_oslo.dhgraph").await?;
 target.resources.import_graph_from_path("plant_oslo.dhgraph").await?;
 ```
 
@@ -957,11 +976,12 @@ The export walks the graph, which settles a moment after a write. A component cr
 exported straight away can come back short; read it with `fetch_related` first when that
 matters.
 
-Over plain HTTP, send the bearer token the client already holds:
+Over plain HTTP, send the bearer token the client already holds, with `PLANT_ID` set to the
+plant's numeric id:
 
 ```bash
 curl -fsS -H "Authorization: Bearer $TOKEN" \
-  -o plant_oslo.dhgraph "$API/resources/export/5677892"
+  -o plant_oslo.dhgraph "$API/resources/export/$PLANT_ID"
 
 curl -fsS -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/octet-stream" \
@@ -1031,9 +1051,9 @@ plant.setIsRoot(true);
 client.assets().create(List.of(plant));
 
 DataWrapper<Asset> newest = client.assets().list(100);
-DataWrapper<Asset> one = client.assets().getById(5677892L);
 DataWrapper<Asset> some = client.assets().byIds(List.of(
         IdCollection.createFromExternalId("plant_oslo")));
+DataWrapper<Asset> one = client.assets().getById(some.getItems().get(0).getId());
 ```
 
 `filter`, `search`, `update` and `delete` take the same forms as their `resources()`

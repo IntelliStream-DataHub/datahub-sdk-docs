@@ -36,6 +36,20 @@ client = intellistream_datahub_sdk.DataHubClient.from_env()
 # The upload examples reference a local file the reader is assumed to have.
 import pathlib as _pathlib
 _pathlib.Path("report.csv").write_text("timestamp,value" + chr(10) + "2026-01-01T00:00:00Z,1" + chr(10))
+# The upload examples file under `plant_a`, the data set the Datasets reference creates.
+if not client.datasets.by_ids(["plant_a"]):
+    client.datasets.create([intellistream_datahub_sdk.Dataset(external_id="plant_a", name="Plant A")])
+"""
+
+# The download example reads the report the upload example stored.
+[[python.inject]]
+before = 4
+code = """
+try:
+    client.files.get_by_external_id("report_2026_q2")
+except intellistream_datahub_sdk.DataHubException:
+    client.files.upload_file(intellistream_datahub_sdk.FileUpload(
+        path="report.csv", destination_path="/reports/2026/", external_id="report_2026_q2", name="q2.csv"))
 """
 
 # KNOWN PLATFORM LIMITATION — this page cannot be made repeatable yet.
@@ -50,4 +64,5 @@ _pathlib.Path("report.csv").write_text("timestamp,value" + chr(10) + "2026-01-01
 # delete and re-upload — not something to hide by renaming the path in this plan.
 
 [owns]
+datasets = ["plant_a"]
 files = ["report_2026_q2"]

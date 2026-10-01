@@ -67,7 +67,8 @@ for unit in api.units.list().await?.get_items() {
 ```java
 DataWrapper<UnitModel> byExt = client.units().byIds(List.of(
         IdCollection.createFromExternalId("temperature_deg_c")));
-DataWrapper<UnitModel> byId = client.units().byIds(List.of(IdCollection.createFromId(7)));
+DataWrapper<UnitModel> byId = client.units().byIds(List.of(
+        IdCollection.createFromId(byExt.getItems().get(0).getId())));
 ```
 
 </TabItem>
@@ -77,7 +78,7 @@ DataWrapper<UnitModel> byId = client.units().byIds(List.of(IdCollection.createFr
 import intellistream_datahub_sdk
 
 by_ext = client.units.by_external_id("temperature_deg_c")
-by_id = client.units.by_ids([intellistream_datahub_sdk.IdCollection(id=7)])
+by_id = client.units.by_ids([intellistream_datahub_sdk.IdCollection(id=by_ext[0].id)])
 ```
 
 `by_external_id` takes one external id and returns a list, empty when no unit has it. The
@@ -94,7 +95,7 @@ by_ext = await client.units.by_external_id("temperature_deg_c")
 use intellistream_datahub_sdk::generic::{DataWrapper, IdAndExtId};
 
 let by_ext = api.units.by_external_id("temperature_deg_c").await?;
-let by_id = api.units.by_ids(&DataWrapper::from(vec![IdAndExtId::from_id(7)])).await?;
+let by_id = api.units.by_ids(&DataWrapper::from(vec![IdAndExtId::from_id(by_ext.get_items()[0].id)])).await?;
 ```
 
 An external id no unit has is an error here, not an empty result: `by_external_id` returns

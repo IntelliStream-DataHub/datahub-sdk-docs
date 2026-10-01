@@ -219,7 +219,7 @@ free-text lookups use `POST /timeseries/search` instead.
 import ai.intellistream.datahub.models.datafilters.TimeseriesFilter;
 
 TimeseriesFilter criteria = new TimeseriesFilter();
-criteria.setDataSetId(List.of(IdCollection.createFromId(12L)));   // and every data set beneath it
+criteria.setDataSetId(List.of(IdCollection.createFromExternalId("plant_a")));   // and every data set beneath it
 criteria.setUnit(List.of("celsius"));
 
 DataWrapper<Timeseries> series = client.timeseries().filter(criteria);
@@ -232,7 +232,7 @@ Pass a `TimeseriesRetreiver` instead of the bare criteria to set an explicit `li
 
 ```python
 series = client.timeseries.filter(
-    data_set_id=[12],            # this data set and every data set beneath it
+    data_set_id=["plant_a"],     # this data set and every data set beneath it
     unit="celsius",              # a pattern field also takes a bare value
     limit=100)
 ```
@@ -249,7 +249,7 @@ use intellistream_datahub_sdk::generic::IdAndExtId;
 use intellistream_datahub_sdk::{TimeSeriesFilter, TimeSeriesFilterForm};
 
 let criteria = TimeSeriesFilter {
-    data_set_id: Some(vec![IdAndExtId::from_id(12)]),   // and every data set beneath it
+    data_set_id: Some(vec![IdAndExtId::from_external_id("plant_a")]),   // and every data set beneath it
     unit: Some(vec!["celsius".into()]),
     ..Default::default()
 };
