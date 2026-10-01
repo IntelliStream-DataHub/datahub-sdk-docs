@@ -28,10 +28,21 @@ const config = {
         docs: {
           sidebarPath: './sidebars.js',
           routeBasePath: '/',          // docs at site root, GitBook-style
+          // No `versions` block and no snapshot yet: `docs/` is the only version
+          // and is served at '/'. AGENTS.md has the three lines to add when the
+          // first release is tagged. Leave `lastVersion` out then too — it
+          // defaults to the newest name in versions.json, so cutting a snapshot
+          // moves readers onto it with nothing here to keep in step.
+
           // Adds "Edit this page" to every doc. Docusaurus appends the file's
           // path relative to this site directory. Note the branch here is
           // master, unlike datahub-docs which is main.
           editUrl: 'https://github.com/IntelliStream-DataHub/datahub-sdk-docs/edit/master/',
+          // Send every "Edit this page" to docs/, including from a snapshot once
+          // one exists: a snapshot takes corrections for its own release, but a
+          // new feature belongs in docs/, and the stock link would invite the
+          // wrong edit. No effect until the first snapshot.
+          editCurrentVersion: true,
         },
         blog: false,                    // SDK docs site — no blog
         theme: { customCss: './src/css/custom.css' },
@@ -77,8 +88,10 @@ const config = {
           // which pushState's the URL and then renders this site's own 404 —
           // the href looks right in the HTML but the click never leaves the SPA.
           { type: 'html', position: 'right', value: '<a class="navbar__item navbar__link" href="/data-platform-documentation/">Platform documentation</a>' },
-          // Simple version indicator. When the docs start tracking multiple releases,
-          // replace this with a docsVersionDropdown via `npm run docusaurus docs:version`.
+          // The site's own version, not an SDK version. Swap it for
+          // { type: 'docsVersionDropdown', position: 'right' } once a snapshot
+          // exists — with none, the dropdown renders as a lone link labelled
+          // after the development version, which reads as a release.
           { type: 'html', position: 'right', value: '<span class="badge badge--secondary navbar__version-badge">v1.0</span>' },
           // This site's own repo, so "GitHub" is unambiguous. The old link went
           // to the SDK code on Gitea; if a code link is wanted too it needs its
