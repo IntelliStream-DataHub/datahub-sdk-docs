@@ -64,7 +64,7 @@ client.timeseries().ingest(Map.of(
 import intellistream_datahub_sdk, pandas as pd
 
 client.timeseries.create([intellistream_datahub_sdk.TimeSeries(
-    external_id="batch_22f_ph", name="Batch 22F — pH", unit="ph", value_type="numeric")])
+    external_id="batch_22f_ph", name="Batch 22F — pH", unit="ph", value_type="float")])
 
 client.timeseries.insert_from_lists(
     timestamps=[pd.Timestamp.now(tz="UTC")], values=[7.0421], ts="batch_22f_ph")

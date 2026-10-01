@@ -27,7 +27,7 @@ import intellistream_datahub_sdk, numpy as np, pandas as pd
 
 client = intellistream_datahub_sdk.DataHubClient.from_env()
 
-client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id="feeder_f12_load_mw", name="Feeder F12 load", unit="mw")])
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(value_type="float", external_id="feeder_f12_load_mw", name="Feeder F12 load", unit="mw")])
 idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=24, freq="1h")
 load = 8 + 4 * np.sin(np.arange(24) / 24 * 2 * np.pi) + np.random.normal(0, 0.5, 24)
 load[18] = 14.8                                   # an evening overload past the 12 MW rating

@@ -27,7 +27,7 @@ client = intellistream_datahub_sdk.DataHubClient.from_env()
 
 desk_id = client.datasets.create([intellistream_datahub_sdk.Dataset(external_id="desk_equities", name="Equities desk")])[0].id
 client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id="portfolio_growth_mtm_usd",
-    name="Growth portfolio — MtM (USD)", unit="usd", value_type="numeric", data_set_id=desk_id)])
+    name="Growth portfolio — MtM (USD)", unit="usd", value_type="float", data_set_id=desk_id)])
 idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=30, freq="1d")
 client.timeseries.insert_from_lists(timestamps=idx,
     values=1e7 + np.cumsum(np.random.normal(0, 5e4, 30)), ts="portfolio_growth_mtm_usd")
@@ -105,7 +105,7 @@ client.timeseries().ingest(Map.of(
 client.timeseries.create([intellistream_datahub_sdk.TimeSeries(
     external_id="portfolio_growth_mtm_usd",
     name="Growth portfolio — mark-to-market (USD)",
-    unit="usd", value_type="numeric", data_set_id=desk_id)])
+    unit="usd", value_type="float", data_set_id=desk_id)])
 
 client.timeseries.insert_from_lists(
     timestamps=[pd.Timestamp.now(tz="UTC")], values=[10428155.42],

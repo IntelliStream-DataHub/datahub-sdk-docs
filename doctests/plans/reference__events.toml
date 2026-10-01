@@ -36,9 +36,26 @@ import intellistream_datahub_sdk
 client = intellistream_datahub_sdk.DataHubClient.from_env()
 """
 
+# "Fold the stream" continues from the filter example above it, which defines `findings`;
+# independent blocks each start fresh, so the reader's previous step is supplied here.
+[[python.inject]]
+before = 6
+code = """
+findings = client.events.filter(type="policy_finding", limit=200)
+"""
+
+# "High-throughput ingestion" sends `events`, the reader's own batch.
+[[python.inject]]
+before = 7
+code = """
+from datetime import datetime, timezone
+events = [intellistream_datahub_sdk.Event(external_id="door_open", type="door_open",
+                                          event_time=datetime.now(timezone.utc))]
+"""
+
 [owns]
 events = ["door_open"]
 
 # The create example must leave its event behind.
-[expect]
-events = ["door_open"]
+# No [expect]: the last example deletes the event the first one creates, so nothing is
+# meant to outlive the run. The proof is that every example executed cleanly.

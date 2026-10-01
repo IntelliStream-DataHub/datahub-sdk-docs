@@ -33,7 +33,7 @@ event even when a `snake_case` policy is rejecting it on resources.
 | `subType` | string, 3–128 | Refinement of `type` (`overpressure`). |
 | `status` | string, 3–128 | Free-form lifecycle marker (`OPEN`, `acknowledged`). No state machine is enforced. |
 | `source` | string, 2–128 | The system of record the event came from (`SAP`, a historian). |
-| `description` | string | Prose. This is the field [full-text search](#search) reads. |
+| `description` | string | Prose. [Full-text search](#search) reads it, along with `externalId` and the metadata values. |
 | `metadata` | map&lt;string, string&gt; | Flat key/value. An empty key is dropped rather than rejected. |
 | `dataSetId` | number | Optional. Platform-internal events (say, anomaly detection on a series outside any data set) legitimately have none. |
 | `relatedResources` | object[] | Resources the event is about. Each entry takes an `id`, an `externalId`, or both. |
@@ -172,6 +172,8 @@ DataWrapper<EventModel> events = client.events().byIds(List.of(
 <TabItem value="python" label="Python">
 
 ```python
+import uuid
+
 events = client.events.by_ids(["PO-4500171"])   # a str selects by external id
 events = client.events.by_ids([uuid.UUID("0195f3a2-4c1b-7f9e-9c3a-1b2d4e6f8a90")])
 ```
@@ -237,10 +239,16 @@ let events = api.events.filter(&filter).await?;
 
 `limit` defaults to **1 000** and is capped at **10 000**; a zero or negative value falls back
 to the default rather than returning nothing. The Python and Rust clients always send a
-`limit`, **100** unless you set one, so the server's default only applies to a request that
-omits the field. Whatever you ask for, the result is intersected with
+`limit`, **1 000** unless you set one, so a call that says nothing about paging gets the same
+page size as the server's default. Whatever you ask for, the result is intersected with
 the data sets your token may read, a filter can never widen access, so an empty page can
 mean "no matches" or "none you may see", and the two are not distinguished.
+
+`GET /events?limit=` is the criteria-free read, `events.list` in all three clients. It runs the
+filter with an empty body, so it returns the **oldest** `limit` events (`eventTime` ascending),
+not the newest. `limit` defaults to 1 000, and above 10 000 is a `400` rather than a clamp. It
+never returns a `nextCursor`, so it is one page and no more: for "what just happened", filter with
+`sort` on `eventTime` descending. In Python it returns a plain list rather than a `Page`.
 
 ### Filtering {#filtering}
 
@@ -483,10 +491,10 @@ cursor pages in, so paging does not change the order underneath you. Ask for ano
   "limit": 200 }
 ```
 
-Only the **first** `property` is used, and `id` is appended behind it, a sort column alone is
+Only the **first** sortable `property` is used, and `id` is appended behind it, a sort column alone is
 not a position unless it is unique, and a page boundary inside a run of equal values repeats or
 drops exactly those rows. A property that is not sortable is ignored rather than rejected, and
-any `order` that is not exactly `desc` sorts ascending, a malformed sort degrades to the
+any `order` that is not `desc` (compared case-insensitively) sorts ascending, a malformed sort degrades to the
 default instead of silently reversing your results. Null values sort last ascending, first
 descending.
 
@@ -495,12 +503,12 @@ To walk past the first page, echo back the `nextCursor` the response carried:
 ```json
 { "filter": { "type": "alarm" },
   "sort": { "property": ["eventTime"], "order": "desc" },
-  "cursor": "djE6ZXZlbnRUaW1lfGRlc2N8MTc1NDQ3NjUyMjEwNHwwMTk1ZjNhMg",
+  "cursor": "ZXZlbnRUaW1lfGRlc2N8MDE5NWYzYTItNGMxYi03ZjllLTljM2EtMWIyZDRlNmY4YTkwfHYxNzU0NDc2NTIyMTA0",
   "limit": 200 }
 ```
 
-The cursor is **opaque**, base64 of a versioned encoding carrying the sort, the boundary value
-and the id, so do not build or parse one. A cursor that does not decode is refused with a
+The cursor is **opaque**, base64 of an encoding carrying the sort, the boundary value and the
+id, with no version tag, so do not build or parse one. A cursor that does not decode is refused with a
 `400` of `type: ".../errors/malformed-cursor"` rather than guessed at: half a position would
 silently skip or repeat the rows around the boundary.
 
@@ -754,6 +762,12 @@ query.
 Both families take `limit` (default 1 000, clamped to 1–10 000). The `search/*` form requires
 `q` and returns `400` without it.
 
+The values come from small tables the write path maintains, not from a scan of the events, which
+is what makes them cheap. They are **eventually consistent** with the events: a new value appears
+once the write path has recorded it, and a value no event carries any more lingers until a
+periodic reconcile. Good for populating a picker, not proof that an event with that value exists
+right now.
+
 ```
 GET /events/search/type?q=alarm&limit=20
 → { "items": ["alarm", "alarm_cleared", "pre_alarm"] }
@@ -823,9 +837,6 @@ instead: that is what an append-only log is for, and it keeps the correction its
 `status` is the honourable exception, acknowledging an alarm in place is what the field is
 there for.
 :::
-
-`source` is worth one warning: create accepts up to 128 characters, but the update path
-rejects anything over **64**. A value in between can be written and then not modified.
 
 ## High-throughput ingestion
 
@@ -920,6 +931,7 @@ The three clients cover every event endpoint, the facet endpoints included.
 | --- | --- | --- | --- |
 | Create | `events().create` / `ingest` | `events.create` | `events.create` |
 | Get by id | `events().getById` | `events.get` | `events.get` |
+| List, oldest first (`GET /events`) | `events().list(limit)` | `events.list(limit=None)` | `events.list(limit)` |
 | Look up by id / external id | `events().byIds` | `events.by_ids` | `events.by_ids` |
 | Filter | `events().filter` | `events.filter` | `events.filter` |
 | Filter with `sort` | `EventRetreiver.sort` | `sort_by` / `sort_order` | `set_sort` |

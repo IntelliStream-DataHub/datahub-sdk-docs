@@ -399,9 +399,10 @@ assert_eq!(found.get_items().len(), 1, "expected exactly one finding");
 </TabItem>
 </Tabs>
 
-Re-running the replay is safe to try, and instructive: the detector raises the same finding
-again with the same external id, and the platform collapses it rather than storing a
-duplicate. Events are keyed by id, datapoints by series and timestamp.
+Re-running the replay is instructive: the detector raises the same finding again with the
+same external id, and the platform stores it as a second event rather than collapsing it, so
+the check above then finds two. An event's external id is not unique; each create without an
+`id` gets a new one. Only the datapoints collapse, keyed by series and timestamp.
 
 ## 5. Run the same detector live
 

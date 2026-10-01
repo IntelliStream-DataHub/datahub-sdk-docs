@@ -42,8 +42,9 @@ client = DataHubClient.from_envfile("/path/to/.env")
 client = DataHubClient(base_url="https://api.intellistream.ai", token="...")
 ```
 
-For `async`/`await`, use `AsyncDataHubClient` instead, same methods, awaited (one is spelled
-differently, see [Units](./units#client-coverage)):
+For `async`/`await`, use `AsyncDataHubClient` instead, same methods, awaited (except the
+[binary datapoint](./binary-datapoints) ingest, `insert_datapoints_binary` and
+`insert_from_lists_binary`, which only `DataHubClient` has):
 
 ```python
 from intellistream_datahub_sdk import AsyncDataHubClient
@@ -443,7 +444,7 @@ try {
 </TabItem>
 <TabItem value="python" label="Python">
 
-Methods return plain `list[T]`. Non-2xx raises `DataHubException`:
+Most methods return plain `list[T]`. Non-2xx raises `DataHubException`:
 
 ```python
 from intellistream_datahub_sdk import DataHubException
@@ -458,7 +459,8 @@ except DataHubException as e:
 <TabItem value="rust" label="Rust">
 
 Most methods return `Result<DataWrapper<T>, ResponseError>`, where `get_items()` holds the
-results. `resources.by_ids`, `create`, `update` and `delete`, and `edges.by_ids`, return a
+results. `resources.by_ids`, `create`, `update` and `delete`, `assets.update`,
+`functions.update` and `edges.by_ids` return a
 `GraphDataWrapper` instead, whose `nodes()` holds them. `ResponseError` exposes
 `get_status()` and `get_message()` (its `Display` prints both):
 
@@ -600,14 +602,14 @@ rotated credential does not cost the batch. What each ingest path does with eith
 [which failures are worth retrying](#retryable-failures).
 
 :::caution Not every failure is a problem document
-Some endpoints still answer in a shape the API has not converged yet: plain text, a Spring
-whitelabel body carrying a stack trace, the legacy `{"error": {...}}` wrapper, or a
-success-shaped `{"items": [...]}` envelope. Those all arrive labelled `application/json`, so the
-`Content-Type` does not separate them and the clients read the body's structure instead.
-`problem` is absent for every one of them in Python and Rust; in Java `problem()` is never null,
-but carries the HTTP status alone and leaves `slug()` null. A real problem document may also carry no `type`
-(some `404`s), which leaves the slug absent too. Write that branch first and keep the status and raw
-message as the fallback: it stays load-bearing until the API is done converging.
+The API now answers every refusal with a typed problem document, but a proxy or gateway in front
+of it, or an older API, can still hand you plain text, HTML, a Spring whitelabel body, the legacy
+`{"error": {...}}` wrapper or a success-shaped `{"items": [...]}` envelope. Several of those
+arrive labelled `application/json`, so the `Content-Type` does not separate them and the clients
+read the body's structure instead. `problem` is absent for every one of them in Python and Rust;
+in Java `problem()` is never null, but carries the HTTP status alone and leaves `slug()` null. A
+problem document from something other than this API may also carry no `type`, which leaves the
+slug absent too. Write that branch first and keep the status and raw message as the fallback.
 :::
 
 ### Which failures are worth retrying {#retryable-failures}
@@ -634,7 +636,7 @@ sleeping when that is over 30 seconds, so a spent daily quota reaches your code,
 instead of parking a thread until midnight UTC.
 
 Rust and Python retry JSON ingest through the [durable spool](#durable-ingest-buffering): with
-buffering on, a `429`, `5xx` or network failure and a `401` or `403` are written to disk and sent
+buffering on, a `408`, `429`, `5xx` or network failure and a `401` or `403` are written to disk and sent
 again, oldest first, by the next ingest call; with it off, they reach you. Their binary path,
 `insert_datapoints_binary`, retries `429`, `5xx` and network failures up to three times by
 default, 1, 2 and 3 seconds apart, and rebuilds a request refused for a removed or renamed

@@ -29,10 +29,8 @@ requires_python = ["psutil"]
 # and `host` in narrative and names psutil in its install step, so a reader has
 # them by Step 2; the harness supplies exactly that and nothing more.
 #
-# Deliberately NOT supplied: the SDK import. Step 2 calls `datahub_sdk.TimeSeries`
-# but no step-path block ever imports it — only the complete listing at the bottom
-# does. Handing it over here would hide that gap, which is precisely the kind of
-# thing this suite exists to surface.
+# Deliberately NOT supplied: the SDK import. Step 1 imports it, and handing it over
+# here would hide the gap if that line went missing again.
 imports = """
 import os
 import socket

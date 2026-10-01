@@ -88,8 +88,10 @@ let nb = api.resources.fetch_related(
 
 ## 3. Find the shared subsystem
 
-Intersect the two node sets. Whatever remains (besides the sensors themselves) is a
-subsystem both alarms belong to, the likely common cause.
+Intersect the two node sets. The walk follows edges in both directions, so once it reaches
+the shared skid it also comes back down the other branch: besides the sensors themselves, the
+intersection holds both pumps as well as `skid_1` and `cooling_system`, the subsystems both
+alarms belong to and the likely common cause.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
@@ -105,7 +107,7 @@ Set<String> shared = nb.nodes().stream()
 shared.remove("sensor_a");
 shared.remove("sensor_b");
 
-System.out.println("Both alarms are part of: " + shared);      // [cooling_system, skid_1]
+System.out.println("Both alarms are part of: " + shared);      // [cooling_system, skid_1, pump_a, pump_b]
 if (!shared.contains("cooling_system")) {
     throw new AssertionError("expected cooling_system, found " + shared);
 }
@@ -119,7 +121,7 @@ a_nodes = {n.external_id for n in na.nodes}
 shared = {n.external_id for n in nb.nodes} & a_nodes
 shared -= {"sensor_a", "sensor_b"}
 
-print("Both alarms are part of:", shared)       # {'cooling_system', 'skid_1'}
+print("Both alarms are part of:", shared)       # {'cooling_system', 'skid_1', 'pump_a', 'pump_b'}
 assert "cooling_system" in shared, f"expected cooling_system, found {shared}"
 ```
 
@@ -137,7 +139,7 @@ let mut shared: HashSet<&str> = nb.nodes().iter()
 shared.remove("sensor_a");
 shared.remove("sensor_b");
 
-println!("Both alarms are part of: {:?}", shared);      // {"cooling_system", "skid_1"}
+println!("Both alarms are part of: {:?}", shared);      // {"cooling_system", "skid_1", "pump_a", "pump_b"}
 assert!(shared.contains("cooling_system"), "expected cooling_system, found {:?}", shared);
 ```
 

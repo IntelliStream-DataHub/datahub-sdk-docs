@@ -30,6 +30,14 @@ import intellistream_datahub_sdk
 client = intellistream_datahub_sdk.DataHubClient.from_env()
 """
 
+# The lookup example reads the plant_a a reader made in the Create example; independent
+# blocks each start from a swept backend, so it is made again here.
+[[python.inject]]
+before = 2
+code = """
+client.datasets.create([intellistream_datahub_sdk.Dataset(external_id="plant_a", name="Plant A")])
+"""
+
 [owns]
 datasets = ["plant_a"]
 

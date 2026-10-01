@@ -22,7 +22,8 @@ Datapoints are split into batches (the store is optimised for large batches) and
 concurrently up to a bounded in-flight limit. The caps below are the API's and bind every client.
 Java sends **10,000** datapoints per request by default, retries transient failures (HTTP
 429/5xx, network) in process and returns an `IngestResult` summarising what landed and what
-didn't. Python and Rust send up to **100,000** per request, four at once, and retry through the
+didn't. Python and Rust send up to **100,000** per request, four at once (one at a time with
+buffering on), and retry through the
 [durable spool](/reference/client#durable-ingest-buffering): with buffering on, a transient
 failure (429, 5xx, network, or a `401`/`403`) writes the input to disk, and the next ingest call
 sends the spool again, oldest first, before its own data. With buffering off, the first request

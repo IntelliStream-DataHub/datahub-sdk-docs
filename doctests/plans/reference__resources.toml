@@ -30,6 +30,9 @@ timeout = 600
 # needs — so each block runs on its own.
 independent = true
 
+# The traversal example walks out from `sensor_a`, which the sandbox page seeds.
+requires_once = ["guides__seed-a-sandbox-data"]
+
 # Each example needs a client. Composing the quickstart in to get one would also
 # create its `engine_temperature`, which several of these pages create themselves;
 # `from_env()` is the constructor this section documents, so this is the reader's

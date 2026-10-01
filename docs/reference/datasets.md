@@ -80,7 +80,7 @@ failing. `GET /datasets/{id}` reads one data set by numeric id and answers `404`
 ```java
 DataWrapper<DataSetModel> some = client.datasets()
         .byIds(List.of(IdCollection.createFromExternalId("plant_a")));
-DataWrapper<DataSetModel> one = client.datasets().getById(5677892L);
+DataWrapper<DataSetModel> one = client.datasets().getById(some.getItems().get(0).getId());
 
 client.datasets().delete(List.of(IdCollection.createFromExternalId("plant_a")));
 ```
@@ -90,7 +90,7 @@ client.datasets().delete(List.of(IdCollection.createFromExternalId("plant_a")));
 
 ```python
 some = client.datasets.by_ids(["plant_a"])
-one = client.datasets.get_by_id(5677892)
+one = client.datasets.get_by_id(some[0].id)
 client.datasets.delete(["plant_a"])
 ```
 
@@ -101,7 +101,7 @@ client.datasets.delete(["plant_a"])
 use intellistream_datahub_sdk::generic::IdAndExtId;
 
 let some = api.datasets.by_ids(&vec![IdAndExtId::from_external_id("plant_a")]).await?;
-let one = api.datasets.get_by_id(5677892).await?;
+let one = api.datasets.get_by_id(some.get_items()[0].id.unwrap()).await?;
 api.datasets.delete(&vec![IdAndExtId::from_external_id("plant_a")]).await?;
 ```
 

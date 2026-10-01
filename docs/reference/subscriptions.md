@@ -80,7 +80,8 @@ criteria combined by **AND**:
 
 | Criterion | Matching |
 | --- | --- |
-| `id`, `externalId`, `name` | Patterns, case-insensitive. `*` and `%` are wildcards, `_` is literal, and an entry with no wildcard matches exactly. |
+| `id` | Exact numeric ids. |
+| `externalId`, `name` | Patterns, case-insensitive. `*` and `%` are wildcards, `_` is literal, and an entry with no wildcard matches exactly. |
 | `timeseries` | Subscriptions bound to **any** of these time-series, each named by `id`, `externalId`, or both. |
 | `createdTime`, `lastUpdatedTime` | `{ "min": …, "max": … }` bounds. |
 
@@ -107,17 +108,19 @@ response carries `nextCursor` while more remain.
 }
 ```
 
-The clients do not all send the whole body yet:
+All three clients send the whole body:
 
 | | Java | Python and Rust |
 | --- | --- | --- |
-| Criteria | all of them, on `SubscriptionRetriever` | `timeseries` only |
-| `cursor` | sent | not sent yet |
-| `limit` you did not set | the server's default, 1000 | 100 |
+| Criteria | all of them, on `SubscriptionRetriever` | all of them, on `SubscriptionFilter` |
+| `cursor` | sent | sent |
+| `limit` you did not set | the server's default, 1000 | the server's default, 1000 |
 
-`limit` is capped at 10 000 everywhere. To narrow by series in Python, pass keywords,
+`limit` is capped at 10 000 everywhere. In Python, pass the criteria as keywords,
 `client.subscriptions.filter(timeseries=["engine_temperature"], limit=100)`, or a prepared
-`SubscriptionFilterForm`, which is the only form Rust takes.
+`SubscriptionFilter` as `filter=`, with `sort_by`, `sort_order` and `cursor` as keywords of the
+call; the result is a `Page` carrying `next_cursor`. Rust takes a `SubscriptionFilterForm`, whose
+`paging` carries `sort` and `cursor`.
 
 This replaced `POST /subscriptions/list`, which took a `filter` argument in a shape nothing else
 in the API used: its own default page size, a sort that was not validated, and no cursor, so a
@@ -187,8 +190,9 @@ an `AsyncDataHubClient`, `listen` returns a `SubscriptionListenerAsync`, driven 
 
 `next().await` yields `Some(Ok(msg))` or `Some(Err(..))` and never `None`: a dropped or closed
 socket is reconnected for you, with a fresh token and the same subscriptions. An `Err` is a
-refused subscription while the socket stays open, a frame that could not be decoded, or a
-reconnect that ran out of retries, and calling `next` again resumes reconnecting:
+refused subscription while the socket stays open, a connection refused at the WebSocket cap
+(`ListenError::ConnectionLimit`), a frame that could not be decoded, or a reconnect that ran out
+of retries, and calling `next` again resumes reconnecting:
 
 ```rust
 let mut listener = api.subscriptions.listen(&["engine_temps"]).await?;
@@ -314,7 +318,7 @@ error instead of retried.
 | --- | --- | --- | --- |
 | Create | `subscriptions().create` | `subscriptions.create` | `subscriptions.create` |
 | List `subscriptions().list` | HTTP | `subscriptions.list(limit=None)` | `subscriptions.list(limit)` |
-| Filter | `subscriptions().filter` | `subscriptions.filter(form=None, *, timeseries=, limit=, sort=)` | `subscriptions.filter` |
+| Filter | `subscriptions().filter` | `subscriptions.filter(*, filter=, id=, external_id=, name=, timeseries=, created_time=, last_updated_time=, limit=, sort_by=, sort_order=, cursor=)`, returning a `Page` | `subscriptions.filter` |
 | Delete | `subscriptions().delete` | `subscriptions.delete` | `subscriptions.delete` |
 | Live delivery | `subscriptions().listen` | `subscriptions.listen` (`SubscriptionListenerAsync` with `async for` on the async client) | `subscriptions.listen` |
 | [Live tail](#live-tail), no subscription | — | `timeseries.listen_datapoints` | `time_series.listen_datapoints` |

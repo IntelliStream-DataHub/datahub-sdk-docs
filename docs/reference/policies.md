@@ -17,6 +17,11 @@ The Java client reaches both through `client.policies()` and `client.governance(
 [`datasets().policies()`](./datasets#client-coverage) lists the same catalogue from the data
 set side, in all three clients.
 
+Python and Rust have no policy service. A policy is a node, so they reach one through
+[`resources`](./resources#typed-reads): a read narrowed to node type `policy` comes back as `Policy`,
+and `resources.create` takes a `Policy` node, under the same `403` rule as any
+[`POLICY`-labelled create](./resources#body).
+
 ## Policy types {#types}
 
 `GET /policies/types` lists the types a policy can instantiate. Each entry carries the type's
