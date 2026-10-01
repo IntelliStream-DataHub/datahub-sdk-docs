@@ -106,22 +106,36 @@ same change: that note's table, and the versions in the install lines of `quicks
 version is where breaking changes go. When the SDK tags `vX.Y.0`:
 
 1. `npm run docusaurus docs:version X.Y`. It copies `docs/` into `versioned_docs/version-X.Y/`
-   and writes `versioned_sidebars/` and `versions.json`.
-2. In the docs preset in `docusaurus.config.js`, set `lastVersion: 'X.Y'` so readers land on the
-   release, and label `versions.current` as `Next (unreleased)`. With `routeBasePath: '/'` the
-   release is served at `/` and `master` at `/next/`.
+   and writes `versioned_sidebars/` and `versions.json`. Cut it from an up-to-date `master`, as
+   the last step before the pull request: every merge into `docs/` makes an uncut snapshot stale,
+   and there is no refresh command, only delete and cut again.
+2. In the docs preset in `docusaurus.config.js`, add `versions: { current: { label: 'Next
+   (unreleased)' } }`. Do **not** set `lastVersion`: it defaults to the newest name in
+   `versions.json`, so each later cut moves readers on its own. With `routeBasePath: '/'` the
+   release is then served at `/` and `master` at `/next/`, both by default.
 3. Replace the hardcoded `v1.0` navbar badge with `{ type: 'docsVersionDropdown', position: 'right' }`.
+   Not before the first snapshot: with none, the dropdown renders as a lone link labelled after
+   the development version, which reads as a release.
 4. Rewrite the quick start note in `docs/`: from the first snapshot on, `master` is the "Next"
-   version and the note says so.
+   version and the note says so. Give the snapshot's own copy of the note the versions that
+   shipped, and the same for the install lines it froze.
 5. Build, and check that search and the `/next/` pages both work before `sync-docs` publishes it.
+   Each version gets its own index (`build/search-index.json`, `build/next/search-index.json`);
+   search from a `/next/` page and confirm the hit stays under `/next/`.
+
+Snapshots are cut for released versions only. A version the SDK has not tagged never gets one,
+so the version a reader picks in the navbar is always one they can install.
 
 A snapshot is changed only where it was wrong for its own release, a patch release that changes
 behaviour included. A new feature goes into `docs/`, never back into a snapshot.
 
 **Where this stands.** No snapshot exists yet, so the published site describes `main`, and a
-reader on 0.2.0 can meet calls their version lacks; the quick start note warns them. Nothing
-checks these rules automatically yet. The doc tests being added under `doctests/` are meant to,
-by building against pinned SDK and platform commits.
+reader on 0.2.0 can meet calls their version lacks; the quick start note warns them. The steps
+above are all that is left to run, and `editCurrentVersion` is already set so a snapshot's "Edit
+this page" will point at `docs/`. The first cut waits on the first tagged release; the SDK has
+tagged only `v0.2.0`, and bumped `main` past it without releasing, so no number in between gets a
+snapshot. Nothing checks these rules automatically yet. The doc tests being added under
+`doctests/` are meant to, by building against pinned SDK and platform commits.
 
 ## Every example has to be runnable
 
