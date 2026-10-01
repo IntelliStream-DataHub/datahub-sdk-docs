@@ -29,7 +29,7 @@ client = intellistream_datahub_sdk.DataHubClient.from_env()
 
 for s, u in [("station_kirkeveien_pm25", "ug_m3"), ("station_kirkeveien_no2", "ppb"),
              ("station_kirkeveien_co", "ppm")]:
-    client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id=s, name=s, unit=u)])
+    client.timeseries.create([intellistream_datahub_sdk.TimeSeries(value_type="float", external_id=s, name=s, unit=u)])
 idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=24, freq="1h")
 client.timeseries.insert_from_lists(timestamps=idx, values=np.random.uniform(5, 45, 24), ts="station_kirkeveien_pm25")
 ```
@@ -102,9 +102,9 @@ client.timeseries().create(pm25, no2, co);
 import intellistream_datahub_sdk
 
 client.timeseries.create([
-    intellistream_datahub_sdk.TimeSeries(external_id="station_kirkeveien_pm25", name="Kirkeveien PM2.5", unit="ug_m3"),
-    intellistream_datahub_sdk.TimeSeries(external_id="station_kirkeveien_no2", name="Kirkeveien NO2", unit="ppb"),
-    intellistream_datahub_sdk.TimeSeries(external_id="station_kirkeveien_co", name="Kirkeveien CO", unit="ppm")])
+    intellistream_datahub_sdk.TimeSeries(value_type="float", external_id="station_kirkeveien_pm25", name="Kirkeveien PM2.5", unit="ug_m3"),
+    intellistream_datahub_sdk.TimeSeries(value_type="float", external_id="station_kirkeveien_no2", name="Kirkeveien NO2", unit="ppb"),
+    intellistream_datahub_sdk.TimeSeries(value_type="float", external_id="station_kirkeveien_co", name="Kirkeveien CO", unit="ppm")])
 ```
 
 </TabItem>

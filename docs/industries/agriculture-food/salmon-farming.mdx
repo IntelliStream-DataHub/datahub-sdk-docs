@@ -139,8 +139,8 @@ client.timeseries().ingest(Map.of(
 import intellistream_datahub_sdk
 
 client.timeseries.create([
-    intellistream_datahub_sdk.TimeSeries(external_id="pen_h_07_feed_kg", name="Pen H-07 feed", unit="kg"),
-    intellistream_datahub_sdk.TimeSeries(external_id="pen_h_07_biomass_kg", name="Pen H-07 biomass", unit="kg")])
+    intellistream_datahub_sdk.TimeSeries(value_type="float", external_id="pen_h_07_feed_kg", name="Pen H-07 feed", unit="kg"),
+    intellistream_datahub_sdk.TimeSeries(value_type="float", external_id="pen_h_07_biomass_kg", name="Pen H-07 biomass", unit="kg")])
 client.timeseries.insert_from_lists(
     timestamps=[pd.Timestamp.now(tz="UTC")], values=[420.0], ts="pen_h_07_feed_kg")
 ```

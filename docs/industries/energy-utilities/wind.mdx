@@ -27,7 +27,7 @@ import intellistream_datahub_sdk, numpy as np, pandas as pd
 client = intellistream_datahub_sdk.DataHubClient.from_env()
 
 for s, u in [("turbine_t14_power_kw", "kw"), ("turbine_t14_wind_ms", "m_s")]:
-    client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id=s, name=s, unit=u)])
+    client.timeseries.create([intellistream_datahub_sdk.TimeSeries(value_type="float", external_id=s, name=s, unit=u)])
 idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=168, freq="1h")
 wind = np.clip(np.random.weibull(2.0, 168) * 6.0, 0, 25)
 power = np.clip(wind**3 * 2.0, 0, 3500)           # rated ~3500 kW
@@ -65,9 +65,9 @@ client.timeseries().ingest(Map.of(
 import intellistream_datahub_sdk
 
 client.timeseries.create([
-    intellistream_datahub_sdk.TimeSeries(external_id="turbine_t14_power_kw",
+    intellistream_datahub_sdk.TimeSeries(value_type="float", external_id="turbine_t14_power_kw",
                            name="Turbine T14 power", unit="kw"),
-    intellistream_datahub_sdk.TimeSeries(external_id="turbine_t14_wind_ms",
+    intellistream_datahub_sdk.TimeSeries(value_type="float", external_id="turbine_t14_wind_ms",
                            name="Turbine T14 wind speed", unit="m_s")])
 client.timeseries.insert_from_lists(
     timestamps=timestamps, values=power_kw, ts="turbine_t14_power_kw")

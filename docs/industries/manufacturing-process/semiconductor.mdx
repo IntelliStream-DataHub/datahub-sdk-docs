@@ -67,7 +67,7 @@ import intellistream_datahub_sdk, pandas as pd
 
 client.timeseries.create([intellistream_datahub_sdk.TimeSeries(
     external_id="tool_etch_07_chamber_pressure_mtorr",
-    name="Etch-07 chamber pressure", unit="mtorr", value_type="numeric")])
+    name="Etch-07 chamber pressure", unit="mtorr", value_type="float")])
 client.timeseries.insert_from_lists(
     timestamps=[pd.Timestamp.now(tz="UTC")], values=[12.0436],
     ts="tool_etch_07_chamber_pressure_mtorr")

@@ -172,6 +172,8 @@ DataWrapper<EventModel> events = client.events().byIds(List.of(
 <TabItem value="python" label="Python">
 
 ```python
+import uuid
+
 events = client.events.by_ids(["PO-4500171"])   # a str selects by external id
 events = client.events.by_ids([uuid.UUID("0195f3a2-4c1b-7f9e-9c3a-1b2d4e6f8a90")])
 ```

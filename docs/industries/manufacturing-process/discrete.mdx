@@ -65,7 +65,7 @@ client.timeseries().ingest(Map.of(
 import intellistream_datahub_sdk
 
 client.timeseries.create([
-    intellistream_datahub_sdk.TimeSeries(external_id="station_07_cycle_time_s",
+    intellistream_datahub_sdk.TimeSeries(value_type="float", external_id="station_07_cycle_time_s",
                            name="Station 07 cycle time", unit="s"),
     intellistream_datahub_sdk.TimeSeries(external_id="station_07_scrap", name="Station 07 scrap count", unit="count")])
 

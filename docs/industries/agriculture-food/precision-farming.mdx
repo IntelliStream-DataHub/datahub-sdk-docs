@@ -28,7 +28,7 @@ import intellistream_datahub_sdk, numpy as np, pandas as pd
 client = intellistream_datahub_sdk.DataHubClient.from_env()
 
 for s, u in [("field_north_40_soil_moisture", "pct"), ("field_north_40_soil_temp_c", "deg_c")]:
-    client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id=s, name=s, unit=u)])
+    client.timeseries.create([intellistream_datahub_sdk.TimeSeries(value_type="float", external_id=s, name=s, unit=u)])
 idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=48, freq="1h")
 moisture = 35 - np.linspace(0, 15, 48) + np.random.normal(0, 1, 48)     # drying out
 client.timeseries.insert_from_lists(timestamps=idx, values=moisture, ts="field_north_40_soil_moisture")
@@ -63,9 +63,9 @@ client.timeseries().ingest(Map.of(
 import intellistream_datahub_sdk
 
 client.timeseries.create([
-    intellistream_datahub_sdk.TimeSeries(external_id="field_north_40_soil_moisture",
+    intellistream_datahub_sdk.TimeSeries(value_type="float", external_id="field_north_40_soil_moisture",
         name="North 40 soil moisture", unit="pct"),
-    intellistream_datahub_sdk.TimeSeries(external_id="field_north_40_soil_temp_c",
+    intellistream_datahub_sdk.TimeSeries(value_type="float", external_id="field_north_40_soil_temp_c",
         name="North 40 soil temperature", unit="deg_c")])
 client.timeseries.insert_from_lists(
     timestamps=timestamps, values=moisture, ts="field_north_40_soil_moisture")
