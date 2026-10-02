@@ -75,8 +75,8 @@ nvm install 22 && nvm use 22       # or fnm, or a NodeSource apt package
 
 ## Versions: which SDK these pages describe
 
-The SDKs are pre-1.0 and still change their interfaces between versions (the platform's
-`FAQ.md` says so), so one page cannot be right for every release. These are the rules for
+The Python and Rust SDKs are pre-1.0 and still change their interfaces between versions (the
+platform's `FAQ.md` says so), so one page cannot be right for every release. These are the rules for
 that. Nothing like them was written down before 2026-09-17, and by then the examples matched no
 SDK version at all: some calls only the released 0.2.0 had, some only `main`.
 
@@ -85,7 +85,7 @@ SDK version at all: some calls only the released 0.2.0 had, some only `main`.
 | SDK | What `master` describes | How it is released |
 | --- | --- | --- |
 | Python and Rust | `main` of [dataplatform-rust-sdk](https://github.com/IntelliStream-DataHub/dataplatform-rust-sdk) | `intellistream-datahub-sdk` on PyPI and crates.io, from a `vX.Y.Z` tag |
-| Java | the default branch of [datahub-platform](https://github.com/IntelliStream-DataHub/datahub-platform) | not released; its version is `javaSdkVersion` in that repo's `gradle.properties` |
+| Java | the default branch of [datahub-platform](https://github.com/IntelliStream-DataHub/datahub-platform) | `ai.intellistream:datahub-sdk` on Maven Central, from a `vX.Y.Z` GitHub Release of that repo; its version is `version` in that repo's `gradle.properties` |
 
 The platform already works this way: its `docs-check` skill sends a user-visible change here,
 "changed API or SDK contracts" included, when the change merges, not when it is released. The
