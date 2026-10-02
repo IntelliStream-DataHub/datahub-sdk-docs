@@ -188,6 +188,32 @@ the record as `TenantLlmSettings.EFFORT_LEVELS`.
 The API instance that served the write refreshes immediately. Other instances and services
 cache the tenant registry and pick the change up within five minutes.
 
+### Suggest model names {#llm-models}
+
+`POST /tenant/settings/llm/models` asks an OpenAI-compatible server which models it offers and
+returns their ids (`data[].id` from `<baseUrl>/models`). The SDKs have no method for it, so call
+it over REST:
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"baseUrl": "http://localhost:11434/v1"}' \
+  "$API/tenant/settings/llm/models"
+# ["qwen3.8:latest", "nemotron-3.5-lightning:30b"]
+```
+
+An optional `apiKey` goes in the body, not the URL, so it stays out of access logs. Leave it out
+and the API uses your organization's stored key, but only when `baseUrl` is the stored base URL;
+for any other URL no key is sent.
+
+The list is a suggestion, not a check: the `PUT` above accepts any model name, since some hosts
+answer to names they do not list (deployment names, gateway aliases). A server that cannot be
+reached, or that answers with something other than a model list, gives `200` with an empty
+array, and nothing else from it is passed back. A missing or non-http(s) `baseUrl` is a `400`
+with a field error on `baseUrl`.
+
+It needs the same grant as changing the configuration, `llm` write (`/settings/llm/write` or
+`/settings/*/write`, see [above](#settings-permissions)), and is a `403` without it.
+
 ## What each client covers {#client-coverage}
 
 | Operation | Java | Python | Rust |
@@ -196,3 +222,4 @@ cache the tenant registry and pick the change up within five minutes.
 | Settings permissions (`GET /tenant/settings/permissions`) | `tenant().settingsPermissions` | `tenant.settings_permissions` | `tenant.settings_permissions` |
 | Read model configuration (`GET /tenant/settings/llm`) | `tenant().llmSettings` | `tenant.llm_settings` | `tenant.llm_settings` |
 | Change model configuration (`PUT /tenant/settings/llm`) | `tenant().updateLlmSettings` | `tenant.update_llm_settings` | `tenant.update_llm_settings` |
+| [Suggest model names](#llm-models) (`POST /tenant/settings/llm/models`) | — | — | — |
