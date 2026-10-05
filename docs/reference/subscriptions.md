@@ -154,7 +154,7 @@ Or drive `poll` yourself, a blocking queue hand-off (not network polling) that r
 to ack on your own schedule:
 
 ```java
-import ai.intellistream.datahub.sdk.subscriptions.SubscriptionListener;
+import ai.intellistream.datahub.sdk.client.SubscriptionListener;
 import java.time.Duration;
 
 try (SubscriptionListener listener = client.subscriptions().listen(List.of("engine_temps"))) {

@@ -720,7 +720,7 @@ never blocks on the network; flushes run on a thread of their own. Python and Ru
 binary buffer: collect the readings and call `insert_datapoints_binary` yourself.
 
 ```java
-import ai.intellistream.datahub.sdk.ingest.BinaryIngestBuffer;
+import ai.intellistream.datahub.sdk.client.BinaryIngestBuffer;
 
 try (BinaryIngestBuffer buffer = client.timeseries().binaryBuffer()) {   // 10 000 points or 200 ms
     buffer.add("engine_temperature", Instant.now(), 92.4);
