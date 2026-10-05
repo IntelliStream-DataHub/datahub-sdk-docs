@@ -75,10 +75,11 @@ nvm install 22 && nvm use 22       # or fnm, or a NodeSource apt package
 
 ## Versions: which SDK these pages describe
 
-The Python and Rust SDKs are pre-1.0 and still change their interfaces between versions (the
-platform's `FAQ.md` says so), so one page cannot be right for every release. These are the rules for
-that. Nothing like them was written down before 2026-09-17, and by then the examples matched no
-SDK version at all: some calls only the released 0.2.0 had, some only `main`.
+The SDKs change their interfaces between releases (the platform's `FAQ.md` says so), so one page
+cannot be right for every release. These are the rules for that. Nothing like them was written down
+before 2026-09-17, and by then the examples matched no SDK version at all: some calls only the
+released 0.2.0 had, some only `main`. All three SDKs released 1.0.0 on 2026-10-05, and the `1.0`
+snapshot was cut then.
 
 **`master` describes the development versions, not the latest release.**
 
@@ -102,22 +103,20 @@ use a call newer than the latest release, so the `:::note` under "1. Install" in
 same change: that note's table, and the versions in the install lines of `quickstart.mdx` and
 `tutorial.mdx` (the `Cargo.toml` snippets and the Java `implementation(...)` line).
 
-**A release gets a frozen snapshot of the docs**, one per minor version, since in 0.x the minor
-version is where breaking changes go. When the SDK tags `vX.Y.0`:
+**A release gets a frozen snapshot of the docs**, one per minor version, the unit the SDKs
+release breaking changes in. When the SDK tags `vX.Y.0`:
 
 1. `npm run docusaurus docs:version X.Y`. It copies `docs/` into `versioned_docs/version-X.Y/`
    and writes `versioned_sidebars/` and `versions.json`. Cut it from an up-to-date `master`, as
    the last step before the pull request: every merge into `docs/` makes an uncut snapshot stale,
    and there is no refresh command, only delete and cut again.
-2. In the docs preset in `docusaurus.config.js`, add `versions: { current: { label: 'Next
-   (unreleased)' } }`. Do **not** set `lastVersion`: it defaults to the newest name in
+2. `docusaurus.config.js` already sets `versions: { current: { label: 'Next (unreleased)' } }`.
+   Do **not** set `lastVersion`: it defaults to the newest name in
    `versions.json`, so each later cut moves readers on its own. With `routeBasePath: '/'` the
    release is then served at `/` and `master` at `/next/`, both by default.
-3. Replace the hardcoded `v1.0` navbar badge with `{ type: 'docsVersionDropdown', position: 'right' }`.
-   Not before the first snapshot: with none, the dropdown renders as a lone link labelled after
-   the development version, which reads as a release.
-4. Rewrite the quick start note in `docs/`: from the first snapshot on, `master` is the "Next"
-   version and the note says so. Give the snapshot's own copy of the note the versions that
+3. The navbar already has `{ type: 'docsVersionDropdown', position: 'right' }` and needs no change.
+4. Update the quick start note in `docs/`: `master` is the "Next" version and the note says so, with
+   the latest releases in its table. Give the snapshot's own copy of the note the versions that
    shipped, and the same for the install lines it froze.
 5. Build, and check that search and the `/next/` pages both work before `sync-docs` publishes it.
    Each version gets its own index (`build/search-index.json`, `build/next/search-index.json`);
