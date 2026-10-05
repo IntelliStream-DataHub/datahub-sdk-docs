@@ -290,7 +290,7 @@ sends once 10 000 points have accumulated or the oldest is 200 ms old. `add` nev
 network, and closing the buffer flushes what is left:
 
 ```java
-import ai.intellistream.datahub.sdk.ingest.BinaryIngestBuffer;
+import ai.intellistream.datahub.sdk.client.BinaryIngestBuffer;
 
 try (BinaryIngestBuffer buffer = client.timeseries().binaryBuffer()) {
     buffer.add("engine_temperature", Instant.now(), 92.4);
