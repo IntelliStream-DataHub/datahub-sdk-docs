@@ -1,0 +1,355 @@
+---
+sidebar_position: 0.5
+title: Generate sample data
+---
+
+# Generate sample data
+
+:::info Start here
+The advanced scenarios **read** series, events and graphs that already exist. To run any
+of them end-to-end, first populate a sandbox with realistic synthetic data, that's what
+this page does, using the same SDK ingestion calls you'd use for real data. Point each
+scenario's `external_id`s at the series you create here.
+:::
+
+Everything below is Python (`numpy` + `pandas` + the SDK). Each generator builds a signal
+with the *shape* a model needs to learn, then ingests it.
+
+## A reusable ingest helper
+
+```python
+import intellistream_datahub_sdk, numpy as np, pandas as pd
+
+client = intellistream_datahub_sdk.DataHubClient.from_env()
+
+def ingest(external_id, index, values, unit=None, name=None):
+    try:
+        client.timeseries.create([intellistream_datahub_sdk.TimeSeries(
+            external_id=external_id, name=name or external_id, unit=unit or "value", value_type="float")])
+    except intellistream_datahub_sdk.DataHubException as e:
+        if e.status_code != 409:          # a second run finds the series already there
+            raise
+    client.timeseries.insert_from_lists(timestamps=index, values=np.asarray(values), ts=external_id)
+    print(f"ingested {len(values):,} points → {external_id}")
+```
+
+## A. A degrading sensor signal
+
+For [predictive maintenance](/advanced/predictive-maintenance),
+[LSTM anomaly detection](/advanced/lstm-anomaly-detection) and
+[health scoring](/advanced/asset-health-score): a vibration signal that runs healthy,
+then develops a fault, rising amplitude and impulsiveness over the final stretch. It is
+written at **one reading a second**, which is the rate the predictive-maintenance page's
+`SAMPLE_HZ` and window length assume.
+
+```python
+def degrading_vibration(hours=24, fs_per_hour=3600):
+    n = hours * fs_per_hour                    # one reading a second
+    idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=n, freq="1s")
+    t = np.linspace(0, 1, n)
+    healthy = 0.6 * np.sin(2 * np.pi * 50 * np.arange(n) / fs_per_hour)   # base tone
+    fault = np.where(t > 0.8, (t - 0.8) * 4, 0.0)                          # ramps in late
+    impulses = fault * np.random.standard_normal(n) * 3                    # impulsiveness
+    return idx, healthy + fault + impulses + np.random.normal(0, 0.1, n)
+
+idx, vib = degrading_vibration()
+ingest("pump_07_vibration_mm_s", idx, vib, unit="mm_s")
+```
+
+The same pump's slower signals, bearing temperature, oil pressure, and a stand-in
+anomaly score, feed the [asset health score](/advanced/asset-health-score):
+
+```python
+hrs = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=24*60, freq="1h")
+n = len(hrs)
+ingest("pump_07_bearing_temp_c", hrs, 55 + np.linspace(0, 18, n) + np.random.normal(0, 1, n), unit="celsius")
+ingest("pump_07_oil_pressure_kpa", hrs, 320 - np.linspace(0, 60, n) + np.random.normal(0, 5, n), unit="kpa")
+# stand-in for the predictive-maintenance output, if you haven't run that scenario yet
+ingest("pump_07_vibration_anomaly", hrs, np.clip(np.linspace(0, 0.9, n) + np.random.normal(0, 0.03, n), 0, 1))
+```
+
+## B. A production decline curve
+
+For [LSTM forecasting](/advanced/lstm-forecasting): a hyperbolic decline with noise and a
+weekly wobble, the shape of a producing well's rate.
+
+```python
+def decline_curve(days=540, qi=1200, b=0.8, d=0.006):
+    idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=days, freq="1d")
+    t = np.arange(days)
+    rate = qi / (1 + b * d * t) ** (1 / b)              # hyperbolic decline (still visibly falling at the tail)
+    weekly = 1 + 0.03 * np.sin(2 * np.pi * t / 7)
+    return idx, rate * weekly + np.random.normal(0, 5, days)
+
+idx, rate = decline_curve()
+ingest("well_a12_oil_rate_bpd", idx, rate, unit="bpd")
+```
+
+## C. Correlated multivariate process data, with a fault
+
+For [PCA process monitoring](/advanced/pca-process-monitoring): several sensors that move
+together normally, with a fault window where one breaks the correlation. (Section J below
+reuses this exact shape with drilling names for the multivariate
+[LSTM autoencoder](/advanced/lstm-anomaly-detection).)
+
+```python
+def correlated_process(minutes=60*24*14):
+    idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=minutes, freq="1min")
+    feed = 100 + 10 * np.sin(2 * np.pi * np.arange(minutes) / (60*24)) + np.random.normal(0, 1, minutes)
+    top_temp = 150 + 0.4 * feed + np.random.normal(0, 0.5, minutes)        # correlated with feed
+    pressure = 200 + 0.8 * feed + np.random.normal(0, 1, minutes)
+    reflux   = 2.0 + 0.005 * feed + np.random.normal(0, 0.02, minutes)
+    bottom_temp = 340 + 0.6 * feed + np.random.normal(0, 0.6, minutes)     # bottoms also track feed
+    reboiler    = 30 + 0.15 * feed + np.random.normal(0, 0.3, minutes)     # reboiler duty follows feed
+    top_temp[-600:] += np.linspace(0, 12, 600)            # fault: temp drifts off the relationship
+    return idx, {"cdu_1_feed_bpd": feed, "cdu_1_top_temp_c": top_temp,
+                 "cdu_1_pressure_kpa": pressure, "cdu_1_reflux_ratio": reflux,
+                 "cdu_1_bottom_temp_c": bottom_temp, "cdu_1_reboiler_duty_gj": reboiler}
+
+idx, channels = correlated_process()
+for tag, values in channels.items():
+    ingest(tag, idx, values)
+```
+
+## D. Sparse lab samples vs. dense sensors
+
+For the [soft sensor](/advanced/random-forest-soft-sensor): cheap online sensors every
+minute, plus an expensive lab measurement only once an hour that depends on them.
+
+```python
+idx, channels = correlated_process()                      # reuse the dense sensors above
+# lab value is a (hidden) function of the sensors, sampled hourly with measurement noise
+lab_idx = idx[::60]
+lab = (5.0 + 0.05 * (channels["cdu_1_top_temp_c"][::60] - 190)      # strong, learnable dependence
+           - 2.0 * (channels["cdu_1_reflux_ratio"][::60] - 2.5)     # on the online sensors...
+           + np.random.normal(0, 0.05, len(lab_idx)))               # ...with small measurement noise
+ingest("cdu_1_product_sulfur_ppm_lab", lab_idx, lab, unit="ppm")
+```
+
+## E. A labelled failure history (events) and the sensors leading up to it
+
+For [XGBoost failure prediction](/advanced/xgboost-failure-prediction): historical
+failures as events, so each `(asset, day)` row can be labelled.
+
+```python
+for day_offset in (40, 95, 160, 240):                     # a few past failures
+    when = pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=day_offset)
+    client.events.create([intellistream_datahub_sdk.Event(
+        external_id=f"esp_failure_a12_{int(when.timestamp())}",
+        type="esp_failure", status="closed", event_time=when,
+        metadata={"pump": "pump_esp_a12"})])
+```
+
+The model reads three sensors on `pump_esp_a12`. Give each a slow degradation that ramps
+up in the fortnight before every seeded failure (and resets after the implied repair), so
+the 7-day-ahead label has real signal to learn from:
+
+```python
+days = 300
+esp_idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=days*24, freq="1h")
+n = len(esp_idx)
+stress = np.zeros(n)                                       # 0 = healthy, 1 = about to fail
+for day_offset in (40, 95, 160, 240):                     # the same failures seeded above
+    fail = n - 1 - day_offset*24
+    lo = max(fail - 14*24 + 1, 0)                          # degrade over the fortnight before
+    stress[lo:fail+1] = np.maximum(stress[lo:fail+1], np.linspace(0, 1, fail + 1 - lo))
+ingest("pump_esp_a12_intake_pressure_bar", esp_idx, 90 - 25*stress + np.random.normal(0, 1.5, n), unit="bar")
+ingest("pump_esp_a12_motor_temp_c",        esp_idx, 70 + 45*stress + np.random.normal(0, 1.0, n), unit="celsius")
+ingest("pump_esp_a12_vibration_mm_s",      esp_idx, 2.0 + 6*stress + np.abs(np.random.normal(0, 0.2, n)), unit="mm_s")
+```
+
+## F. A small graph
+
+For the graph-feature builds ([fraud classification](/advanced/fraud-classification),
+[K-Means communities](/advanced/kmeans-clustering)): 30 ordinary accounts
+`account_1…30`, plus the flagged ring that fraud classification traverses from
+`account_77310`. Fraud classification also reads each account's behavioural series
+(`<account>_inflow` / `<account>_outflow`), seeded below.
+
+```python
+ring = ["account_77310", "account_44120", "account_61885", "account_22907"]   # a flagged laundering ring
+ordinary = [f"account_{i}" for i in range(1, 31)]                             # 30 ordinary accounts
+nodes = [intellistream_datahub_sdk.Resource(external_id=a, name=a.replace("_", " ").title(), labels=["Account"])
+         for a in ordinary + ring]
+# ordinary accounts: an acyclic transfer web — money only flows "forward", so no loops or pass-through mules
+edges = [intellistream_datahub_sdk.RelForm.by_external_ids(f"account_{i}", f"account_{i+step}", "sent_to")
+         for i in range(1, 31) for step in (1, 3) if i + step <= 30]
+# the flagged ring: a tight cycle fraud-classification walks out from account_77310 (funds loop back)
+edges += [intellistream_datahub_sdk.RelForm.by_external_ids(ring[k], ring[(k+1) % len(ring)], "sent_to")
+          for k in range(len(ring))]
+client.resources.create(nodes, edges)
+```
+
+Fraud classification turns the money *in* and *out* of each account into features, a
+pass-through mule shows inflow ≈ outflow, an ordinary account doesn't. Seed both series
+for every account in the graph:
+
+```python
+hrs = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=24*7, freq="1h")
+n = len(hrs)
+profiles = {a: (50_000, 0.97) for a in ring}                          # ring mules: high volume, in≈out
+profiles.update({a: (np.random.uniform(2_000, 8_000),
+                     np.random.uniform(0.3, 0.6)) for a in ordinary})   # ordinary: only part flows back out
+for acct, (base, ratio) in profiles.items():
+    inflow  = np.clip(base * (1 + 0.3*np.sin(2*np.pi*np.arange(n)/24)) + np.random.normal(0, base*0.05, n), 0, None)
+    outflow = np.clip(inflow * ratio + np.random.normal(0, base*0.03, n), 0, None)      # ~ratio of it flows back out
+    ingest(f"{acct}_inflow",  hrs, inflow,  unit="usd")
+    ingest(f"{acct}_outflow", hrs, outflow, unit="usd")
+```
+
+## G. An electrical feeder load curve
+
+For [demand forecasting](/advanced/demand-forecasting): 120 days of hourly feeder load
+with the daily double-peak, a lighter weekend, and a slow seasonal drift, the shape the
+forecaster learns.
+
+```python
+def feeder_load(days=120):
+    idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=days*24, freq="1h")
+    t = np.arange(days*24)
+    daily   = 8 * np.sin(2*np.pi*((t % 24) - 6)/24)        # morning & evening peaks
+    weekend = -3 * (((t // 24) % 7) >= 5)                  # weekends run lighter
+    season  = 4 * np.sin(2*np.pi*t/(24*365))              # slow seasonal swing
+    return idx, np.clip(30 + daily + weekend + season + np.random.normal(0, 1, len(t)), 5, None)
+
+idx, load = feeder_load()
+ingest("feeder_f12_load_mw", idx, load, unit="mw")
+```
+
+## H. Fish-pen oxygen, with crash episodes
+
+For the [oxygen-crash early warning](/advanced/oxygen-crash-early-warning): 30 days of
+dissolved oxygen and water temperature at 15-minute resolution, with a few episodes where
+oxygen plunges, the crashes the model learns to see coming.
+
+```python
+def pen_oxygen(days=30):
+    idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=days*24*4, freq="15min")
+    n = len(idx)
+    temp = 12 + 2*np.sin(2*np.pi*np.arange(n)/(24*4)) + np.random.normal(0, 0.2, n)
+    do   = 8.5 - 0.15*(temp - 12) + np.random.normal(0, 0.2, n)     # warmer water holds less O2
+    for start in (5*24*4, 14*24*4, 23*24*4, 27*24*4):               # crash episodes (incl. a late one)
+        do[start:start+8]    -= np.linspace(0, 4, 8)
+        do[start+8:start+20] -= 4
+    return idx, np.clip(do, 1, None), temp
+
+idx, do, temp = pen_oxygen()
+ingest("pen_h_07_dissolved_oxygen_mg_l", idx, do, unit="mg_l")
+ingest("pen_h_07_water_temp_c", idx, temp, unit="celsius")
+```
+
+## I. Operating channels, one unit's regimes and a peer fleet
+
+For [K-Means](/advanced/kmeans-clustering): four channels for `unit_3` as it swings
+between idle, ramp, steady and overload (the *operating regimes* section clusters on all
+four), plus just `load_mw` for a small pump fleet running at different duty levels (the
+*asset cohorts* section only clusters `load_mw` across the pumps).
+
+```python
+def operating_modes(asset, minutes=60*24*14, load_scale=1.0, phase=0.0):
+    idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=minutes, freq="1min")
+    duty = (np.sin(2*np.pi*np.arange(minutes)/(60*8) + phase) + 1) / 2      # 0..1 duty cycle
+    load = np.clip(duty*80*load_scale + np.random.normal(0, 3, minutes), 0, None)
+    return idx, {
+        f"{asset}_load_mw":      load,
+        f"{asset}_temp_c":       120 + 0.5*load + np.random.normal(0, 2, minutes),
+        f"{asset}_pressure_kpa": 180 + 0.7*load + np.random.normal(0, 3, minutes),
+        f"{asset}_flow_m3h":     20 + 0.4*load + np.random.normal(0, 1, minutes),
+    }
+
+# unit_3: all four channels — the operating-regimes section clusters on the full state.
+idx, channels = operating_modes("unit_3")
+for tag, values in channels.items():
+    ingest(tag, idx, values)
+
+# Peer fleet: the asset-cohorts section only clusters load_mw across pumps, so seed just that.
+for asset, scale, phase in [("pump_07", 0.9, 0.0), ("pump_08", 1.05, 0.4),
+                            ("pump_11", 0.6, 0.8), ("pump_19", 1.3, 1.2)]:
+    idx, channels = operating_modes(asset, load_scale=scale, phase=phase)
+    ingest(f"{asset}_load_mw", idx, channels[f"{asset}_load_mw"])
+```
+
+## J. Correlated drilling channels, with a kick
+
+For the multivariate [LSTM autoencoder](/advanced/lstm-anomaly-detection): section C's
+exact shape with drilling names, mud flow-in, flow-out, pit volume and standpipe pressure
+move together until a late **kick** (gas influx) pushes returns and pit volume up while
+standpipe pressure sags, breaking the joint pattern the autoencoder learned.
+
+```python
+def drilling_process(seconds=60*60):                     # 1 h at 1 s — the LSTM autoencoder works in seconds
+    idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=seconds, freq="1s")
+    flow_in   = 600 + 40*np.sin(2*np.pi*np.arange(seconds)/3600) + np.random.normal(0, 4, seconds)
+    flow_out  = 590 + 0.97*(flow_in - 600) + np.random.normal(0, 4, seconds)     # returns track pumps-in
+    pit_vol   = 240 + 0.02*(flow_in - 600) + np.random.normal(0, 0.5, seconds)   # steady active pits
+    standpipe = 2800 + 3.0*(flow_in - 600) + np.random.normal(0, 15, seconds)
+    flow_out[-600:]  += np.linspace(0, 60, 600)          # kick over the last 10 min: returns gain over flow-in
+    pit_vol[-600:]   += np.linspace(0, 8, 600)           # pit volume rises with the influx
+    standpipe[-600:] -= np.linspace(0, 120, 600)         # standpipe sags as gas lightens the column
+    return idx, {"rig_dw1_flow_in_gpm": flow_in, "rig_dw1_flow_out_gpm": flow_out,
+                 "rig_dw1_pit_volume_bbl": pit_vol, "rig_dw1_standpipe_psi": standpipe}
+
+idx, channels = drilling_process()
+for tag, values in channels.items():
+    ingest(tag, idx, values)
+```
+
+## K. Messy raw sensors to clean
+
+For the [data pipeline & lineage](/advanced/data-cleaning-lineage) build: two *raw* engine
+sensors carrying the real-world defects that pipeline exists to fix, spike outliers,
+scattered `NaN` dropouts, a longer gap and a stuck/flatline stretch. (Everything
+downstream, the `*_clean`, feature and score series, is written *by* that recipe, so
+only these raw inputs are seeded here.)
+
+```python
+def messy_sensor(hours=24*7, base=90.0, swing=8.0, noise=1.0):
+    idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=hours*60, freq="1min")
+    n = len(idx)
+    s = pd.Series(base + swing*np.sin(2*np.pi*np.arange(n)/(60*24)) + np.random.normal(0, noise, n), index=idx)
+    s.iloc[np.random.randint(0, n, n//200)] += np.random.normal(0, 12, n//200)   # spike outliers
+    s.iloc[np.random.randint(0, n, n//150)] = np.nan                             # scattered dropouts
+    gap   = np.random.randint(0, n - 240); s.iloc[gap:gap+180]     = np.nan       # a longer gap
+    stuck = np.random.randint(0, n - 240); s.iloc[stuck:stuck+120] = base         # stuck / flatline
+    s = s.dropna()               # dropouts/gaps become real gaps — NaN values can't be ingested
+    return s.index, s.to_numpy()
+
+idx, temp = messy_sensor(base=90, swing=8, noise=1.0)
+ingest("engine_temperature_raw", idx, temp, unit="celsius")
+idx, vib = messy_sensor(base=3.0, swing=1.2, noise=0.25)
+ingest("engine_vibration_raw", idx, vib, unit="mm_s")
+```
+
+## L. A noisy alarm: four transients and one real excursion
+
+For the [sustained-condition alarm](/advanced/sustained-alarm-window): a pump discharge
+pressure that spikes briefly four times and then stays above the limit for eighty minutes.
+The transients are deliberately **higher** than the sustained excursion, because duration
+rather than severity is what that rule judges, and a signal where the real one is also the
+tallest would let a plain threshold look good.
+
+```python
+LIMIT_BAR = 4.5
+
+def noisy_discharge(hours=6, per_minute=1):
+    n = hours * 60 * per_minute
+    step = f"{60 // per_minute}s"
+    idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=n, freq=step)
+    t = np.arange(n, dtype=float) / per_minute                     # minutes from the start
+    v = 3.6 + 0.25*np.sin(t/23) + 0.15*np.sin(t/7.5)               # ordinary running
+    for centre in (30, 75, 140, 200):                              # four brief transients
+        v += 2.6 * np.exp(-((t - centre) / 2.0) ** 2)
+    v += np.where((t > 250) & (t < 330), 1.6, 0.0)                 # the one that matters
+    return idx, v + np.random.normal(0, 0.03, n)
+
+idx, bar = noisy_discharge()
+ingest("pump_p101_discharge_bar", idx, bar, unit="bar")
+print(f"{(bar > LIMIT_BAR).sum()} of {len(bar)} readings are above {LIMIT_BAR}")
+```
+
+---
+
+With the sandbox populated, every advanced scenario will find the series, events and
+graph it reads. As you swap in real data, the only thing that changes is where the
+numbers come from, the [ingestion guide](/guides/ingest-timeseries) covers doing it at
+production volume.

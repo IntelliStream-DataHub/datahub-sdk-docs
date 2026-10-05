@@ -129,13 +129,10 @@ so the version a reader picks in the navbar is always one they can install.
 A snapshot is changed only where it was wrong for its own release, a patch release that changes
 behaviour included. A new feature goes into `docs/`, never back into a snapshot.
 
-**Where this stands.** No snapshot exists yet, so the published site describes `main`, and a
-reader on 0.2.0 can meet calls their version lacks; the quick start note warns them. The steps
-above are all that is left to run, and `editCurrentVersion` is already set so a snapshot's "Edit
-this page" will point at `docs/`. The first cut waits on the first tagged release; the SDK has
-tagged only `v0.2.0`, and bumped `main` past it without releasing, so no number in between gets a
-snapshot. Nothing checks these rules automatically yet. The doc tests being added under
-`doctests/` are meant to, by building against pinned SDK and platform commits.
+**Where this stands.** The `1.0` snapshot was cut when Python, Rust and Java all released 1.0.0.
+It is served at `/` and `docs/` is served at `/next/`. The next cut waits on the next tagged `vX.Y.0`.
+Nothing checks these rules automatically yet. The doc tests being added under `doctests/` are meant
+to, by building against pinned SDK and platform commits.
 
 ## Every example has to be runnable
 

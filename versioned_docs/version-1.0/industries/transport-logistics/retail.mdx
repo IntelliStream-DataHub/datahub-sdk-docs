@@ -1,0 +1,156 @@
+---
+sidebar_position: 6
+title: Retail — demand & replenishment
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Retail — demand & replenishment
+
+**The problem.** A retail chain spans regions, each with stores, each tracking sales
+and stock per SKU. Regional teams must see *their* numbers and only their numbers,
+while head office rolls everything up. The data is one big stream; the requirement is
+clean separation by region — for access, for ownership, for reporting.
+
+This scenario centres on **datasets** as the unit of segmentation: give each region its
+own, tag everything with it, and the partitioning falls out for free.
+
+## Set up demo data
+
+New workspace? Run this once (Python) to create the region's dataset and a store's SKU
+sales series with a month of daily units. Safe to re-run.
+
+```python
+import intellistream_datahub_sdk, numpy as np, pandas as pd
+
+client = intellistream_datahub_sdk.DataHubClient.from_env()
+
+region_id = client.datasets.create([intellistream_datahub_sdk.Dataset(external_id="region_nordics", name="Nordics region")])[0].id
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id="store_oslo_01_sku_4471_sales",
+    name="Oslo-01 SKU 4471 units sold", unit="units", value_type="float", data_set_id=region_id)])
+idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=30, freq="1d")
+client.timeseries.insert_from_lists(timestamps=idx, values=np.random.poisson(40, 30).astype(float),
+    ts="store_oslo_01_sku_4471_sales")
+```
+
+## 1. A dataset per region
+
+Create a dataset for each region; every series the region owns carries its
+`data_set_id`.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+DataSetModel region = new DataSetModel();
+region.setExternalId("region_nordics");
+region.setName("Nordics region");
+long regionId = client.datasets().create(List.of(region))
+    .getItems().get(0).getId();
+
+var salesSeries = new Timeseries();
+salesSeries.setExternalId("store_oslo_01_sku_4471_sales");
+salesSeries.setName("Oslo 01 — SKU 4471 units sold");
+salesSeries.setDataSetId(regionId);
+salesSeries.setUnit("units");
+client.timeseries().create(salesSeries);
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import intellistream_datahub_sdk
+
+region_id = client.datasets.create([
+    intellistream_datahub_sdk.Dataset(external_id="region_nordics", name="Nordics region")])[0].id
+
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(
+    external_id="store_oslo_01_sku_4471_sales",
+    name="Oslo 01 — SKU 4471 units sold", unit="units", value_type="float", data_set_id=region_id)])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use intellistream_datahub_sdk::datasets::Dataset;
+use intellistream_datahub_sdk::timeseries::TimeSeries;
+
+// Dataset::new derives external_id as snake_case → set it explicitly to match
+let mut ds = Dataset::new("Nordics region".into());
+ds.external_id = "region_nordics".into();
+let created = api.datasets.create(&vec![ds]).await?;
+let region_id = created.get_items()[0].id;
+
+let mut ts = TimeSeries::new("store_oslo_01_sku_4471_sales", "Oslo 01 — SKU 4471 units sold");
+ts.unit = Some("units".into());
+ts.data_set_id = region_id;
+api.time_series.create_one(&ts).await?;
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Roll up demand per region
+
+Each region lists or filters by its own dataset, then aggregates daily sales to feed
+replenishment. See [Datasets reference](/reference/datasets) and
+[Query & aggregate](/guides/query-and-aggregate).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+import ai.intellistream.datahub.models.IdCollection;
+
+// scope to the region's dataset
+DataWrapper<DataSetModel> regional = client.datasets().byIds(
+        List.of(IdCollection.createFromExternalId("region_nordics")));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+regional = client.datasets.by_ids(["region_nordics"])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use intellistream_datahub_sdk::generic::IdAndExtId;
+
+let regional = api.datasets.by_ids(&vec![IdAndExtId::from_external_id("region_nordics")]).await?;
+```
+
+</TabItem>
+</Tabs>
+
+## 3. Trigger replenishment
+
+When a store's on-hand for a SKU falls below its reorder point, raise a `reorder`
+[event](/guides/detect-events) carrying the store, SKU and suggested quantity — the
+replenishment system acts on it, scoped to the region's dataset.
+
+## See the result
+
+Chart the SKU's daily sales — the demand signal replenishment runs on:
+
+```python
+import matplotlib.pyplot as plt
+
+rf = intellistream_datahub_sdk.RetrieveFilter(ts="store_oslo_01_sku_4471_sales",
+    start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=30), end=pd.Timestamp.now(tz="UTC"),
+    aggregates=["sum"], granularity="1d")
+sales = [dp.sum for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()]
+plt.bar(range(len(sales)), sales); plt.title("Oslo-01 SKU 4471 daily units sold"); plt.show()
+```
+
+## See also
+
+- [Datasets reference](/reference/datasets) — segmentation and access by region.
+- [Query & aggregate](/guides/query-and-aggregate) — demand roll-ups.
+- [Turn readings into events](/guides/detect-events) — the reorder rule.
+- **[Demand forecasting (advanced)](/advanced/demand-forecasting)** — forecast demand to drive replenishment ahead of the shelf going empty.

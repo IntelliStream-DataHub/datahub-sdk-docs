@@ -1,0 +1,171 @@
+---
+sidebar_position: 2
+title: Maritime — fleet & cold chain
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Maritime — fleet tracking & reefer cold chain
+
+**The problem.** A shipping line moves refrigerated ("reefer") containers across
+oceans. A reefer that drifts out of its temperature band for too long can spoil an
+entire container of cargo — and on a ship mid-Atlantic, the only way to catch it is a
+live feed, not a daily report. The fleet desk needs each vessel's reefers streaming in
+real time and an alarm the instant one breaches its band.
+
+This scenario is about **live consumption at sea**: a long-running monitor that tails
+every reefer's temperature and reacts the moment it strays.
+
+## Set up demo data
+
+New workspace? Run this once (Python) to create a reefer's supply/set-point series and feed
+in air that drifts warm out of band. Step 1 below creates the subscription (before the
+listen loop) over these series. Safe to re-run.
+
+```python
+import intellistream_datahub_sdk, numpy as np, pandas as pd
+
+client = intellistream_datahub_sdk.DataHubClient.from_env()
+
+for s in ["reefer_msc_1182_supply_c", "reefer_msc_1182_setpoint_c"]:
+    client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id=s, name=s, unit="deg_c", value_type="float")])
+idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=120, freq="1min")
+client.timeseries.insert_from_lists(timestamps=idx, values=np.full(120, -18.0), ts="reefer_msc_1182_setpoint_c")
+supply = np.full(120, -18.0); supply[-30:] += np.linspace(0, 6, 30)        # drifting warm
+client.timeseries.insert_from_lists(timestamps=idx, values=supply, ts="reefer_msc_1182_supply_c")
+```
+
+## 1. Subscribe to the reefer fleet
+
+Each reefer reports its set-point and supply-air temperature as series; a subscription
+fans them all into one live feed.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+Subscription sub = new Subscription();
+sub.setExternalId("reefer_fleet");
+sub.setName("Reefer fleet");
+sub.setTimeseries(List.of(
+    IdCollection.createFromExternalId("reefer_msc_1182_supply_c"),
+    IdCollection.createFromExternalId("reefer_msc_1182_setpoint_c")));
+client.subscriptions().create(List.of(sub));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import intellistream_datahub_sdk
+
+client.subscriptions.create([intellistream_datahub_sdk.Subscription(
+    external_id="reefer_fleet", name="Reefer fleet",
+    timeseries=["reefer_msc_1182_supply_c", "reefer_msc_1182_setpoint_c"])])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use intellistream_datahub_sdk::subscriptions::Subscription;
+use intellistream_datahub_sdk::generic::IdAndExtId;
+
+let sub = Subscription::new("reefer_fleet".into(), "Reefer fleet".into(),
+    vec![IdAndExtId::from_external_id("reefer_msc_1182_supply_c"),
+         IdAndExtId::from_external_id("reefer_msc_1182_setpoint_c")]);
+api.subscriptions.create(&sub).await?;
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Watch for a temperature excursion live
+
+Drive the listener in a loop; when a reefer's supply air strays from its set-point
+beyond tolerance, raise a `reefer_excursion` event so the fleet desk — and the ship —
+are alerted while there's still time to act. See
+[Consume live data](/guides/realtime-subscriptions).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+import ai.intellistream.datahub.sdk.subscriptions.SubscriptionMessage;
+
+try (var stream = client.subscriptions().listen(List.of("reefer_fleet"))
+        .stream((SubscriptionMessage msg) -> {   // auto-acks after each message
+            if (outOfBand(msg.payload())) {           // |supply - setpoint| > tolerance
+                EventModel excursion = new EventModel();
+                excursion.setExternalId("reefer_excursion_1182_" + System.currentTimeMillis());
+                excursion.setType("reefer_excursion");
+                excursion.setStatus("open");
+                excursion.setMetadata(Map.of("reefer", "reefer_msc_1182", "vessel", "vessel_nordic_star"));
+                excursion.setEventTime(ZonedDateTime.now());
+                client.events().create(List.of(excursion));
+            }
+        })) {
+    awaitShutdown();   // your app lifecycle; closing the stream ends delivery
+}
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+with client.subscriptions.listen(["reefer_fleet"]) as listener:
+    for msg in listener:
+        if out_of_band(msg.payload):              # |supply - setpoint| > tolerance
+            client.events.create([intellistream_datahub_sdk.Event(
+                external_id=f"reefer_excursion_1182_{int(pd.Timestamp.now().timestamp())}",
+                type="reefer_excursion", status="open",
+                event_time=pd.Timestamp.now(tz="UTC"),
+                metadata={"reefer": "reefer_msc_1182", "vessel": "vessel_nordic_star"})])
+        listener.ack([msg.message_id])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use intellistream_datahub_sdk::events::Event;
+use chrono::Utc;
+
+let mut listener = api.subscriptions.listen(&["reefer_fleet"]).await?;
+while let Some(Ok(msg)) = listener.next().await {
+    if out_of_band(&msg.payload) {                // |supply - setpoint| > tolerance
+        let mut excursion = Event::new(
+            format!("reefer_excursion_1182_{}", Utc::now().timestamp()),
+            "reefer_excursion".into(),
+            Utc::now());
+        excursion.status = Some("open".into());
+        excursion.add_metadata("reefer".into(), "reefer_msc_1182".into());
+        excursion.add_metadata("vessel".into(), "vessel_nordic_star".into());
+        api.events.create(&vec![excursion]).await?;
+    }
+    listener.ack(&[msg.message_id.as_str()]).await?;
+}
+```
+
+</TabItem>
+</Tabs>
+
+## 3. Prove the cold chain held
+
+For each delivered container, retrieve the voyage's temperature series to produce the
+compliance record the receiver requires — a complete, time-stamped trace. See
+[Query & aggregate](/guides/query-and-aggregate).
+
+## See the result
+
+The warming reefer trips the loop:
+
+```text
+reefer_excursion_1182_…  → open   (supply air strayed from set-point beyond tolerance)
+```
+
+## See also
+
+- [Consume live data](/guides/realtime-subscriptions) — the reefer-monitoring loop.
+- [Turn readings into events](/guides/detect-events) — the excursion rule.
+- [Query & aggregate](/guides/query-and-aggregate) — the voyage compliance record.

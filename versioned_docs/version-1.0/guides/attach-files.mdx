@@ -1,0 +1,199 @@
+---
+sidebar_position: 6
+title: Attach files to assets
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Attach files to assets
+
+Not everything is a number. A pump has a calibration certificate, a plant has a
+piping diagram, a daily run produces a CSV export. Store these as **files**,
+organized in folders, tagged with metadata, and linked to the data set they belong to.
+
+## Upload a file
+
+Give the file a destination path and some metadata. The server stores one full path, name
+included; the Java client sends the `path` you give it as-is, and the Python and Rust
+clients join `destination_path` and `name` into the same thing. The Java client uploads raw
+bytes; the Python and Rust clients read a local file.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+import java.nio.file.Files;
+import java.nio.file.Path;
+
+byte[] content = Files.readAllBytes(Path.of("calibration_a12.pdf"));
+
+var uploaded = client.files().upload(
+    FileUploadRequest.builder()
+        .path("/certificates/2026/calibration_a12.pdf")  // destination, name included
+        .content(content)
+        .contentType("application/pdf")
+        .externalId("calibration_pump_esp_a12")
+        .dataSetId(42L)
+        .description("ESP A-12 calibration certificate")
+        .build());
+
+System.out.println("stored as id " + uploaded.getItems().get(0).getId());
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import intellistream_datahub_sdk
+
+uploaded = client.files.upload_file(intellistream_datahub_sdk.FileUpload(
+    path="calibration_a12.pdf",                # local file
+    destination_path="/certificates/2026/",
+    external_id="calibration_pump_esp_a12",
+    name="calibration_a12.pdf",
+    data_set_id=42,
+    description="ESP A-12 calibration certificate"))
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use intellistream_datahub_sdk::files::FileUpload;
+
+// MIME type is inferred from the file content
+let mut upload = FileUpload::new_with_destination_path(
+    "calibration_a12.pdf", "/certificates/2026/")?;
+upload.set_external_id("calibration_pump_esp_a12".into());
+upload.set_file_name("calibration_a12.pdf".into());
+upload.set_data_set_id(42);
+upload.set_description("ESP A-12 calibration certificate".into());
+let uploaded = api.files.upload_file(upload).await?;
+```
+
+</TabItem>
+</Tabs>
+
+:::tip Link a file to what it documents
+Set `dataSetId` so a file is discoverable from the data set it documents. To point it at the
+resource it documents, the calibration certificate at the pump it certifies, the Python and
+Rust clients take `related_resources`, a list of numeric resource ids; the Java client has no
+field for it.
+:::
+
+## List a directory
+
+Browse the folder tree. Each entry is a file or a folder (`type`), with its name,
+path and size.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+var listing = client.files().list("/certificates/2026");
+listing.getItems().forEach(node ->
+    System.out.println(node.getType() + "  " + node.getName() + "  " + node.getSize() + " bytes"));
+
+boolean present = listing.getItems().stream()
+    .anyMatch(node -> "calibration_a12.pdf".equals(node.getName()));
+if (!present) {
+    throw new AssertionError("upload not found in /certificates/2026");
+}
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+listing = client.files.list_directory_by_path("/certificates/2026")
+for node in listing:
+    print(node.type, node.name, node.size)
+
+assert "calibration_a12.pdf" in [node.name for node in listing], "upload not found"
+
+roots = client.files.list_root_directory()   # top of the tree
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+let listing = api.files.list_directory_by_path("/certificates/2026").await?;
+for node in listing.get_items() {
+    println!("{}  {}  {} bytes", node.r#type.as_deref().unwrap_or(""), node.name, node.size);
+}
+
+assert!(listing.get_items().iter().any(|node| node.name == "calibration_a12.pdf"),
+        "upload not found in /certificates/2026");
+```
+
+</TabItem>
+</Tabs>
+
+## Download
+
+Download by the id the upload echoed. Python and Rust take it as an integer, Java as a
+string (the endpoint also accepts an external id in that position).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+long id = uploaded.getItems().get(0).getId();
+byte[] bytes = client.files().download(String.valueOf(id));
+Files.write(Path.of("calibration_a12.pdf"), bytes);
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+from pathlib import Path
+
+download = client.files.download(uploaded[0].id)
+Path("calibration_a12.pdf").write_bytes(download.content)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+let id = uploaded.get_items()[0].id.expect("the upload echo carries the id");
+let download = api.files.download(id).await?;
+std::fs::write("calibration_a12.pdf", &download.bytes)?;
+```
+
+</TabItem>
+</Tabs>
+
+## Delete
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+client.files().delete(List.of(IdCollection.createFromExternalId("calibration_pump_esp_a12")));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+client.files.delete(["calibration_pump_esp_a12"])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use intellistream_datahub_sdk::generic::{DataWrapper, IdAndExtId};
+
+api.files.delete(&DataWrapper::from(
+    vec![IdAndExtId::from_external_id("calibration_pump_esp_a12")])).await?;
+```
+
+</TabItem>
+</Tabs>
+
+See the [Files reference](/reference/files) for every method and the upload metadata
+fields.

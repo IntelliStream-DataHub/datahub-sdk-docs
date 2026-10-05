@@ -1,0 +1,132 @@
+---
+sidebar_position: 3
+title: Airports — turnaround & on-time
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Airports — turnaround & on-time operations
+
+**The problem.** An aircraft on the ground earns nothing, and every minute past its
+slot ripples outward — a late turnaround misses the departure wave, the next rotation
+slips, and by evening the delay has spread across the network. A turnaround is a relay
+of independent teams — deboarding, cleaning, fuelling, catering, loading, boarding — and
+if any leg runs long, the whole thing does. Operations needs to **see a turnaround
+falling behind while it can still be recovered**, not after pushback is missed.
+
+What we solve here is delay propagation: catching the slow leg of a turnaround in time
+to throw resources at it.
+
+## Set up demo data
+
+New workspace? Run this once (Python) to create the stand's turnaround feed, **create the
+subscription before we listen**, and push a leg-overrun reading. Safe to re-run.
+
+```python
+import intellistream_datahub_sdk, pandas as pd
+
+client = intellistream_datahub_sdk.DataHubClient.from_env()
+
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id="stand_b12_fuelling_progress", name="Stand B12 fuelling", unit="pct", value_type="float")])
+client.subscriptions.create([intellistream_datahub_sdk.Subscription(
+    external_id="stand_b12_turnaround", name="Stand B12 turnaround", timeseries=["stand_b12_fuelling_progress"])])
+client.timeseries.insert_from_lists(timestamps=[pd.Timestamp.now(tz="UTC")], values=[1.0], ts="stand_b12_fuelling_progress")
+```
+
+## 1. Track each turnaround milestone live
+
+Milestone timestamps and progress stream in per stand. When a leg overruns its planned
+duration, raise a `turnaround_risk` event so the duty manager reallocates before the
+slot is lost. See [Consume live data](/guides/realtime-subscriptions).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+import ai.intellistream.datahub.sdk.subscriptions.SubscriptionMessage;
+
+try (var stream = client.subscriptions().listen(List.of("stand_b12_turnaround"))
+        .stream((SubscriptionMessage msg) -> {   // auto-acks after each message
+            if (legOverrunning(msg.payload())) {          // e.g. fuelling past plan
+                EventModel risk = new EventModel();
+                risk.setExternalId("turnaround_risk_su204_" + System.currentTimeMillis());
+                risk.setType("turnaround_risk");
+                risk.setStatus("open");
+                risk.setMetadata(Map.of("flight", "flight_su204", "leg", "fuelling", "stand", "stand_b12"));
+                risk.setEventTime(ZonedDateTime.now());
+                client.events().create(List.of(risk));
+            }
+        })) {
+    awaitShutdown();   // your app lifecycle; closing the stream ends delivery
+}
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+with client.subscriptions.listen(["stand_b12_turnaround"]) as listener:
+    for msg in listener:
+        if leg_overrunning(msg.payload):              # e.g. fuelling past plan
+            client.events.create([intellistream_datahub_sdk.Event(
+                external_id=f"turnaround_risk_su204_{int(pd.Timestamp.now().timestamp())}",
+                type="turnaround_risk", status="open",
+                event_time=pd.Timestamp.now(tz="UTC"),
+                metadata={"flight": "flight_su204", "leg": "fuelling", "stand": "stand_b12"})])
+        listener.ack([msg.message_id])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use intellistream_datahub_sdk::events::Event;
+use chrono::Utc;
+
+let mut listener = api.subscriptions.listen(&["stand_b12_turnaround"]).await?;
+while let Some(Ok(msg)) = listener.next().await {
+    if leg_overrunning(&msg.payload) {                // e.g. fuelling past plan
+        let mut risk = Event::new(
+            format!("turnaround_risk_su204_{}", Utc::now().timestamp()),
+            "turnaround_risk".into(),
+            Utc::now());
+        risk.status = Some("open".into());
+        risk.add_metadata("flight".into(), "flight_su204".into());
+        risk.add_metadata("leg".into(), "fuelling".into());
+        risk.add_metadata("stand".into(), "stand_b12".into());
+        api.events.create(&vec![risk]).await?;
+    }
+    listener.ack(&[msg.message_id.as_str()]).await?;
+}
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Trace the knock-on through shared aircraft
+
+One late arrival delays the *next* flight on the same airframe, and the one after that.
+Model flights and the aircraft and crews they share as a [graph](/guides/model-assets-graph);
+walking out from the delayed flight reveals the downstream rotations at risk — the
+[blast radius](/guides/correlate-alarms) of the delay — so re-timing decisions are made
+with the whole chain in view.
+
+## 3. Learn from the day
+
+On-time performance and per-leg durations are series; daily roll-ups by stand and
+ground-handler surface the legs that chronically run long. See
+[Query & aggregate](/guides/query-and-aggregate).
+
+## See the result
+
+The overrunning leg trips the loop:
+
+```text
+turnaround_risk_su204_…  → open   (fuelling running past plan, slot at risk)
+```
+
+## See also
+
+- [Consume live data](/guides/realtime-subscriptions) — live milestone tracking.
+- [Correlate alarms with the graph](/guides/correlate-alarms) — delay knock-on across rotations.
+- [Query & aggregate](/guides/query-and-aggregate) — on-time-performance reporting.

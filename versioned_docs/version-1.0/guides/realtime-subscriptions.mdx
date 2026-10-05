@@ -1,0 +1,268 @@
+---
+sidebar_position: 4
+title: Consume live data
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Consume live data
+
+Push-based monitoring: a **subscription** names a set of time series, and a live
+connection delivers each new datapoint as it lands, no polling. A control-room
+dashboard, an alerting worker, or a downstream pipeline drives the loop and **acks**
+what it has handled. Anything unacked is redelivered, so a crash is followed by redelivery.
+
+:::info Needs a sandbox
+This guide reads data it does not create. [Seed a sandbox](/guides/seed-a-sandbox) writes it
+in one go. Nothing arrives on the socket until something writes to the series, so once the
+listener below is running, re-run section **A** of the seed in a second shell and watch the
+messages arrive.
+:::
+
+## 1. Create a subscription
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+Subscription sub = new Subscription();
+sub.setExternalId("engine_room");
+sub.setName("Engine room");
+sub.setTimeseries(List.of(
+    IdCollection.createFromExternalId("engine_temperature"),
+    IdCollection.createFromExternalId("engine_rpm")));
+client.subscriptions().create(List.of(sub));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import intellistream_datahub_sdk
+
+client.subscriptions.create([
+    intellistream_datahub_sdk.Subscription(
+        external_id="engine_room",
+        name="Engine room",
+        timeseries=["engine_temperature", "engine_rpm"])])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use intellistream_datahub_sdk::subscriptions::Subscription;
+use intellistream_datahub_sdk::generic::IdAndExtId;
+
+let sub = Subscription::new(
+    "engine_room".into(), "Engine room".into(),
+    vec![
+        IdAndExtId::from_external_id("engine_temperature"),
+        IdAndExtId::from_external_id("engine_rpm"),
+    ]);
+api.subscriptions.create(&sub).await?;
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Listen and ack
+
+Drive a loop over the listener (Java can also hand each message to a handler), and ack once
+you've durably handled it. Make the handler **idempotent**, a redelivery after a crash will replay
+the last unacked messages.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+Register a handler with `stream`, a dedicated virtual thread delivers each message **as
+it arrives** and acks it once your handler returns (or nacks it if the handler throws).
+The returned handle stops delivery and closes the listener, so use try-with-resources.
+
+```java
+import ai.intellistream.datahub.sdk.subscriptions.SubscriptionMessage;
+
+try (var stream = client.subscriptions().listen(List.of("engine_room"))
+        .stream((SubscriptionMessage msg) -> handle(msg.payload()))) {   // auto-acks on return
+    awaitShutdown();        // your app's lifecycle; closing the handle ends the stream
+}
+```
+
+Prefer a loop, or want to ack on your own schedule? Drive `poll` yourself, it blocks up
+to the timeout and returns `null` on a quiet interval (it is a blocking queue hand-off,
+**not** network polling):
+
+```java
+import ai.intellistream.datahub.sdk.subscriptions.SubscriptionListener;
+import java.time.Duration;
+
+try (SubscriptionListener listener = client.subscriptions().listen(List.of("engine_room"))) {
+    while (running) {
+        SubscriptionMessage msg = listener.poll(Duration.ofSeconds(5));
+        if (msg == null) continue;
+        handle(msg.payload());        // event action + affected datapoints
+        listener.ack(msg.messageId());
+    }
+}
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+The listener is iterable and a context manager. The loop does not end on its own, since a
+dropped socket is reconnected for you, and an error such as a refused subscription is raised
+from it:
+
+```python
+with client.subscriptions.listen(["engine_room"]) as listener:
+    for msg in listener:
+        handle(msg.payload)
+        listener.ack([msg.message_id])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+`next().await` never returns `None`: a dropped or closed socket is reconnected for you. An
+error comes back as `Some(Err(..))`, either a refused subscription while the socket stays open
+or a reconnect that ran out of retries, so log it and keep going.
+
+```rust
+let mut listener = api.subscriptions.listen(&["engine_room"]).await?;
+while let Some(result) = listener.next().await {
+    match result {
+        Ok(msg) => {
+            handle(&msg.payload);
+            listener.ack(&[msg.message_id.as_str()]).await?;
+        }
+        Err(e) => eprintln!("listen error: {}", e),
+    }
+}
+```
+
+</TabItem>
+</Tabs>
+
+## 3. Count what arrives
+
+Re-run section **A** of the seed in a second shell. Each batch it writes to
+`engine_temperature` or `engine_rpm` becomes a message here, so the count climbs.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+import java.util.concurrent.atomic.AtomicInteger;
+
+AtomicInteger seen = new AtomicInteger();
+try (var stream = client.subscriptions().listen(List.of("engine_room"))
+        .stream((SubscriptionMessage msg) ->
+            System.out.println(seen.incrementAndGet() + " messages so far"))) {
+    Thread.sleep(60_000);        // long enough to re-run the seed in another shell
+}
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+seen = 0
+with client.subscriptions.listen(["engine_room"]) as listener:
+    for msg in listener:
+        listener.ack([msg.message_id])
+        seen += 1
+        print(f"{seen} messages so far")
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use std::time::Duration;
+use tokio::time::{timeout_at, Instant};
+
+let mut seen = 0;
+let mut listener = api.subscriptions.listen(&["engine_room"]).await?;
+let deadline = Instant::now() + Duration::from_secs(60);   // long enough to re-run the seed in another shell
+while let Ok(Some(result)) = timeout_at(deadline, listener.next()).await {
+    match result {
+        Ok(msg) => {
+            listener.ack(&[msg.message_id.as_str()]).await?;
+            seen += 1;
+            println!("{seen} messages so far");
+        }
+        Err(e) => eprintln!("listen error: {e}"),
+    }
+}
+listener.close().await?;
+```
+
+</TabItem>
+</Tabs>
+
+## Change the interest set at runtime
+
+A long-lived listener doesn't need to reconnect to follow more (or fewer) series:
+`subscribe` / `unsubscribe` adjust it in place. They take **subscription** external ids, not
+series, so to follow another series create a subscription for it first. This swaps
+`engine_room` for one that follows the oil pressure:
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+Subscription oil = new Subscription();
+oil.setExternalId("engine_oil");
+oil.setName("Engine oil");
+oil.setTimeseries(List.of(IdCollection.createFromExternalId("engine_oil_pressure")));
+client.subscriptions().create(List.of(oil));
+
+listener.subscribe(List.of("engine_oil"));
+listener.unsubscribe(List.of("engine_room"));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+client.subscriptions.create([
+    intellistream_datahub_sdk.Subscription(
+        external_id="engine_oil",
+        name="Engine oil",
+        timeseries=["engine_oil_pressure"])])
+
+listener.subscribe(["engine_oil"])
+listener.unsubscribe(["engine_room"])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+let oil = Subscription::new(
+    "engine_oil".into(), "Engine oil".into(),
+    vec![IdAndExtId::from_external_id("engine_oil_pressure")]);
+api.subscriptions.create(&oil).await?;
+
+listener.subscribe(&["engine_oil"]).await?;
+listener.unsubscribe(&["engine_room"]).await?;
+```
+
+</TabItem>
+</Tabs>
+
+:::tip nack to retry later
+If a message can't be processed right now (a downstream system is down), `nack` it
+instead of acking, it will be redelivered rather than dropped. In Java, throwing from a
+`stream` handler nacks for you; to control acks explicitly use
+`stream(handler, AckMode.MANUAL)` and call `ack`/`nack` yourself, and with `poll`, just call
+`nack` instead of `ack`. Python and Rust have no `stream` or `poll`: in the loops above, call
+`listener.nack(...)` in place of `listener.ack(...)`.
+:::
+
+## See also
+
+- [Sustained-condition alarms](/advanced/sustained-alarm-window): a full worked example that keeps a sliding window over this stream, seeds its own data and then verifies what it found.
+- [Turn readings into events](/guides/detect-events): recording what a rule decides.
+- [Seed a sandbox](/guides/seed-a-sandbox): the series this guide subscribes to.
+- <a href="/data-platform-documentation/concepts/stream-processing">Stream processing, in the platform documentation</a>, windows, event time against arrival time, and what has to be remembered.

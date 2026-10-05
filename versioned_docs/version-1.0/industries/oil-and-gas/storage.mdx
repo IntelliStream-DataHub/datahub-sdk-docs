@@ -1,0 +1,139 @@
+---
+sidebar_position: 5
+title: Oil & gas — tank storage & custody
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Oil & gas — tank storage & custody transfer
+
+**The problem.** A tank terminal holds millions of barrels whose value turns on one
+thing: that the books match the tanks. Every custody transfer in or out is metered, and
+the measured volume in the tank should move by exactly that amount. When it doesn't —
+when there's an unexplained loss — it's an evaporation issue, a measurement error, a
+leak, or theft, and each needs investigating fast. The challenge is **reconciling
+metered movements against measured inventory** continuously, not at month-end.
+
+What we solve here is keeping book and physical inventory in agreement, and flagging the
+gap the moment it opens.
+
+## Set up demo data
+
+New workspace? Run this once (Python) to create the tank's volume and metered-movement
+series with a built-in discrepancy — the measured drop is larger than the metered
+deliveries, so the reconciliation flags an unexplained loss. Safe to re-run.
+
+```python
+import intellistream_datahub_sdk, numpy as np, pandas as pd
+
+client = intellistream_datahub_sdk.DataHubClient.from_env()
+
+idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=12, freq="1h")
+# measured volume falls 3000 bbl over the shift
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id="tank_t_12_volume_bbl", name="Tank 12 volume", unit="bbl", value_type="float")])
+client.timeseries.insert_from_lists(timestamps=idx, values=np.linspace(50000, 47000, 12), ts="tank_t_12_volume_bbl")
+# but only 2500 bbl was metered out → 500 bbl unexplained
+for s, total in [("tank_t_12_receipts_bbl", 0.0), ("tank_t_12_deliveries_bbl", 2500.0)]:
+    client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id=s, name=s, unit="bbl", value_type="float")])
+    client.timeseries.insert_from_lists(timestamps=idx, values=np.full(12, total / 12), ts=s)
+```
+
+## 1. Reconcile movement against measurement
+
+Compare the tank's measured volume change over a period against the net of its metered
+transfers. A gap beyond tolerance is an unexplained loss.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+// measured volume now vs the start of the shift
+double opening = firstValue("tank_t_12_volume_bbl", shiftStart);
+double closing = latest("tank_t_12_volume_bbl");
+double measuredChange = closing - opening;
+
+// net metered movement over the same period (receipts − deliveries)
+double metered = sum("tank_t_12_receipts_bbl", shiftStart)
+               - sum("tank_t_12_deliveries_bbl", shiftStart);
+
+double unexplained = measuredChange - metered;
+if (Math.abs(unexplained) > tolerance(closing)) {
+    EventModel loss = new EventModel();
+    loss.setExternalId("inventory_discrepancy_t12_" + System.currentTimeMillis());
+    loss.setType("inventory_discrepancy");
+    loss.setStatus("open");
+    loss.setMetadata(Map.of("tank", "tank_t_12", "unexplained_bbl",
+                            String.format("%.1f", unexplained)));
+    loss.setEventTime(shiftStart);
+    client.events().create(List.of(loss));
+}
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+opening = first_value("tank_t_12_volume_bbl", shift_start)
+closing = latest("tank_t_12_volume_bbl")
+measured_change = closing - opening
+
+metered = (sum_over("tank_t_12_receipts_bbl", shift_start)
+           - sum_over("tank_t_12_deliveries_bbl", shift_start))
+
+unexplained = measured_change - metered
+if abs(unexplained) > tolerance(closing):
+    client.events.create([intellistream_datahub_sdk.Event(
+        external_id=f"inventory_discrepancy_t12_{int(pd.Timestamp.now().timestamp())}",
+        type="inventory_discrepancy", status="open",
+        event_time=shift_start,
+        metadata={"tank": "tank_t_12", "unexplained_bbl": f"{unexplained:.1f}"})])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use intellistream_datahub_sdk::events::Event;
+use chrono::Utc;
+
+let measured_change: f64 = latest("tank_t_12_volume_bbl").await?
+    - first_value("tank_t_12_volume_bbl", shift_start).await?;
+let metered: f64 = sum_over("tank_t_12_receipts_bbl", shift_start).await?
+    - sum_over("tank_t_12_deliveries_bbl", shift_start).await?;
+
+let unexplained = measured_change - metered;
+if unexplained.abs() > tolerance(latest("tank_t_12_volume_bbl").await?) {
+    let mut loss = Event::new(
+        format!("inventory_discrepancy_t12_{}", Utc::now().timestamp()),
+        "inventory_discrepancy".into(),
+        shift_start);
+    loss.status = Some("open".into());
+    loss.add_metadata("tank".into(), "tank_t_12".into());
+    loss.add_metadata("unexplained_bbl".into(), format!("{:.1}", unexplained));
+    api.events.create(&vec![loss]).await?;
+}
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Watch tank conditions
+
+Level, temperature and pressure are series per tank; trends catch a tank breathing
+abnormally or a level moving with no scheduled transfer — an early sign of a leak.
+See [Query & aggregate](/guides/query-and-aggregate).
+
+## See the result
+
+The reconciliation compares the 3000 bbl the tank actually lost against the 2500 bbl that
+was metered out — and flags the gap:
+
+```text
+unexplained_bbl ≈ 500.0     → an inventory_discrepancy event is raised for tank_t_12
+```
+
+## See also
+
+- [Turn readings into events](/guides/detect-events) — the reconciliation rule.
+- [Finance — exact values](/industries/financial-services/portfolio-risk) — the same need for exact, reconciled numbers.
+- [Query & aggregate](/guides/query-and-aggregate) — tank-condition trends.
