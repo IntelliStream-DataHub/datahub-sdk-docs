@@ -1,0 +1,313 @@
+---
+sidebar_position: 1
+title: High-throughput ingestion
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# High-throughput ingestion
+
+A common job: push a steady, high-volume stream of sensor readings in so a dashboard
+or alerting rule can act on them. Every SDK **chunks the data into batches, sends them
+concurrently and retries transient failures**: Java in process, Python and Rust through the
+durable spool.
+
+:::info Needs a sandbox
+This guide writes into `engine_temperature`, which section **A** of
+[Seed a sandbox](/guides/seed-a-sandbox) creates.
+:::
+
+:::note How it works, and the caps it fits
+Datapoints are split into batches (the store is optimised for large batches) and sent
+concurrently up to a bounded in-flight limit. The caps below are the API's and bind every client.
+Java sends **10,000** datapoints per request by default, retries transient failures (HTTP
+429/5xx, network) in process and returns an `IngestResult` summarising what landed and what
+didn't. Python and Rust send up to **100,000** per request, four at once (one at a time with
+buffering on), and retry through the
+[durable spool](/reference/client#durable-ingest-buffering): with buffering on, a transient
+failure (429, 5xx, network, or a `401`/`403`) writes the input to disk, and the next ingest call
+sends the spool again, oldest first, before its own data. With buffering off, the first request
+to fail is the call's error. The defaults fit the caps, so the table only matters if you have
+tuned something, with one exception: Python and Rust split by count whatever the value type, so
+keep a `TEXT` or `MIXED` series to 10,000 points per call.
+
+| Cap | Value |
+| --- | --- |
+| `items` in one request | **10,000** |
+| Datapoints in one collection, numeric | 100,000 |
+| Datapoints in one collection, `TEXT` / `MIXED` | **10,000** |
+| Body of `POST /timeseries/data` | 16 MiB (10,000 numeric points is roughly 500 KB) |
+
+Over a cap is a `400`; an oversized body is a `413`, which no retry will fix. Sustained
+volume is bounded separately by a per-minute rate limit and a daily ingest quota, both `429`.
+Java retries them in process; Python and Rust retry them through the spool when buffering is on,
+and return them as the call's error when it is off. See [Limits & quotas](/reference/limits). The [binary path](#binary-ingest) has
+caps of its own, and each SDK stays under them by itself.
+:::
+
+## Ingest a million readings
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+`ingest` groups datapoints by series external id and returns an `IngestResult`.
+
+```java
+import java.time.Instant;
+import java.util.*;
+
+var client = DatahubClient.fromEnv();
+
+// a million readings, one per second from the start of 2026
+Instant start = Instant.parse("2026-01-01T00:00:00Z");
+List<Datapoint> points = new ArrayList<>(1_000_000);
+for (int i = 0; i < 1_000_000; i++) {
+    points.add(Datapoint.of(start.plusSeconds(i), 90 + 5 * Math.random()));
+}
+Map<String, List<Datapoint>> readings = Map.of("engine_temperature", points);
+
+IngestResult result = client.timeseries().ingest(readings,
+    IngestOptions.builder()
+        .batchSize(10_000)     // datapoints per request
+        .parallelism(16)       // concurrent in-flight batches
+        .maxRetries(3)
+        .build());
+
+System.out.printf("ingested %,d, failed %,d%n", result.succeeded(), result.failed());
+if (!result.isComplete()) {
+    result.errors().forEach(e -> System.err.println(e.statusCode() + ": " + e.message()));
+    throw new IllegalStateException("ingest incomplete");
+}
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+`insert_from_lists` takes whole arrays (NumPy / pandas) and batches them for you.
+
+```python
+import intellistream_datahub_sdk, numpy as np, pandas as pd
+
+client = intellistream_datahub_sdk.DataHubClient.from_env()
+
+# a million readings, one per second from the start of 2026
+client.timeseries.insert_from_lists(
+    timestamps=pd.date_range("2026-01-01", periods=1_000_000, freq="s", tz="UTC"),
+    values=90 + 5 * np.random.rand(1_000_000),
+    ts="engine_temperature")
+
+# read the first hour back: 3 600 readings
+rf = intellistream_datahub_sdk.RetrieveFilter(
+    ts="engine_temperature",
+    start=pd.Timestamp("2026-01-01 00:00", tz="UTC"),
+    end=pd.Timestamp("2026-01-01 01:00", tz="UTC"),
+    limit=10_000)
+points = client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()
+print(f"{len(points)} readings in the first hour")
+assert len(points) >= 3600, len(points)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+`insert_datapoints` splits large inputs into requests of at most 100 000 datapoints.
+
+```rust
+use chrono::{Duration, TimeZone, Utc};
+use intellistream_datahub_sdk::create_api_service;
+use intellistream_datahub_sdk::generic::{DataWrapper, DatapointString, DatapointsCollection, RetrieveFilter};
+
+let api = create_api_service();
+
+// a million readings, one per second from the start of 2026
+let start = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap();
+let readings: Vec<DatapointString> = (0..1_000_000)
+    .map(|i| DatapointString::from_datetime(
+        start + Duration::seconds(i),
+        &format!("{:.2}", 90.0 + (i % 50) as f64 / 10.0)))
+    .collect();
+
+let mut dw = DataWrapper::new();
+dw.add_item(DatapointsCollection {
+    external_id: Some("engine_temperature".into()),
+    datapoints: readings,
+    ..Default::default()
+});
+api.time_series.insert_datapoints(&mut dw).await?;
+
+// read the first hour back: 3 600 readings
+let first_hour = RetrieveFilter {
+    external_id: Some("engine_temperature".into()),
+    start: Some(start),
+    end: Some(start + Duration::hours(1)),
+    limit: Some(10_000),
+    ..Default::default()
+};
+let points = api.time_series.retrieve_datapoints(&DataWrapper::from(vec![first_hour])).await?;
+let n = points.get_items()[0].datapoints.len();
+println!("{n} readings in the first hour");
+assert!(n >= 3600, "expected 3600 readings, got {n}");
+```
+
+</TabItem>
+</Tabs>
+
+## Tuning
+
+Java's `ingest` knobs let you trade throughput against load on the server:
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `batchSize` | `10_000` | Datapoints per request. Do not raise it above `10_000`, the server's [`items` cap](/reference/limits#batch-caps). |
+| `parallelism` | `8` | Concurrent in-flight requests. |
+| `maxRetries` | `3` | Retries for transient failures. |
+| `failFast` | `false` | Abort on the first failed batch instead of collecting errors. |
+
+When `failFast` is off, inspect `result.errors()` for the per-batch failures. See the
+[Time series reference](/reference/timeseries#ingestresult) for the full result shape.
+
+Python and Rust have one knob, the number of requests in flight (default 4). Set
+`DATAPOINT_INSERT_PARALLELISM` in the environment, which `create_api_service()` and Python's
+`from_env()` read, or call `set_datapoint_insert_parallelism` on a Rust `DataHubConfig`. More is
+faster only while the API has cores to parse the requests on.
+
+## Binary ingest {#binary-ingest}
+
+Past a few thousand points a second, JSON is the bottleneck: every value is text the API has
+to parse. `ingestBinary` in Java and `insert_datapoints_binary` in Python and Rust send the same
+readings as zstd-compressed Arrow frames to
+[`POST /timeseries/data/binary`](/reference/binary-datapoints), a million points or more per
+request, parsed and sorted on the client. Pick it when the volume is sustained; keep the JSON
+path when you want the [durable spool](/reference/client#durable-ingest-buffering), which the
+binary path does not have. It resolves each series through `/timeseries/byids` once and caches
+it, so the token needs **read** access to the data set as well as write. Python has it on the
+synchronous `DataHubClient` only.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+import ai.intellistream.datahub.sdk.ingest.BinaryIngestOptions;
+import java.time.ZoneOffset;
+
+IngestResult result = client.timeseries().ingestBinary(readings,     // the same map as above
+    BinaryIngestOptions.builder()
+        .zstdLevel(3)          // 1, 3 or 9 (default 9): client CPU against bytes on the wire
+        .parallelism(16)       // concurrent in-flight requests
+        .build());
+
+System.out.printf("ingested %,d, failed %,d%n", result.succeeded(), result.failed());
+if (!result.isComplete()) {
+    result.errors().forEach(e -> System.err.println(e.statusCode() + ": " + e.message()));
+    throw new IllegalStateException("ingest incomplete");
+}
+
+// read the first hour back: 3 600 readings
+RetrieveFilter firstHour = new RetrieveFilter();
+firstHour.setExternalId("engine_temperature");
+firstHour.setStart(start.atZone(ZoneOffset.UTC));
+firstHour.setEnd(start.plusSeconds(3600).atZone(ZoneOffset.UTC));
+firstHour.setLimit(10_000);
+DataRetriever<RetrieveFilter> request = new DataRetriever<>();
+request.setItems(List.of(firstHour));
+
+int n = client.timeseries().retrieve(request).getItems().get(0).getDatapoints().size();
+System.out.printf("%d readings in the first hour%n", n);
+if (n < 3600) throw new IllegalStateException("expected 3600 readings, got " + n);
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+`insert_from_lists_binary` takes the same arrays as `insert_from_lists`.
+
+```python
+# the same million readings, as Arrow frames
+client.timeseries.insert_from_lists_binary(
+    timestamps=pd.date_range("2026-01-01", periods=1_000_000, freq="s", tz="UTC"),
+    values=90 + 5 * np.random.rand(1_000_000),
+    ts="engine_temperature",
+    zstd_level=3)          # 1, 3 or 9 (default 9): client CPU against bytes on the wire
+
+# read the first hour back: 3 600 readings
+rf = intellistream_datahub_sdk.RetrieveFilter(
+    ts="engine_temperature",
+    start=pd.Timestamp("2026-01-01 00:00", tz="UTC"),
+    end=pd.Timestamp("2026-01-01 01:00", tz="UTC"),
+    limit=10_000)
+points = client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()
+print(f"{len(points)} readings in the first hour")
+assert len(points) >= 3600, len(points)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+`insert_datapoints_binary` takes the same `DataWrapper` as `insert_datapoints`, by reference.
+
+```rust
+use intellistream_datahub_sdk::timeseries::BinaryIngestOptions;
+
+// the same million readings, built again: insert_datapoints drains the wrapper as it sends
+let mut dw = DataWrapper::new();
+dw.add_item(DatapointsCollection {
+    external_id: Some("engine_temperature".into()),
+    datapoints: (0..1_000_000)
+        .map(|i| DatapointString::from_datetime(
+            start + Duration::seconds(i),
+            &format!("{:.2}", 90.0 + (i % 50) as f64 / 10.0)))
+        .collect(),
+    ..Default::default()
+});
+api.time_series
+    .insert_datapoints_binary(&dw, &BinaryIngestOptions::new().zstd_level(3))   // 1, 3 or 9 (default 9)
+    .await?;
+
+// read the first hour back: 3 600 readings
+let first_hour = RetrieveFilter {
+    external_id: Some("engine_temperature".into()),
+    start: Some(start),
+    end: Some(start + Duration::hours(1)),
+    limit: Some(10_000),
+    ..Default::default()
+};
+let points = api.time_series.retrieve_datapoints(&DataWrapper::from(vec![first_hour])).await?;
+let n = points.get_items()[0].datapoints.len();
+println!("{n} readings in the first hour");
+assert!(n >= 3600, "expected 3600 readings, got {n}");
+```
+
+</TabItem>
+</Tabs>
+
+A series that does not exist, or a value that does not fit its type, is caught without a request
+(status 404 and 422): Java reports it in `result.errors()`, Python and Rust return it as the
+call's error. A request the server refuses because a series was renamed or removed since it was
+cached is rebuilt once after re-resolving, and `429`, `5xx` and network failures are retried.
+
+For readings that arrive one at a time, Java has a buffer that batches them into frames and
+sends once 10 000 points have accumulated or the oldest is 200 ms old. `add` never blocks on the
+network, and closing the buffer flushes what is left:
+
+```java
+import ai.intellistream.datahub.sdk.client.BinaryIngestBuffer;
+
+try (BinaryIngestBuffer buffer = client.timeseries().binaryBuffer()) {
+    buffer.add("engine_temperature", Instant.now(), 92.4);
+    buffer.add("engine_rpm", Instant.now(), 1500L);
+}
+```
+
+Python and Rust have no such buffer: collect the readings and send them with
+`insert_datapoints_binary`. The options and the buffer's other methods are in the
+[Time series reference](/reference/timeseries#binary-ingest).
+
+## Then chart the trend
+
+Once the data is in, roll it up to hourly or daily buckets for a dashboard, see
+[Query & aggregate time series](./query-and-aggregate.mdx).
+
+:::warning Ordering
+Batches are sent in parallel, so there is **no cross-batch ordering guarantee**,
+which is fine for time-stamped data, since each datapoint carries its own timestamp.
+:::

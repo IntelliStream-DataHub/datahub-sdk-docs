@@ -1,0 +1,172 @@
+---
+sidebar_position: 3
+title: Healthcare — patient flow
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Healthcare — patient flow
+
+**The problem.** Patients move through a hospital in a chain — emergency department →
+assessment → ward → discharge — and the whole thing jams if any link backs up. A slow
+discharge process leaves no free beds, which backs up the ward, which strands patients
+in the ED corridor. Operations needs to see **where the flow is actually stuck** —
+which stage's wait is growing — so they fix the real bottleneck, not the loudest one.
+
+What we solve here is finding the bottleneck stage in the patient journey, using the
+flow data the hospital already has.
+
+## Set up demo data
+
+New workspace? Run this once (Python) to create the ED time-to-bed series with a day of
+readings whose wait grows through the afternoon. Safe to re-run.
+
+```python
+import intellistream_datahub_sdk, numpy as np, pandas as pd
+
+client = intellistream_datahub_sdk.DataHubClient.from_env()
+
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id="ed_time_to_bed_minutes", name="ED time to bed (min)", unit="min", value_type="float")])
+idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=24, freq="1h")
+ttb = 90 + np.linspace(0, 120, 24) + np.random.normal(0, 10, 24)
+client.timeseries.insert_from_lists(timestamps=idx, values=ttb, ts="ed_time_to_bed_minutes")
+```
+
+## 1. Roll up the wait at each stage
+
+ED wait, time-to-bed, and length-of-stay are series. Hourly and daily roll-ups show
+which stage is slow *right now* versus its normal — the bottleneck. See
+[Query & aggregate](/guides/query-and-aggregate).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+var filter = new RetrieveFilter();
+filter.setExternalId("ed_time_to_bed_minutes");
+filter.setStart(ZonedDateTime.now().minusDays(1));
+filter.setEnd(ZonedDateTime.now());
+filter.setAggregates(List.of("avg", "max"));
+filter.setGranularity("1h");
+
+var request = new DataRetriever<RetrieveFilter>();
+request.setItems(List.of(filter));
+
+client.timeseries().retrieve(request).getItems().get(0).getDatapoints()
+    .forEach(p -> trackStage("time_to_bed", p.getTimestamp(), p.getValue()));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import pandas as pd
+
+rf = intellistream_datahub_sdk.RetrieveFilter(
+    ts="ed_time_to_bed_minutes",
+    start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=1),
+    end=pd.Timestamp.now(tz="UTC"),
+    aggregates=["avg", "max"], granularity="1h")
+
+for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
+    track_stage("time_to_bed", dp.timestamp, dp.average)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use intellistream_datahub_sdk::generic::{DataWrapper, RetrieveFilter};
+use chrono::Utc;
+
+let filter = RetrieveFilter {
+    external_id: Some("ed_time_to_bed_minutes".into()),
+    aggregates: Some(vec!["avg".into(), "max".into()]),
+    granularity: Some("1h".into()),
+    start: Some(Utc::now() - chrono::Duration::days(1)),
+    end: Some(Utc::now()),
+    ..Default::default()
+};
+let page = api.time_series
+    .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?;
+let series = &page.get_items()[0];
+for p in &series.datapoints { track_stage("time_to_bed", &p.timestamp, p.average); }
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Alert when the ED breaches its target
+
+When the ED's four-hour-target breach rate climbs past a threshold, raise a
+`flow_breach` event so the patient-flow coordinator can pull the right lever —
+expedite discharges, open an escalation area. See [Turn readings into events](/guides/detect-events).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+EventModel breach = new EventModel();
+breach.setExternalId("flow_breach_ed_" + System.currentTimeMillis());
+breach.setType("flow_breach");
+breach.setStatus("open");
+breach.setMetadata(Map.of("stage", "emergency_department", "breach_rate_pct", "22"));
+breach.setEventTime(ZonedDateTime.now());
+client.events().create(List.of(breach));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+client.events.create([intellistream_datahub_sdk.Event(
+    external_id=f"flow_breach_ed_{int(pd.Timestamp.now().timestamp())}",
+    type="flow_breach", status="open",
+    event_time=pd.Timestamp.now(tz="UTC"),
+    metadata={"stage": "emergency_department", "breach_rate_pct": "22"})])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use intellistream_datahub_sdk::events::Event;
+use chrono::Utc;
+
+let mut breach = Event::new(
+    format!("flow_breach_ed_{}", Utc::now().timestamp()),
+    "flow_breach".into(),
+    Utc::now());
+breach.status = Some("open".into());
+breach.add_metadata("stage".into(), "emergency_department".into());
+breach.add_metadata("breach_rate_pct".into(), "22".into());
+api.events.create(&vec![breach]).await?;
+```
+
+</TabItem>
+</Tabs>
+
+## 3. Forecast the surge
+
+Admissions follow strong daily and seasonal patterns — [forecast
+them](/advanced/demand-forecasting) to staff ahead of the surge instead of reacting to it.
+
+## See the result
+
+Chart the hourly wait — the climb is the bottleneck the coordinator acts on:
+
+```python
+import matplotlib.pyplot as plt
+
+rf = intellistream_datahub_sdk.RetrieveFilter(ts="ed_time_to_bed_minutes",
+    start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=1), end=pd.Timestamp.now(tz="UTC"),
+    aggregates=["avg"], granularity="1h")
+v = [dp.average for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()]
+plt.plot(v); plt.title("ED time-to-bed (min), hourly average"); plt.show()
+```
+
+## See also
+
+- [Query & aggregate](/guides/query-and-aggregate) — per-stage wait roll-ups.
+- [Turn readings into events](/guides/detect-events) — the breach rule.
+- [Demand forecasting](/advanced/demand-forecasting) — predicting admissions.

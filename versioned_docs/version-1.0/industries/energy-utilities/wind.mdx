@@ -1,0 +1,206 @@
+---
+sidebar_position: 2
+title: Renewable energy — wind farm
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Renewable energy — wind farm generation
+
+**The problem.** A wind farm's output swings with the weather minute to minute. The
+operations desk needs to know how much each turbine and the farm as a whole is
+generating against its rated capacity, spot under-performers, and feed a generation
+forecast to the grid operator. Raw per-second power is far too dense — what matters is
+the **rolled-up capacity factor** over useful windows.
+
+This scenario centres on **aggregation** of generation data into the hourly and daily
+figures a forecasting model and a performance dashboard consume.
+
+## Set up demo data
+
+New workspace? Run this once (Python) to create a turbine's power and wind series with a
+week of hourly readings — so the capacity-factor roll-up has data. Safe to re-run.
+
+```python
+import intellistream_datahub_sdk, numpy as np, pandas as pd
+
+client = intellistream_datahub_sdk.DataHubClient.from_env()
+
+for s, u in [("turbine_t14_power_kw", "kw"), ("turbine_t14_wind_ms", "m_s")]:
+    client.timeseries.create([intellistream_datahub_sdk.TimeSeries(value_type="float", external_id=s, name=s, unit=u)])
+idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=168, freq="1h")
+wind = np.clip(np.random.weibull(2.0, 168) * 6.0, 0, 25)
+power = np.clip(wind**3 * 2.0, 0, 3500)           # rated ~3500 kW
+client.timeseries.insert_from_lists(timestamps=idx, values=power, ts="turbine_t14_power_kw")
+client.timeseries.insert_from_lists(timestamps=idx, values=wind, ts="turbine_t14_wind_ms")
+```
+
+## 1. Ingest per-turbine output
+
+Each turbine reports power and wind speed continuously. Hand the readings off in bulk.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+var power = new Timeseries();
+power.setExternalId("turbine_t14_power_kw");
+power.setName("Turbine T14 power");
+power.setUnit("kw");
+var wind = new Timeseries();
+wind.setExternalId("turbine_t14_wind_ms");
+wind.setName("Turbine T14 wind speed");
+wind.setUnit("m_s");
+client.timeseries().create(power, wind);
+
+client.timeseries().ingest(Map.of(
+    "turbine_t14_power_kw", powerReadings,    // List<Datapoint>
+    "turbine_t14_wind_ms", windReadings));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import intellistream_datahub_sdk
+
+client.timeseries.create([
+    intellistream_datahub_sdk.TimeSeries(value_type="float", external_id="turbine_t14_power_kw",
+                           name="Turbine T14 power", unit="kw"),
+    intellistream_datahub_sdk.TimeSeries(value_type="float", external_id="turbine_t14_wind_ms",
+                           name="Turbine T14 wind speed", unit="m_s")])
+client.timeseries.insert_from_lists(
+    timestamps=timestamps, values=power_kw, ts="turbine_t14_power_kw")
+client.timeseries.insert_from_lists(
+    timestamps=timestamps, values=wind_ms, ts="turbine_t14_wind_ms")
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use intellistream_datahub_sdk::timeseries::TimeSeries;
+use intellistream_datahub_sdk::generic::{DataWrapper, DatapointsCollection};
+
+let mut power = TimeSeries::new("turbine_t14_power_kw", "Turbine T14 power");
+power.unit = Some("kw".into());
+api.time_series.create_one(&power).await?;
+
+let mut wind = TimeSeries::new("turbine_t14_wind_ms", "Turbine T14 wind speed");
+wind.unit = Some("m_s".into());
+api.time_series.create_one(&wind).await?;
+
+let mut dw = DataWrapper::new();
+dw.add_item(DatapointsCollection {
+    external_id: Some("turbine_t14_power_kw".into()),
+    datapoints: power_readings,    // Vec<DatapointString>
+    ..Default::default()
+});
+dw.add_item(DatapointsCollection {
+    external_id: Some("turbine_t14_wind_ms".into()),
+    datapoints: wind_readings,
+    ..Default::default()
+});
+api.time_series.insert_datapoints(&mut dw).await?;
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Roll up to a capacity factor
+
+Capacity factor is average output over rated capacity. Ask for hourly averages, divide
+by the turbine's rating, and you have the curve the forecast and the dashboard need.
+Full mechanics in [Query & aggregate](/guides/query-and-aggregate).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+var filter = new RetrieveFilter();
+filter.setExternalId("turbine_t14_power_kw");
+filter.setStart(ZonedDateTime.now().minusDays(7));
+filter.setEnd(ZonedDateTime.now());
+filter.setAggregates(List.of("avg"));
+filter.setGranularity("1h");
+
+var request = new DataRetriever<RetrieveFilter>();
+request.setItems(List.of(filter));
+
+double rated = 3500.0;   // kW
+client.timeseries().retrieve(request).getItems().get(0).getDatapoints()
+    .forEach(p -> recordCapacityFactor(
+        p.getTimestamp(), Double.parseDouble(p.getValue()) / rated));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import pandas as pd
+
+rf = intellistream_datahub_sdk.RetrieveFilter(
+    ts="turbine_t14_power_kw",
+    start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=7),
+    end=pd.Timestamp.now(tz="UTC"),
+    aggregates=["avg"], granularity="1h")
+
+rated = 3500.0
+for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
+    record_capacity_factor(dp.timestamp, dp.average / rated)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use intellistream_datahub_sdk::generic::{DataWrapper, RetrieveFilter};
+use chrono::Utc;
+
+let filter = RetrieveFilter {
+    external_id: Some("turbine_t14_power_kw".into()),
+    start: Some(Utc::now() - chrono::Duration::days(7)),
+    end: Some(Utc::now()),
+    aggregates: Some(vec!["avg".into()]),
+    granularity: Some("1h".into()),
+    ..Default::default()
+};
+let page = api.time_series
+    .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?;
+let series = &page.get_items()[0];
+let rated = 3500.0;
+for p in &series.datapoints {
+    if let Some(avg) = p.average { record_capacity_factor(&p.timestamp, avg / rated); }
+}
+```
+
+</TabItem>
+</Tabs>
+
+## 3. Flag an under-performer
+
+When a turbine's capacity factor stays well below the farm average in good wind, raise
+a `turbine_underperformance` [event](/guides/detect-events) for the maintenance team —
+a sign of a pitch or gearbox problem worth a closer look.
+
+## See the result
+
+Print the average capacity factor and chart it over the week:
+
+```python
+import matplotlib.pyplot as plt
+
+rf = intellistream_datahub_sdk.RetrieveFilter(ts="turbine_t14_power_kw",
+    start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=7), end=pd.Timestamp.now(tz="UTC"),
+    aggregates=["avg"], granularity="1h")
+cf = [dp.average / 3500 for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()]
+print(f"average capacity factor: {sum(cf)/len(cf):.0%}")
+plt.plot(cf); plt.title("Turbine T14 capacity factor"); plt.show()
+```
+
+## See also
+
+- [Query & aggregate](/guides/query-and-aggregate) — windows and aggregates for the capacity factor.
+- [High-throughput ingestion](/guides/ingest-timeseries) — per-turbine data volume.
+- [Turn readings into events](/guides/detect-events) — the under-performance rule.
+- **[Demand forecasting (advanced)](/advanced/demand-forecasting)** — forecast generation the same way you'd forecast load.

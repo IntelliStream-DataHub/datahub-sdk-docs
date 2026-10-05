@@ -1,0 +1,171 @@
+---
+sidebar_position: 10
+title: Soft sensor with Random Forest
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Soft sensor with a Random Forest
+
+:::info At a glance
+**Effort:** ~1 hour · **You'll build:** a regression model that infers a hard-to-measure
+quantity from cheap online sensors · **Stack:** the SDK for data in/out, plus `pandas`,
+`numpy` and `scikit-learn`.
+:::
+
+Some of the most important quantities are the hardest to measure. Product purity,
+produced-water oil content, melt viscosity, they come from a lab, hours apart, while
+the process runs continuously. A **soft sensor** closes that gap: a model that infers
+the lab value in real time from the cheap online sensors that *are* measured every
+second. Random Forest is a great fit, robust, little tuning, and an out-of-bag score
+that estimates accuracy without a separate test set.
+
+:::info Needs a sandbox
+These steps read process sensors and sparse lab samples that already exist.
+[Generate a sandbox](/advanced/generate-sample-data) first, section D ingests both.
+:::
+
+:::tip New to machine learning?
+No background needed. Skim the [gentle primer](/advanced/machine-learning-gently) for the
+ideas in plain language, model, feature, training, and the algorithm itself.
+:::
+
+## 1. Assemble lab targets against sensor features
+
+The training signal is the infrequent lab samples (the target) paired with the online
+sensor readings *at the moment each sample was taken* (the features).
+
+<Tabs groupId="lang">
+<TabItem value="python" label="Python">
+
+```python
+import intellistream_datahub_sdk, numpy as np, pandas as pd
+
+client = intellistream_datahub_sdk.DataHubClient.from_env()
+
+def series(external_id, start, end, granularity="5m"):
+    rf = intellistream_datahub_sdk.RetrieveFilter(ts=external_id, start=start, end=end,
+                                    aggregates=["avg"], granularity=granularity, limit=100_000)
+    pts = client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()
+    return pd.Series([float(p.average) for p in pts],
+                     index=pd.to_datetime([p.timestamp for p in pts], utc=True)).sort_index()
+
+start, end = pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=14), pd.Timestamp.now(tz="UTC")
+SENSORS = ["cdu_1_top_temp_c", "cdu_1_reflux_ratio", "cdu_1_feed_bpd", "cdu_1_pressure_kpa"]
+features = pd.DataFrame({s: series(s, start, end) for s in SENSORS})
+
+# lab samples are sparse — align each to the nearest sensor row
+lab = series("cdu_1_product_sulfur_ppm_lab", start, end, granularity="1h").dropna()
+train = features.reindex(lab.index, method="nearest").join(lab.rename("y")).dropna()
+```
+
+</TabItem>
+<TabItem value="java" label="Java">
+
+```java
+// Java pulls the sensor and lab series the same way; the model below is Python.
+var filter = new RetrieveFilter();
+filter.setExternalId("cdu_1_top_temp_c");
+filter.setStart(ZonedDateTime.now().minusDays(14));
+filter.setEnd(ZonedDateTime.now());
+filter.setAggregates(List.of("avg"));
+filter.setGranularity("5m");
+filter.setLimit(100000);
+
+var request = new DataRetriever<RetrieveFilter>();
+request.setItems(List.of(filter));
+var pts = client.timeseries().retrieve(request).getItems().get(0).getDatapoints();
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+// Rust pulls the sensor and lab series the same way; the model below is Python.
+use intellistream_datahub_sdk::generic::{DataWrapper, RetrieveFilter};
+use chrono::Utc;
+
+let filter = RetrieveFilter {
+    external_id: Some("cdu_1_top_temp_c".into()),
+    start: Some(Utc::now() - chrono::Duration::days(14)),
+    end: Some(Utc::now()),
+    aggregates: Some(vec!["avg".into()]),
+    granularity: Some("5m".into()),
+    limit: Some(100_000),
+    ..Default::default()
+};
+let page = api.time_series
+    .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?;
+let pts = &page.get_items()[0];
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Train the regressor
+
+A Random Forest needs little tuning, and `oob_score` gives an honest accuracy estimate
+from the trees' out-of-bag samples, handy when labels are scarce.
+
+```python
+from sklearn.ensemble import RandomForestRegressor
+
+rf = RandomForestRegressor(n_estimators=400, max_depth=None,
+                           oob_score=True, n_jobs=-1, random_state=0)
+rf.fit(train[SENSORS], train["y"])
+print(f"out-of-bag R²: {rf.oob_score_:.3f}")
+
+# which sensors drive the quality?
+for name, imp in sorted(zip(SENSORS, rf.feature_importances_),
+                        key=lambda kv: kv[1], reverse=True):
+    print(f"  {name}: {imp:.2f}")
+```
+
+## 3. Infer continuously and publish the virtual sensor
+
+Run the model on the live sensor rows and write the prediction back as its own
+series, a continuous estimate of the lab value, updated every few minutes instead of
+once a shift. Now it can be charted, alerted on, and fed into control like any real tag.
+
+```python
+recent = pd.DataFrame({s: series(s,
+            pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=6),
+            pd.Timestamp.now(tz="UTC")) for s in SENSORS}).dropna()
+virtual = rf.predict(recent[SENSORS])
+
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(
+    external_id="cdu_1_product_sulfur_ppm_soft", name="CDU-1 product sulfur (soft sensor)",
+    unit="ppm", value_type="float")])
+client.timeseries.insert_from_lists(
+    timestamps=recent.index, values=virtual, ts="cdu_1_product_sulfur_ppm_soft")
+
+# read the virtual sensor back: one point per sensor row
+stored = client.timeseries.retrieve_datapoints(intellistream_datahub_sdk.RetrieveFilter(
+    ts="cdu_1_product_sulfur_ppm_soft",
+    start=recent.index[0], end=recent.index[-1] + pd.Timedelta(minutes=1),
+    limit=1000))[0].get_datapoints()
+print(f"{len(stored)} soft-sensor values stored, latest {stored[-1].value:.2f} ppm")
+assert len(stored) == len(virtual), f"expected {len(virtual)}, got {len(stored)}"
+```
+
+When the next lab sample lands, append it to the training set and re-fit, the soft
+sensor stays calibrated as the process and feedstock change.
+
+## Where to take it further
+
+- **Quantify uncertainty.** The spread across the forest's trees gives a per-prediction
+  confidence, widen alerts when the model is unsure.
+- **Drift watch.** Compare each new lab sample to the soft sensor's prediction; a growing
+  gap is a [retrain trigger](/guides/detect-events).
+
+## Further reading
+
+- **Random forest**: [Wikipedia](https://en.wikipedia.org/wiki/Random_forest)
+- **Soft sensor**: [Wikipedia](https://en.wikipedia.org/wiki/Soft_sensor)
+- **Out-of-bag error**: [Wikipedia](https://en.wikipedia.org/wiki/Out-of-bag_error)
+
+## See also
+
+- [Oil & gas, refinery operations](/industries/oil-and-gas/refining): where soft sensors earn their keep.
+- [XGBoost failure prediction](/advanced/xgboost-failure-prediction): the boosted-tree cousin.
+- [Query & aggregate](/guides/query-and-aggregate): assembling the feature history.

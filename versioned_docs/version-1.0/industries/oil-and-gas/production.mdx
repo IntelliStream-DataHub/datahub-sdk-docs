@@ -1,0 +1,334 @@
+---
+sidebar_position: 2
+title: Oil & gas — production monitoring
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Oil & gas — upstream production monitoring
+
+**The problem.** An offshore field has dozens of wells, each with an electric
+submersible pump (ESP) and a cluster of sensors — wellhead pressure, casing
+temperature, flow rate. Engineers in an onshore control room need a live picture of
+every well, fast roll-ups for daily production reports, and an alarm the moment a
+pump trends toward failure.
+
+This scenario wires that together: model the field as a graph, stream sensor data in
+at volume, and raise an event when a reading goes out of bounds.
+
+## Set up demo data
+
+New workspace? Run this once (Python) to create the well's sensor series and feed in a
+pump-intake pressure that sags toward the anomaly threshold — so the alarm in step 3
+actually fires. The field/well/pump graph is created by step 1 below; this also adds the
+two temperature sensors and the shared `cooling_system` that step 4 walks between, so the
+correlation there returns something. Safe to re-run.
+
+```python
+import intellistream_datahub_sdk, numpy as np, pandas as pd
+
+client = intellistream_datahub_sdk.DataHubClient.from_env()
+
+sensors = {"wellhead_pressure_bar": "bar", "casing_temperature_c": "deg_c",
+           "flow_rate_bpd": "bpd", "pump_intake_pressure_bar": "bar"}
+for s, u in sensors.items():
+    client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id=s, name=s, unit=u, value_type="float")])
+
+# intake pressure: healthy ~95 bar, then sagging below the 80-bar ESP-anomaly line
+idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=120, freq="1min")
+intake = np.full(120, 95.0); intake[-30:] -= np.linspace(0, 20, 30)
+client.timeseries.insert_from_lists(timestamps=idx, values=intake, ts="pump_intake_pressure_bar")
+
+# step 4 walks out from two alarmed temperature sensors and looks for what they share
+client.resources.create(
+    [intellistream_datahub_sdk.Resource(external_id=x, name=n, labels=[lbl]) for x, n, lbl in
+     [("cooling_system", "Platform cooling system", "System"),
+      ("wellhead_temp_a12", "Wellhead temperature A-12", "Sensor"),
+      ("pump_temp_a12", "ESP motor temperature A-12", "Sensor")]],
+    [intellistream_datahub_sdk.RelForm.by_external_ids("wellhead_temp_a12", "cooling_system", "PART_OF"),
+     intellistream_datahub_sdk.RelForm.by_external_ids("pump_temp_a12", "cooling_system", "PART_OF")])
+```
+
+## 1. Model the field
+
+A field *contains* wells; a well *contains* a pump and *produces* sensor series.
+Modeling it as a graph lets you walk from a field down to any individual sensor.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+Resource field = new Resource();
+field.setExternalId("field_north_sea");
+field.setName("North Sea field");
+field.setLabels(List.of("Field"));
+
+Resource well = new Resource();
+well.setExternalId("well_a12");
+well.setName("Well A-12");
+well.setLabels(List.of("Well"));
+
+Resource pump = new Resource();
+pump.setExternalId("pump_esp_a12");
+pump.setName("ESP — Well A-12");
+pump.setLabels(List.of("Pump"));
+
+RelForm fieldWell = new RelForm();
+fieldWell.setName("contains");
+fieldWell.setFromExternalId("field_north_sea");
+fieldWell.setToExternalId("well_a12");
+
+RelForm wellPump = new RelForm();
+wellPump.setName("contains");
+wellPump.setFromExternalId("well_a12");
+wellPump.setToExternalId("pump_esp_a12");
+
+client.resources().create(List.of(field, well, pump), List.of(fieldWell, wellPump));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import intellistream_datahub_sdk
+
+nodes = [
+    intellistream_datahub_sdk.Resource(external_id="field_north_sea", name="North Sea field", labels=["Field"]),
+    intellistream_datahub_sdk.Resource(external_id="well_a12", name="Well A-12", labels=["Well"]),
+    intellistream_datahub_sdk.Resource(external_id="pump_esp_a12", name="ESP — Well A-12", labels=["Pump"]),
+]
+edges = [
+    intellistream_datahub_sdk.RelForm.by_external_ids("field_north_sea", "well_a12", "contains"),
+    intellistream_datahub_sdk.RelForm.by_external_ids("well_a12", "pump_esp_a12", "contains"),
+]
+client.resources.create(nodes, edges)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use intellistream_datahub_sdk::resources::Resource;
+use intellistream_datahub_sdk::relations::RelForm;
+
+let mut field = Resource::new();
+field.external_id = "field_north_sea".into();
+field.name = "North Sea field".into();
+field.labels = Some(vec!["Field".into()]);
+
+let mut well = Resource::new();
+well.external_id = "well_a12".into();
+well.name = "Well A-12".into();
+well.labels = Some(vec!["Well".into()]);
+
+let mut pump = Resource::new();
+pump.external_id = "pump_esp_a12".into();
+pump.name = "ESP — Well A-12".into();
+pump.labels = Some(vec!["Pump".into()]);
+
+api.resources.create(
+    vec![field, well, pump],
+    vec![
+        RelForm::by_external_ids("field_north_sea", "well_a12", "contains"),
+        RelForm::by_external_ids("well_a12", "pump_esp_a12", "contains"),
+    ],
+).await?;
+```
+
+</TabItem>
+</Tabs>
+
+Create a series per sensor the same way — `wellhead_pressure_bar`,
+`casing_temperature_c`, `flow_rate_bpd` — and relate each to `well_a12`.
+
+## 2. Stream sensor data at volume
+
+Each well emits readings every second across many sensors — easily millions of
+points an hour at field scale. Hand them to the ingester grouped by series; it
+chunks and parallelises the writes. See [high-throughput ingestion](/guides/ingest-timeseries)
+for the full mechanics.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+client.timeseries().ingest(Map.of(
+    "wellhead_pressure_bar", pressureReadings,   // List<Datapoint>
+    "casing_temperature_c", temperatureReadings,
+    "flow_rate_bpd", flowReadings));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+client.timeseries.insert_from_lists(
+    timestamps=timestamps, values=pressure_bar, ts="wellhead_pressure_bar")
+client.timeseries.insert_from_lists(
+    timestamps=timestamps, values=temperature_c, ts="casing_temperature_c")
+client.timeseries.insert_from_lists(
+    timestamps=timestamps, values=flow_bpd, ts="flow_rate_bpd")
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+api.time_series
+    .insert_datapoint(None, Some("wellhead_pressure_bar".into()), ts, "248.6".into())
+    .await?;
+api.time_series
+    .insert_datapoint(None, Some("casing_temperature_c".into()), ts, "92.0".into())
+    .await?;
+api.time_series
+    .insert_datapoint(None, Some("flow_rate_bpd".into()), ts, "1850.0".into())
+    .await?;
+```
+
+</TabItem>
+</Tabs>
+
+## 3. Alarm on an out-of-bounds reading
+
+A creeping intake pressure is an early sign of an ESP problem. Read the recent
+window and raise an `esp_anomaly` event when it crosses the line — the control room
+queries open events for the field, and the event references the well it concerns.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+var series = client.timeseries().retrieve(lastHourOf("pump_intake_pressure_bar"))
+    .getItems().get(0);
+
+if (series.getDatapoints().stream().anyMatch(p -> Double.parseDouble(p.getValue()) < 80.0)) {
+    EventModel event = new EventModel();
+    event.setExternalId("esp_anomaly_a12_" + System.currentTimeMillis());
+    event.setType("esp_anomaly");
+    event.setStatus("open");
+    event.setMetadata(Map.of("well", "well_a12", "pump", "pump_esp_a12"));
+    event.setEventTime(ZonedDateTime.now());
+    client.events().create(List.of(event));
+}
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+points = client.timeseries.retrieve_datapoints(last_hour("pump_intake_pressure_bar"))[0]
+if any(float(dp.value) < 80.0 for dp in points.get_datapoints()):
+    client.events.create([intellistream_datahub_sdk.Event(
+        external_id=f"esp_anomaly_a12_{int(pd.Timestamp.now().timestamp())}",
+        type="esp_anomaly", status="open",
+        event_time=pd.Timestamp.now(tz="UTC"),
+        metadata={"well": "well_a12", "pump": "pump_esp_a12"})])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use chrono::Utc;
+use intellistream_datahub_sdk::events::Event;
+
+let page = api.time_series.retrieve_datapoints(&last_hour("pump_intake_pressure_bar")).await?;
+let points = &page.get_items()[0];
+let low = points.datapoints.iter()
+    .any(|p| p.value.unwrap_or(99.0) < 80.0);
+if low {
+    let mut event = Event::new(
+        format!("esp_anomaly_a12_{}", Utc::now().timestamp()),
+        "esp_anomaly".into(),
+        Utc::now());
+    event.status = Some("open".into());
+    event.add_metadata("well".into(), "well_a12".into());
+    event.add_metadata("pump".into(), "pump_esp_a12".into());
+    api.events.create(&vec![event]).await?;
+}
+```
+
+</TabItem>
+</Tabs>
+
+## 4. Are two alarms one fault? Ask the graph
+
+On a busy platform, alarms rarely arrive alone. When a wellhead temperature alarm and
+a separate pump alarm fire together, the control room needs to know fast: two
+independent problems, or one upstream cause? The graph answers it. Walk out from each
+alarmed sensor and look for a subsystem they share — if both are `PART_OF` the
+platform `cooling_system`, a single cooling failure is driving both.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+ResourceNetwork na = client.resources().fetchRelated("wellhead_temp_a12", 5);
+ResourceNetwork nb = client.resources().fetchRelated("pump_temp_a12", 5);
+
+Set<String> aNodes = na.nodes().stream()
+    .map(NodeModel::getExternalId).collect(Collectors.toSet());
+Set<String> shared = nb.nodes().stream()
+    .map(NodeModel::getExternalId).filter(aNodes::contains).collect(Collectors.toSet());
+
+// shared contains "cooling_system" → one root cause, not two
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+na = client.resources.fetch_related(external_id="wellhead_temp_a12", depth=5)
+nb = client.resources.fetch_related(external_id="pump_temp_a12", depth=5)
+
+shared = {n.external_id for n in na.nodes} & {n.external_id for n in nb.nodes}
+# 'cooling_system' in shared → one root cause, not two
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use intellistream_datahub_sdk::resources::RelatedResourcesForm;
+use std::collections::HashSet;
+
+let na = api.resources.fetch_related(
+    &RelatedResourcesForm::from_external_id("wellhead_temp_a12").with_depth(5)).await?;
+let nb = api.resources.fetch_related(
+    &RelatedResourcesForm::from_external_id("pump_temp_a12").with_depth(5)).await?;
+
+let a: HashSet<&str> = na.nodes().iter().map(|n| n.external_id()).collect();
+let shared: Vec<&str> = nb.nodes().iter()
+    .map(|n| n.external_id()).filter(|id| a.contains(id)).collect();
+// shared contains "cooling_system" → one root cause, not two
+```
+
+</TabItem>
+</Tabs>
+
+That single query turns two alarms into one incident — see
+[Correlate alarms with the graph](/guides/correlate-alarms) for the general pattern.
+
+## See the result
+
+Chart the intake pressure the alarm watches — it sags below the 80-bar line in the last
+half hour, which is exactly what trips the `esp_anomaly` event:
+
+```python
+import matplotlib.pyplot as plt
+
+rf = intellistream_datahub_sdk.RetrieveFilter(ts="pump_intake_pressure_bar",
+    start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=2), end=pd.Timestamp.now(tz="UTC"))
+s = pd.Series({pd.to_datetime(p.timestamp): float(p.value)
+               for p in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()}).sort_index()
+s.plot(title="Pump intake pressure (bar)"); plt.axhline(80, color="r", ls="--"); plt.show()
+# the line drops from ~95 to ~75 bar — below the threshold, so the alarm fires
+```
+
+## See also
+
+- [Model assets as a graph](/guides/model-assets-graph) — the field/well/pump modeling pattern.
+- [High-throughput ingestion](/guides/ingest-timeseries) — sustaining field-scale write volume.
+- [Turn readings into events](/guides/detect-events) — the detection rule in detail.
+- [Correlate alarms with the graph](/guides/correlate-alarms) — find the shared subsystem behind two alarms.
+- [Consume live data](/guides/realtime-subscriptions) — drive the control-room view from a live stream.

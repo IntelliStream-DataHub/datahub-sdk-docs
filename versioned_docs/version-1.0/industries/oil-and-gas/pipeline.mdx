@@ -1,0 +1,182 @@
+---
+sidebar_position: 3
+title: Oil & gas — pipeline integrity
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Oil & gas — pipeline integrity
+
+**The problem.** A pipeline leak is an environmental and financial emergency, and the
+two questions that follow are both urgent: *is* there a leak, and *where*. The signal
+for the first is a mass imbalance — what flows into a segment should equal what flows
+out, and a sustained gap with a pressure drop means product is escaping. The second is
+a graph question: given the leaking segment, which valves isolate it and what's
+downstream.
+
+What we solve here is detecting a leak from the flow balance and locating it on the
+network so the right valves close fast.
+
+## Set up demo data
+
+New workspace? Run this once (Python) to create the segment's flow series (with an
+inflow/outflow gap — a leak) and the pipeline graph the locate step walks. Safe to re-run.
+
+```python
+import intellistream_datahub_sdk, pandas as pd
+
+client = intellistream_datahub_sdk.DataHubClient.from_env()
+
+# flow series: inflow 1000 vs outflow 940 m³/h → a 60 m³/h imbalance (leak)
+for s, v in [("segment_pn_07_flow_in_m3h", 1000.0), ("segment_pn_07_flow_out_m3h", 940.0)]:
+    client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id=s, name=s, unit="m3h", value_type="float")])
+    client.timeseries.insert_from_lists(timestamps=[pd.Timestamp.now(tz="UTC")], values=[v], ts=s)
+
+# the network: stations, the segment, and the valves that isolate it
+client.resources.create(
+    [intellistream_datahub_sdk.Resource(external_id=x, name=x, labels=[x]) for x in
+     ["station_kollsnes", "segment_pn_07", "station_mongstad", "valve_v18", "valve_v19"]],
+    [intellistream_datahub_sdk.RelForm.by_external_ids("station_kollsnes", "segment_pn_07", "connects_to"),
+     intellistream_datahub_sdk.RelForm.by_external_ids("segment_pn_07", "station_mongstad", "connects_to"),
+     intellistream_datahub_sdk.RelForm.by_external_ids("segment_pn_07", "valve_v18", "isolated_by"),
+     intellistream_datahub_sdk.RelForm.by_external_ids("segment_pn_07", "valve_v19", "isolated_by")])
+```
+
+You'll also need small `latest(id)` and `tolerance(flow)` helpers — `latest` reads the
+last value of a series, `tolerance` returns an acceptable gap (say 1% of inflow).
+
+## 1. Detect the imbalance
+
+Each segment reports inlet and outlet flow and pressure. A sustained inlet-minus-outlet
+gap raises a `leak_suspected` event scoped to the segment. See
+[Turn readings into events](/guides/detect-events).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+double inflow  = latest("segment_pn_07_flow_in_m3h");
+double outflow = latest("segment_pn_07_flow_out_m3h");
+
+if (inflow - outflow > tolerance(inflow)) {
+    EventModel leak = new EventModel();
+    leak.setExternalId("leak_suspected_pn07_" + System.currentTimeMillis());
+    leak.setType("leak_suspected");
+    leak.setStatus("critical");
+    leak.setMetadata(Map.of("segment", "segment_pn_07",
+                            "imbalance_m3h", String.valueOf(inflow - outflow)));
+    leak.setEventTime(ZonedDateTime.now());
+    client.events().create(List.of(leak));
+}
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+inflow  = latest("segment_pn_07_flow_in_m3h")
+outflow = latest("segment_pn_07_flow_out_m3h")
+
+if inflow - outflow > tolerance(inflow):
+    client.events.create([intellistream_datahub_sdk.Event(
+        external_id=f"leak_suspected_pn07_{int(pd.Timestamp.now().timestamp())}",
+        type="leak_suspected", status="critical",
+        event_time=pd.Timestamp.now(tz="UTC"),
+        metadata={"segment": "segment_pn_07", "imbalance_m3h": str(inflow - outflow)})])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use intellistream_datahub_sdk::events::Event;
+use chrono::Utc;
+
+let inflow:  f64 = latest("segment_pn_07_flow_in_m3h").await?;
+let outflow: f64 = latest("segment_pn_07_flow_out_m3h").await?;
+
+if inflow - outflow > tolerance(inflow) {
+    let mut leak = Event::new(
+        format!("leak_suspected_pn07_{}", Utc::now().timestamp()),
+        "leak_suspected".into(),
+        Utc::now());
+    leak.status = Some("critical".into());
+    leak.add_metadata("segment".into(), "segment_pn_07".into());
+    leak.add_metadata("imbalance_m3h".into(), (inflow - outflow).to_string());
+    api.events.create(&vec![leak]).await?;
+}
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Locate it and find the isolation valves
+
+Model the pipeline as a graph — stations joined by segments, valves on the segments.
+Walk out from the leaking segment to find the valves that bound it and everything
+downstream that must be isolated. This is the
+[connectivity traversal](/guides/correlate-alarms) applied to a flow network.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+RelatedResourcesForm form = new RelatedResourcesForm();
+form.setExternalId("segment_pn_07");
+form.setDepth(3);
+form.setRelationshipTypes(List.of("connects_to", "isolated_by"));
+
+ResourceNetwork around = client.resources().fetchRelated(form);
+around.nodes().stream()
+    .filter(n -> n.getExternalId().startsWith("valve_"))
+    .forEach(v -> System.out.println("close: " + v.getExternalId()));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+around = client.resources.fetch_related(
+    external_id="segment_pn_07", depth=3, relationship_types=["connects_to", "isolated_by"])
+
+for node in around.nodes:
+    if node.external_id.startswith("valve_"):
+        print("close:", node.external_id)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use intellistream_datahub_sdk::resources::RelatedResourcesForm;
+
+let around = api.resources.fetch_related(
+    &RelatedResourcesForm::from_external_id("segment_pn_07")
+        .with_depth(3)
+        .with_relationship_types(vec!["connects_to".into(), "isolated_by".into()])).await?;
+
+for node in around.nodes() {
+    if node.external_id().starts_with("valve_") {
+        println!("close: {}", node.external_id());
+    }
+}
+```
+
+</TabItem>
+</Tabs>
+
+## See the result
+
+With the demo leak in place (inflow 1000 vs outflow 940), step 1 raises a
+`leak_suspected` event and step 2 prints the valves that bound the segment:
+
+```text
+close: valve_v18
+close: valve_v19
+```
+
+## See also
+
+- [Turn readings into events](/guides/detect-events) — the mass-balance rule.
+- [Correlate alarms with the graph](/guides/correlate-alarms) — locating on the network.
+- [Water utilities](/industries/energy-utilities/water) — the same flow-graph reasoning.

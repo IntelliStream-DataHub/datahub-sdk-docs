@@ -1,0 +1,127 @@
+---
+title: Browse scenarios by sector
+---
+
+# Industry scenarios
+
+Worked examples, each starting from a real problem an industry needs solved and showing
+how to solve it with the SDK. They're organised by **sector** — pick yours and work
+through its scenarios, which build on each other across the value chain.
+
+:::tip How long each takes
+Every scenario is self-contained: a **Set up demo data** block (run once) → the
+solution → **See the result**. Plan on **~5 minutes to read** one, or **~10–15 minutes
+to run it end to end** from an empty workspace (a couple of minutes more the very first
+time, to install the SDK and set `BASE_URL`/`TOKEN`). When you're ready to go past CRUD
+into prediction, the **[Advanced scenarios (AI)](/advanced/machine-learning-gently)** — no
+data-science background needed — run ~20 minutes to 2 hours each.
+:::
+
+## Oil & gas
+
+Upstream to downstream — the full value chain.
+
+- [Drilling operations](/industries/oil-and-gas/drilling) — catch a well-control kick in its first seconds
+- [Production monitoring](/industries/oil-and-gas/production) — ESP anomaly detection on a field graph
+- [Pipeline integrity](/industries/oil-and-gas/pipeline) — detect and locate a leak on the network
+- [Refinery operations](/industries/oil-and-gas/refining) — keep units on-spec and energy-efficient
+- [Tank storage & custody](/industries/oil-and-gas/storage) — reconcile inventory, catch unexplained loss
+- [Emissions & flaring](/industries/oil-and-gas/emissions) — methane & flaring compliance reporting
+
+## Energy & utilities
+
+- [Grid telemetry](/industries/energy-utilities/grid) — SCADA roll-ups and overload events
+- [Wind generation](/industries/energy-utilities/wind) — capacity factor for a wind farm
+- [EV charging network](/industries/energy-utilities/ev-charging) — uptime and grid load
+- [Water distribution](/industries/energy-utilities/water) — trace a contamination source upstream
+- [Waste collection](/industries/energy-utilities/waste) — collect on fill level, not a calendar
+- [Air quality](/industries/energy-utilities/air-quality) — heterogeneous sensors, correct units
+
+## Manufacturing & process
+
+- [Discrete manufacturing](/industries/manufacturing-process/discrete) — OEE from station telemetry
+- [Semiconductor](/industries/manufacturing-process/semiconductor) — trace a yield excursion to one tool
+- [Pharma](/industries/manufacturing-process/pharma) — exact batch records and upstream genealogy
+
+## Transport & logistics
+
+- [Rail](/industries/transport-logistics/rail) — is the line still connected after a closure?
+- [Maritime](/industries/transport-logistics/maritime) — a reefer cold-chain alarm mid-ocean
+- [Airports](/industries/transport-logistics/airports) — catch a turnaround slipping before the slot is lost
+- [Ports](/industries/transport-logistics/ports) — crane productivity and yard congestion
+- [Last-mile delivery](/industries/transport-logistics/last-mile) — hit delivery windows
+- [Retail replenishment](/industries/transport-logistics/retail) — per-region demand, segmented by dataset
+- [Aerospace fleet](/industries/transport-logistics/aerospace) — a suspect part's blast radius across the fleet
+- [Supply chain](/industries/transport-logistics/supply-chain) — trace a recall downstream from a bad lot
+
+## Financial services
+
+- [Portfolio & risk](/industries/financial-services/portfolio-risk) — exact-decimal metrics and risk-limit events
+- [AML & payments](/industries/financial-services/aml) — expand a flagged payment into its ring
+- [Insurance fraud](/industries/financial-services/insurance-fraud) — expand a claim into its fraud ring
+
+## Healthcare
+
+- [Hospital operations](/industries/healthcare/hospital-operations) — a live capacity wall-board before a ward overflows
+- [Medical-device fleet](/industries/healthcare/medical-devices) — device availability and fast recall tracing
+- [Patient flow](/industries/healthcare/patient-flow) — find the bottleneck stage in the patient journey
+- [Pharmacy cold chain](/industries/healthcare/cold-chain) — protect temperature-sensitive stock
+
+## Mining & metals
+
+- [Mining operations](/industries/mining-metals/operations) — equipment uptime and true throughput against plan
+- [Processing plant](/industries/mining-metals/processing-plant) — protect metal recovery at the mill
+- [Tailings dam safety](/industries/mining-metals/tailings-safety) — trigger-based monitoring of a high-consequence dam
+
+## Agriculture & food
+
+- [Precision farming](/industries/agriculture-food/precision-farming) — drone imagery alongside soil sensors
+- [Salmon farming](/industries/agriculture-food/salmon-farming) — catch an oxygen crash in time to aerate
+
+## Technology & operations
+
+- [Observability (IT ops)](/industries/technology-operations/observability) — alert on an SLO breach the instant it happens
+- [Network performance](/industries/technology-operations/network) — localize degradation to shared backhaul
+- [Data centers](/industries/technology-operations/data-centers) — catch a thermal problem before racks throttle
+
+## Built environment
+
+- [Construction](/industries/built-environment/construction) — drawings and permits tied to the site
+- [Smart buildings](/industries/built-environment/smart-buildings) — flag a stuffy zone before the complaints
+
+## Going deeper
+
+The [Advanced scenarios (AI)](/advanced/machine-learning-gently) take these further into real
+algorithms — forecasting, classification, clustering and anomaly detection. **No
+data-science background needed:** start with
+[Machine learning, gently](/advanced/machine-learning-gently) for the ideas in plain
+language, then [Generate sample data](/advanced/generate-sample-data) for a sandbox to
+run them against. To clean and feature-engineer data while keeping every step traceable,
+see [Data pipeline & lineage](/advanced/data-cleaning-lineage). The models below are
+grouped by what they *do*.
+
+### Detect & monitor condition
+
+Learn what healthy looks like, then surface the drift.
+
+- [Predictive maintenance](/advanced/predictive-maintenance) — flag a machine drifting from its healthy vibration signature *(~1–2 hr)*
+- [Asset health scoring](/advanced/asset-health-score) — one composite health index from many signals *(~20–30 min)*
+- [LSTM anomaly detection](/advanced/lstm-anomaly-detection) — catch a multivariate event from the joint pattern *(~2 hr)*
+- [Process monitoring with PCA](/advanced/pca-process-monitoring) — spot a break in many sensors' normal relationship *(~1–1.5 hr)*
+
+### Forecast & predict ahead
+
+Predict what's coming while there's still time to act.
+
+- [Demand forecasting](/advanced/demand-forecasting) — forecast load or sales with gradient boosting *(~1 hr)*
+- [LSTM forecasting](/advanced/lstm-forecasting) — forecast a decline curve with a neural network *(~2 hr)*
+- [Early warning](/advanced/oxygen-crash-early-warning) — predict a salmon-pen oxygen crash before it happens *(~1 hr)*
+- [Failure prediction with XGBoost](/advanced/xgboost-failure-prediction) — predict an ESP failure a week out, with feature importance *(~1–2 hr)*
+
+### Classify, cluster & infer
+
+Label, group or estimate from features.
+
+- [Fraud classification](/advanced/fraud-classification) — graph features + a model to rank fraud/AML alerts *(~1–2 hr)*
+- [K-Means clustering](/advanced/kmeans-clustering) — discover operating regimes, asset cohorts and network communities *(~1–1.5 hr)*
+- [Soft sensor with Random Forest](/advanced/random-forest-soft-sensor) — infer a lab quality from cheap sensors *(~1 hr)*

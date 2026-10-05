@@ -1,0 +1,154 @@
+---
+sidebar_position: 7
+title: Work with units of measure
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Work with units of measure
+
+Units are shared reference data: `temperature_deg_c`, `pressure_bar`, `mass_flow_rate_kghr`.
+Tagging a time series with a unit makes its values self-describing: a chart can label its
+axis, and a consumer knows that `248.6` is bar, not psi. Browse the catalogue, then
+reference a unit by its external id when you create a series.
+
+## Browse the catalogue
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+client.units().list().getItems().forEach(u ->
+    System.out.println(u.getExternalId() + "  " + u.getName() + "  (" + u.getSymbol() + ")  -  " + u.getQuantity()));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+for u in client.units.list():
+    print(u.external_id, u.name, u.symbol, "-", u.quantity)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+for u in api.units.list().await?.get_items() {
+    println!("{}  {}  ({})  -  {}", u.external_id, u.name, u.symbol, u.quantity);
+}
+```
+
+</TabItem>
+</Tabs>
+
+## Tag a series with a unit
+
+A series carries two unit fields. `unit` is free text of at most 64 characters, the label a
+chart shows (`bar`, `°C`). `unitExternalId` is the catalogue key (`pressure_bar`); set it when a
+consumer should be able to resolve the unit's symbol, quantity and conversion. A create needs at
+least one of them:
+
+| You send | Result |
+| --- | --- |
+| `unitExternalId` only | Accepted if the catalogue has it; `unit` is filled from the entry's symbol (its name if it has no symbol). |
+| `unit` and `unitExternalId` | Both kept as sent, as long as the catalogue has the `unitExternalId`. |
+| `unit` only | Accepted as is; the catalogue is not consulted. |
+| A blank `unitExternalId`, or one the catalogue does not have | `400`, with a field error on `unitExternalId`, whether or not `unit` is set. |
+| Neither | `400`. |
+
+The lookup normalises the id to lower snake_case first, so `Temperature_Deg_C` finds
+`temperature_deg_c`. An update that sets `unitExternalId` is checked the same way before
+anything is written; clearing it with `setNull` is still allowed. The unit leaves the value type
+alone (the Python and Rust examples set `float`); it describes what the numbers mean.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+var series = new Timeseries();
+series.setExternalId("wellhead_pressure_bar");
+series.setName("Wellhead pressure");
+series.setUnit("bar");
+series.setUnitExternalId("pressure_bar");
+client.timeseries().create(series);
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import intellistream_datahub_sdk
+
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(
+    external_id="wellhead_pressure_bar",
+    name="Wellhead pressure",
+    unit="bar",
+    unit_external_id="pressure_bar",
+    value_type="float")])        # Python's default is bigint
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use intellistream_datahub_sdk::timeseries::TimeSeries;
+
+let mut ts = TimeSeries::new("wellhead_pressure_bar", "Wellhead pressure");
+ts.unit = Some("bar".into());
+ts.unit_external_id = Some("pressure_bar".into());
+ts.set_value_type("float");
+api.time_series.create_one(&ts).await?;
+```
+
+</TabItem>
+</Tabs>
+
+## Look up a specific unit
+
+Resolve a unit you already know, by external id, or by numeric id.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+`byIds` takes `IdCollection`, by external id or by numeric id:
+
+```java
+UnitModel celsius = client.units().byIds(List.of(
+        IdCollection.createFromExternalId("temperature_deg_c"))).getItems().get(0);
+UnitModel byId = client.units().byIds(List.of(
+        IdCollection.createFromId(7))).getItems().get(0);
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import intellistream_datahub_sdk
+
+celsius = client.units.by_external_id("temperature_deg_c")
+by_id = client.units.by_ids([intellistream_datahub_sdk.IdCollection(id=7)])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use intellistream_datahub_sdk::generic::{DataWrapper, IdAndExtId};
+
+let celsius = api.units.by_external_id("temperature_deg_c").await?;
+let by_id = api.units.by_ids(&DataWrapper::from(vec![IdAndExtId::from_id(7)])).await?;
+```
+
+</TabItem>
+</Tabs>
+
+:::note Unit external ids are `<quantity>_<unit>` in snake_case
+The seeded unit catalogue names each unit by its quantity and symbol: `temperature_deg_c` for
+degrees Celsius, `pressure_bar` for bar, `mass_flow_rate_kghr` for kilograms per hour. Browse
+the catalogue to find the exact id. That is a property of the catalogue, not a rule about
+external ids in general: the ones *you* create are
+[stored exactly as you send them](/reference/external-ids).
+:::
+
+See the [Units reference](/reference/units) for the full method list.

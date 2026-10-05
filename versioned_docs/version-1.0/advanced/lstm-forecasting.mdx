@@ -1,0 +1,188 @@
+---
+sidebar_position: 6
+title: Sequence forecasting with an LSTM
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Sequence forecasting with an LSTM
+
+:::info At a glance
+**Effort:** ~2 hours · **You'll build:** a sliding-window sequence model that learns
+temporal dynamics directly · **Stack:** the SDK for data in/out, plus `numpy`, `pandas`,
+`scikit-learn` (scaling) and `tensorflow`/`keras`.
+:::
+
+The [gradient-boosted forecaster](/advanced/demand-forecasting) predicts from
+hand-engineered lag features. An **LSTM** takes a different route: it reads the raw
+sequence and *learns* the temporal structure itself, useful when the dynamics are
+non-linear and the right lags aren't obvious, like an oil well's production decline,
+where rate, pressure and water-cut interact over time.
+
+We'll forecast a well's oil rate, but the pattern is the same for any signal with memory.
+
+:::info Needs a sandbox
+These steps read a series that already exists. [Generate a sandbox](/advanced/generate-sample-data)
+first, section B ingests the decline curve this build forecasts.
+:::
+
+:::tip New to machine learning?
+No background needed. Skim the [gentle primer](/advanced/machine-learning-gently) for the
+ideas in plain language, model, feature, training, and the algorithm itself.
+:::
+
+## 1. Load the history
+
+Pull a long, regularly-sampled history and scale it, neural nets train best on values
+in a small range.
+
+<Tabs groupId="lang">
+<TabItem value="python" label="Python">
+
+```python
+import intellistream_datahub_sdk, numpy as np, pandas as pd
+from sklearn.preprocessing import MinMaxScaler
+
+client = intellistream_datahub_sdk.DataHubClient.from_env()
+
+rf = intellistream_datahub_sdk.RetrieveFilter(
+    ts="well_a12_oil_rate_bpd",
+    start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=730),
+    end=pd.Timestamp.now(tz="UTC"),
+    aggregates=["avg"], granularity="1d", limit=100_000)
+pts = client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()
+
+rate = pd.Series([float(p.average) for p in pts],
+                 index=pd.to_datetime([p.timestamp for p in pts], utc=True)).sort_index().asfreq("1d").interpolate()
+
+scaler = MinMaxScaler()
+scaled = scaler.fit_transform(rate.to_numpy().reshape(-1, 1))
+```
+
+</TabItem>
+<TabItem value="java" label="Java">
+
+```java
+// Java pulls the same daily history; the model below is Python.
+var filter = new RetrieveFilter();
+filter.setExternalId("well_a12_oil_rate_bpd");
+filter.setStart(ZonedDateTime.now().minusDays(730));
+filter.setEnd(ZonedDateTime.now());
+filter.setAggregates(List.of("avg"));
+filter.setGranularity("1d");
+filter.setLimit(100000);
+
+var request = new DataRetriever<RetrieveFilter>();
+request.setItems(List.of(filter));
+var points = client.timeseries().retrieve(request).getItems().get(0).getDatapoints();
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+// Rust pulls the same daily history; the model below is Python.
+use intellistream_datahub_sdk::generic::{DataWrapper, RetrieveFilter};
+use chrono::Utc;
+
+let filter = RetrieveFilter {
+    external_id: Some("well_a12_oil_rate_bpd".into()),
+    start: Some(Utc::now() - chrono::Duration::days(730)),
+    end: Some(Utc::now()),
+    aggregates: Some(vec!["avg".into()]),
+    granularity: Some("1d".into()),
+    limit: Some(100_000),
+    ..Default::default()
+};
+let page = api.time_series
+    .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?;
+let series = &page.get_items()[0];
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Frame it as input window → forecast horizon
+
+An LSTM learns "given the last `LOOKBACK` days, what do the next `HORIZON` days look
+like?". Slice the series into overlapping pairs: each input is `LOOKBACK` days, each
+target is the whole `HORIZON` that follows. Predicting the horizon in **one shot** (rather
+than one day at a time, feeding each prediction back in) avoids the error build-up that
+makes recursive forecasts drift off the trend.
+
+```python
+LOOKBACK, HORIZON = 90, 90
+
+def windows(arr, lookback, horizon):
+    X = np.stack([arr[i:i+lookback, 0]         for i in range(len(arr) - lookback - horizon)])
+    Y = np.stack([arr[i+lookback:i+lookback+horizon, 0] for i in range(len(arr) - lookback - horizon)])
+    return X[..., None], Y          # X: (samples, LOOKBACK, 1), Y: (samples, HORIZON)
+
+X, Y = windows(scaled, LOOKBACK, HORIZON)
+split = int(len(X) * 0.85)
+Xtr, Xte, Ytr, Yte = X[:split], X[split:], Y[:split], Y[split:]
+```
+
+## 3. Train the LSTM
+
+A single LSTM layer feeding a dense layer with one output *per horizon step* learns the
+whole forecast at once.
+
+```python
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense
+from tensorflow.keras.callbacks import EarlyStopping
+
+model = Sequential([LSTM(64, input_shape=(LOOKBACK, 1)), Dense(HORIZON)])
+model.compile(optimizer="adam", loss="mse")
+model.fit(Xtr, Ytr, validation_data=(Xte, Yte),
+          epochs=60, batch_size=32,
+          callbacks=[EarlyStopping(patience=8, restore_best_weights=True)], verbose=0)
+```
+
+## 4. Forecast the horizon and write it back
+
+The model outputs the whole horizon in a single call, feed it the most recent
+`LOOKBACK` days, inverse-scale the result, and publish it as its own series.
+
+```python
+pred = model.predict(scaled[-LOOKBACK:].reshape(1, LOOKBACK, 1), verbose=0)
+forecast = scaler.inverse_transform(pred.reshape(-1, 1)).ravel()
+index = pd.date_range(rate.index[-1] + pd.Timedelta(days=1), periods=HORIZON, freq="1d")
+
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(
+    external_id="well_a12_oil_rate_forecast", name="Well A-12 oil-rate forecast", unit="bpd", value_type="float")])
+client.timeseries.insert_from_lists(
+    timestamps=index, values=forecast, ts="well_a12_oil_rate_forecast")
+
+# read the horizon back: one point per forecast day
+stored = client.timeseries.retrieve_datapoints(intellistream_datahub_sdk.RetrieveFilter(
+    ts="well_a12_oil_rate_forecast",
+    start=index[0], end=index[-1] + pd.Timedelta(minutes=1), limit=1000))[0].get_datapoints()
+print(f"{len(stored)} forecast days stored")
+assert len(stored) == HORIZON, f"expected {HORIZON}, got {len(stored)}"
+```
+
+The decline curve is now a stored series, chart it against actuals, and a
+[threshold rule](/guides/detect-events) on it flags when the well is forecast to drop
+below its economic limit.
+
+## Where to take it further
+
+- **Go multivariate.** Feed rate, tubing pressure and water-cut together (input shape
+  `(N, 3)`) so the model uses their interaction, usually a big accuracy gain.
+- **Encoder–decoder.** For long horizons, a seq2seq LSTM decodes the horizon internally,
+  more expressive than a single dense layer when the forecast shape is complex.
+- **Quantiles.** Train with a pinball loss for a P10/P90 band, not just a point forecast.
+
+## Further reading
+
+- **LSTM**: [Wikipedia](https://en.wikipedia.org/wiki/Long_short-term_memory) · [Keras](https://keras.io/api/layers/recurrent_layers/lstm/)
+- **Recurrent neural networks**: [Wikipedia](https://en.wikipedia.org/wiki/Recurrent_neural_network)
+- **Decline curve analysis** (the domain), [Wikipedia](https://en.wikipedia.org/wiki/Decline_curve_analysis)
+
+## See also
+
+- [Demand forecasting](/advanced/demand-forecasting): the feature-based alternative.
+- [Oil & gas, production monitoring](/industries/oil-and-gas/production): the domain this serves.
+- [Turn readings into events](/guides/detect-events): alerting on the forecast.

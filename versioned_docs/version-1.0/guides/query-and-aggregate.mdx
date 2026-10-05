@@ -1,0 +1,234 @@
+---
+sidebar_position: 2
+title: Query & aggregate time series
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Query & aggregate time series
+
+Read raw datapoints back for a window, then roll them up to fixed buckets
+(hourly averages, daily maxima) for a chart or report. Aggregates and the bucket
+size are part of the retrieve filter, no separate endpoint.
+
+:::info Needs a sandbox
+This guide reads data it does not create. [Seed a sandbox](/guides/seed-a-sandbox) writes it
+in one go.
+:::
+
+## Raw datapoints for a window
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+import java.time.ZonedDateTime;
+
+var filter = new RetrieveFilter();
+filter.setExternalId("engine_temperature");
+filter.setStart(ZonedDateTime.now().minusDays(1));
+filter.setEnd(ZonedDateTime.now());
+filter.setLimit(10_000);
+
+var request = new DataRetriever<RetrieveFilter>();
+request.setItems(List.of(filter));
+
+client.timeseries().retrieve(request).getItems().forEach(series ->
+    series.getDatapoints().forEach(p ->
+        System.out.println(p.getTimestamp() + " = " + p.getValue())));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import intellistream_datahub_sdk, pandas as pd
+
+rf = intellistream_datahub_sdk.RetrieveFilter(
+    ts="engine_temperature",
+    start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=1),
+    end=pd.Timestamp.now(tz="UTC"),
+    limit=10_000)
+
+for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
+    print(dp.timestamp, dp.value)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use chrono::Utc;
+use intellistream_datahub_sdk::generic::{DataWrapper, RetrieveFilter};
+
+let filter = RetrieveFilter {
+    external_id: Some("engine_temperature".into()),
+    start: Some(Utc::now() - chrono::Duration::days(1)),
+    end: Some(Utc::now()),
+    limit: Some(10_000),
+    ..Default::default()
+};
+let result = api.time_series.retrieve_datapoints(&DataWrapper::from(vec![filter])).await?;
+for series in result.get_items() {
+    for p in &series.datapoints {
+        println!("{} = {:?}", p.timestamp, p.value);     // value is Option<f64>
+    }
+}
+```
+
+</TabItem>
+</Tabs>
+
+## Hourly averages
+
+Set `aggregates` and `granularity` and the server returns one value per bucket.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+var filter = new RetrieveFilter();
+filter.setExternalId("engine_temperature");
+filter.setStart(ZonedDateTime.now().minusDays(1));
+filter.setEnd(ZonedDateTime.now());
+filter.setAggregates(List.of("avg", "max"));
+filter.setGranularity("1h");
+
+var request = new DataRetriever<RetrieveFilter>();
+request.setItems(List.of(filter));
+
+// NOTE: Java can't read aggregate values yet — getValue() returns null here (see warning below)
+client.timeseries().retrieve(request).getItems()
+    .forEach(s -> s.getDatapoints().forEach(p ->
+        System.out.println(p.getTimestamp() + " = " + p.getValue())));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+rf = intellistream_datahub_sdk.RetrieveFilter(
+    ts="engine_temperature",
+    start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=1),
+    end=pd.Timestamp.now(tz="UTC"),
+    aggregates=["avg", "max"],
+    granularity="1h")
+
+for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
+    print(dp.timestamp, dp.average, dp.max)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use chrono::Utc;
+
+let filter = RetrieveFilter {
+    external_id: Some("engine_temperature".into()),
+    start: Some(Utc::now() - chrono::Duration::days(1)),
+    end: Some(Utc::now()),
+    aggregates: Some(vec!["avg".into(), "max".into()]),
+    granularity: Some("1h".into()),
+    ..Default::default()
+};
+let result = api.time_series.retrieve_datapoints(&DataWrapper::from(vec![filter])).await?;
+for series in result.get_items() {
+    for p in &series.datapoints {
+        println!("{} avg={:?} max={:?}", p.timestamp, p.average, p.max);
+    }
+}
+```
+
+</TabItem>
+</Tabs>
+
+:::note The aggregates and granularities
+The aggregates are `avg`, `sum`, `min` and `max`, lower-case; a name outside that set is
+dropped, not rejected. Granularity is a number plus a unit: `s`, `m`, `h`, `d`, `w`, `mo`, `y`,
+or the words `sec`, `min`, `hour`, `day`, `week`, `month`, `year` and their plurals (`30s`,
+`5m`, `1h`, `1d`). Bare `m` is a minute; a month is `mo`. The Python and Rust datapoint types
+expose each requested aggregate as its own field: `min`/`max`/`sum` by name, and `avg` read
+back on `.average` (`dp.average`, `dp.max`, …).
+[Retrieve datapoints →](/reference/timeseries#retrieve-datapoints)
+:::
+
+:::warning Java aggregate reads
+The Java client does **not** expose aggregate values yet: `getValue()` returns `null`
+for aggregated datapoints (the server sends `avg`/`max`/… as named fields, but the Java
+datapoint type carries only `timestamp`/`value`). For now use **Python or Rust** for
+aggregates, or in Java, fetch raw datapoints and aggregate them in your application.
+:::
+
+## Paging large windows
+
+A wide window can exceed one response. Each returned collection carries a `nextCursor` when
+there is more (`getNextCursor()` in Java, `next_cursor` in Python and Rust); pass it back as
+`cursor` to fetch the next page.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+String cursor = null;
+do {
+    var filter = new RetrieveFilter();
+    filter.setExternalId("engine_temperature");
+    filter.setStart(start);
+    filter.setEnd(end);
+    filter.setCursor(cursor);
+
+    var request = new DataRetriever<RetrieveFilter>();
+    request.setItems(List.of(filter));
+
+    var page = client.timeseries().retrieve(request).getItems().get(0);
+    page.getDatapoints().forEach(p -> handle(p));
+    cursor = page.getNextCursor();
+} while (cursor != null);
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+end = pd.Timestamp.now(tz="UTC")
+start = end - pd.Timedelta(days=1)
+cursor = None
+while True:
+    rf = intellistream_datahub_sdk.RetrieveFilter(ts="engine_temperature",
+                                    start=start, end=end, cursor=cursor)
+    page = client.timeseries.retrieve_datapoints(rf)[0]
+    for dp in page.get_datapoints():
+        handle(dp)
+    cursor = page.next_cursor
+    if not cursor:
+        break
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use chrono::Utc;
+
+let (start, end) = (Utc::now() - chrono::Duration::days(1), Utc::now());
+let mut cursor: Option<String> = None;
+loop {
+    let filter = RetrieveFilter {
+        external_id: Some("engine_temperature".into()),
+        start: Some(start),
+        end: Some(end),
+        cursor: cursor.clone(),
+        ..Default::default()
+    };
+    let result = api.time_series
+        .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?;
+    let page = &result.get_items()[0];
+    for p in &page.datapoints { handle(p); }
+    cursor = page.next_cursor.clone();
+    if cursor.is_none() { break; }
+}
+```
+
+</TabItem>
+</Tabs>

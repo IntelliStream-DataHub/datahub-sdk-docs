@@ -1,0 +1,151 @@
+---
+sidebar_position: 1
+title: Oil & gas — drilling operations
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Oil & gas — drilling operations
+
+**The problem.** Drilling a well is the most dangerous and expensive phase of upstream
+oil & gas. A **kick** — formation fluid pushing into the wellbore — can escalate to a
+blowout in minutes if it isn't caught; a **stuck pipe** can cost millions and lose the
+well. The signature is in the data the rig already streams: when mud flowing *out*
+starts to exceed mud pumped *in*, and the pit volume creeps up, a kick is developing.
+The driller needs that flagged the instant it starts, not after the trip tank confirms
+it.
+
+What we solve here is catching a well-control event in its first seconds, while it can
+still be shut in safely.
+
+## Set up demo data
+
+New workspace? Run this once (Python) to create the rig's series, **create the
+subscription before we listen**, and feed in five minutes of flow that ends in a
+developing kick — so the loop below has something real to catch. Safe to re-run.
+
+```python
+import intellistream_datahub_sdk, numpy as np, pandas as pd
+
+client = intellistream_datahub_sdk.DataHubClient.from_env()
+
+channels = ["rig_dw1_flow_in_gpm", "rig_dw1_flow_out_gpm", "rig_dw1_pit_volume_bbl"]
+units = {"rig_dw1_flow_in_gpm": "gpm", "rig_dw1_flow_out_gpm": "gpm", "rig_dw1_pit_volume_bbl": "bbl"}
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id=c, name=c, unit=units[c], value_type="float")
+                          for c in channels])
+
+# the subscription — created up front, before the listen loop in step 1
+client.subscriptions.create([intellistream_datahub_sdk.Subscription(
+    external_id="rig_deepwater_1", name="Rig Deepwater 1", timeseries=channels)])
+
+idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=300, freq="1s")
+flow_out = np.full(300, 600.0); flow_out[-60:] += np.linspace(0, 25, 60)   # kick: flow-out climbs
+pit      = np.full(300, 120.0); pit[-60:] += np.linspace(0, 4, 60)         # pit volume rises
+client.timeseries.insert_from_lists(timestamps=idx, values=np.full(300, 600.0), ts="rig_dw1_flow_in_gpm")
+client.timeseries.insert_from_lists(timestamps=idx, values=flow_out, ts="rig_dw1_flow_out_gpm")
+client.timeseries.insert_from_lists(timestamps=idx, values=pit, ts="rig_dw1_pit_volume_bbl")
+```
+
+## 1. Stream the drilling signals live
+
+Weight-on-bit, standpipe pressure, and mud flow in/out stream from the rig into a
+subscription. The moment flow-out runs ahead of flow-in while pit volume rises, raise a
+`kick_detected` alarm. See [Consume live data](/guides/realtime-subscriptions).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+import ai.intellistream.datahub.sdk.subscriptions.SubscriptionMessage;
+
+try (var stream = client.subscriptions().listen(List.of("rig_deepwater_1"))
+        .stream((SubscriptionMessage msg) -> {   // auto-acks after each message
+            if (influxDetected(msg.payload())) {       // flow_out > flow_in & pit rising
+                EventModel kick = new EventModel();
+                kick.setExternalId("kick_detected_a12_" + System.currentTimeMillis());
+                kick.setType("kick_detected");
+                kick.setStatus("critical");
+                kick.setMetadata(Map.of("well", "well_a12", "rig", "rig_deepwater_1",
+                                        "flow_delta_gpm", "18"));
+                kick.setEventTime(ZonedDateTime.now());
+                client.events().create(List.of(kick));
+            }
+        })) {
+    awaitShutdown();   // your app lifecycle; closing the stream ends delivery
+}
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+with client.subscriptions.listen(["rig_deepwater_1"]) as listener:
+    for msg in listener:
+        if influx_detected(msg.payload):           # flow_out > flow_in & pit rising
+            client.events.create([intellistream_datahub_sdk.Event(
+                external_id=f"kick_detected_a12_{int(pd.Timestamp.now().timestamp())}",
+                type="kick_detected", status="critical",
+                event_time=pd.Timestamp.now(tz="UTC"),
+                metadata={"well": "well_a12", "rig": "rig_deepwater_1", "flow_delta_gpm": "18"})])
+        listener.ack([msg.message_id])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use intellistream_datahub_sdk::events::Event;
+use chrono::Utc;
+
+let mut listener = api.subscriptions.listen(&["rig_deepwater_1"]).await?;
+while let Some(Ok(msg)) = listener.next().await {
+    if influx_detected(&msg.payload) {             // flow_out > flow_in & pit rising
+        let mut kick = Event::new(
+            format!("kick_detected_a12_{}", Utc::now().timestamp()),
+            "kick_detected".into(),
+            Utc::now());
+        kick.status = Some("critical".into());
+        kick.add_metadata("well".into(), "well_a12".into());
+        kick.add_metadata("rig".into(), "rig_deepwater_1".into());
+        kick.add_metadata("flow_delta_gpm".into(), "18".into());
+        api.events.create(&vec![kick]).await?;
+    }
+    listener.ack(&[msg.message_id.as_str()]).await?;
+}
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Learn the drilling state, not just one signal
+
+A kick rarely shows in any single channel — it's the *pattern* across flow, pressure
+and pit volume over a few seconds that gives it away. A model that watches all the
+drilling signals together as a sequence catches it earlier and with fewer false alarms
+than a per-channel threshold. That's exactly what the
+[LSTM anomaly detector](/advanced/lstm-anomaly-detection) does.
+
+## 3. Cut non-productive time
+
+Rate-of-penetration, torque and connection times are series per well section; daily
+roll-ups surface the formations and crews where non-productive time accumulates, the
+single biggest controllable cost in a drilling programme. See
+[Query & aggregate](/guides/query-and-aggregate).
+
+## See the result
+
+Run the setup, then the loop above. The demo kick (flow-out climbing past flow-in) trips
+the detector and a `kick_detected` event lands — confirm it:
+
+```python
+hits = client.events.filter(type="kick_detected", limit=5)
+for e in hits:
+    print(e.external_id, "→", e.status)
+# kick_detected_a12_1751…  → critical
+```
+
+## See also
+
+- [Consume live data](/guides/realtime-subscriptions) — the well-control monitoring loop.
+- **[LSTM anomaly detection (advanced)](/advanced/lstm-anomaly-detection)** — catch a kick from the multivariate signal pattern.
+- [Oil & gas — production monitoring](/industries/oil-and-gas/production) — once the well is producing.
