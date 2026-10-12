@@ -254,7 +254,7 @@ shorter answer. The request is a read, so send it again.
 | Read limit | Value |
 | --- | --- |
 | Rows per request | None. An item without a `limit` returns every point in its window, streamed as it is read, so bound a long series with `end` |
-| An item's `limit` | At most 100 000, the retrieve body's own ceiling; leave it out to read more of one series |
+| An item's `limit` | At most 100 000, the retrieve body's own ceiling; leave it out, or send `null`, to read more of one series |
 | The request's top-level `limit`, if given | The request's total: items' limits adding up to more is a `400`, and the items without one share what is left |
 | Rows per frame | 100 000 numeric, 10 000 `text` or `mixed`, 50 000 aggregate |
 

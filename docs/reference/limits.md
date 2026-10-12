@@ -128,7 +128,7 @@ is read. What it does check, before the first byte:
 
 | Read cap | Value | Answered with |
 | --- | --- | --- |
-| An item's `limit` | at most 100 000, the retrieve body's own; leave it out to read more | `400` |
+| An item's `limit` | at most 100 000, the retrieve body's own; leave it out, or send `null`, to read more | `400` |
 | The request's `limit`, if given | the request's total | `400` when the items' limits add up to more |
 | Rows per aggregate frame | 50 000 | |
 
