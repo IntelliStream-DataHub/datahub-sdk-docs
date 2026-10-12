@@ -132,6 +132,9 @@ is read. What it does check, before the first byte:
 | The request's `limit`, if given | the request's total | `400` when the items' limits add up to more |
 | Rows per aggregate frame | 50 000 | |
 
+A read's answer posted back to `POST /timeseries/data/binary` is held to the request caps above,
+so split it at frame boundaries.
+
 The `400`s mean the producer is wrong and the `413`s mean split; only the `429` clears by
 waiting. The full list of reasons, and the retry rules, are on
 [Binary datapoint frames](./binary-datapoints#responses).

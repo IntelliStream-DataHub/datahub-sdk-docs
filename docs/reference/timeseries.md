@@ -876,6 +876,17 @@ server could not finish throws a `DatahubApiException` with status `0` rather th
 fewer points, and is safe to send again.
 `DatapointFrame.parseResponse(byte[], PayloadCodec)` parses a response body you fetched yourself.
 
+The frames hold the Arrow record batches as the database compressed them, each buffer zstd
+in-band, relayed by the server untouched and decompressed by the SDK; a frame holds as many
+whole batches as fit under its row cap, so most hold fewer rows than the cap. The frames write
+back as they are, to the same or another instance, in as many requests as the
+[caps](./limits#binary-frames) need; aggregate frames are refused:
+
+```java
+List<DatapointFrame> frames = source.timeseries().retrieveBinary(request);
+target.timeseries().ingestFrames(frames);
+```
+
 ### Latest datapoint {#latest-datapoints}
 
 `POST /timeseries/data/latest` returns the most recent point of each named series, by id or
