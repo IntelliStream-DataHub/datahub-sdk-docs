@@ -235,7 +235,7 @@ path: compressing harder does not stretch the allowance.
 | `Content-Type` | `application/json`: a `DataRetriever` of `RetrieveFilter` items, each with `start` or `end` |
 | `Accept` | `application/vnd.intellistream.datapoint-block, application/problem+json`, so a refusal comes back as a problem document |
 | Success | `200`, `application/vnd.intellistream.datapoint-block`: zero or more frames back to back, then the 4-byte end marker, the ASCII bytes `DHDE`. Nothing follows the marker. |
-| Failure | Before the first byte: a `400` problem document (invalid filter, over the row budget, a `cursor`, aggregates of a `text` series, or a series that is unknown or unreadable unless `ignoreUnknownIds` is set), or a `500` on a server failure. After that, the body just ends early. |
+| Failure | Before the first byte: a `400` problem document (invalid filter, items' limits over the request's `limit`, a `cursor`, aggregates of a `text` series, or a series that is unknown or unreadable unless `ignoreUnknownIds` is set), or a `500` on a server failure. After that, the body just ends early. |
 
 **A body without `DHDE` was cut short**, inside a frame or between two, and is an error, not a
 shorter answer. The request is a read, so send it again.
@@ -245,7 +245,7 @@ shorter answer. The request is a read, so send it again.
   relying on it.
 - A series with no points in its window sends no frame, so a body of `DHDE` alone is valid.
 - Rows are sorted by timestamp, oldest first, and each item returns at most its `limit` from
-  `start`. A point sent twice is read once.
+  `start`, or every point in its window when it has none. A point sent twice is read once.
 - Values come in [value frames](#schemas) (codec `1`, the series' canonical schema, as on ingest);
   an item with `aggregates` and a `granularity` in [aggregate frames](#aggregate-schema) (codec `2`).
 - There is no cursor, and a `cursor` in an item is a `400`. To read on, send the request again with
@@ -253,9 +253,9 @@ shorter answer. The request is a read, so send it again.
 
 | Read limit | Value |
 | --- | --- |
-| Rows per request, all items together | 1 000 000, or the request's top-level `limit` if lower |
-| An item without a `limit` | An even share of what the explicit limits leave, at most 100 000 |
-| Explicit limits adding up to more than the budget | `400` |
+| Rows per request | None. An item without a `limit` returns every point in its window, streamed as it is read, so bound a long series with `end` |
+| An item's `limit` | At most 100 000, the retrieve body's own ceiling; leave it out to read more of one series |
+| The request's top-level `limit`, if given | The request's total: items' limits adding up to more is a `400`, and the items without one share what is left |
 | Rows per frame | 100 000 numeric, 10 000 `text` or `mixed`, 50 000 aggregate |
 
 ## Producing frames from pyarrow {#pyarrow}

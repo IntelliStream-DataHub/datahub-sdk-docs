@@ -122,13 +122,14 @@ and nothing of the request was inserted:
 | Binary requests validated at once, per API instance | deployment policy | `429`, `too-many-in-flight`, `Retry-After: 1` |
 
 [`POST /timeseries/data/list/binary`](./binary-datapoints#reading) answers a read in the same
-frames, under the same per-frame caps but not the request caps above. Its own limits are
-checked before the first byte:
+frames, under the same per-frame caps but not the request caps above, and with no cap on the
+rows of a request: an item without a `limit` returns every point in its window, streamed as it
+is read. What it does check, before the first byte:
 
 | Read cap | Value | Answered with |
 | --- | --- | --- |
-| Rows per request, all items together | 1 000 000, or the request's `limit` if lower | `400` when the items' explicit limits add up to more |
-| Rows for an item without a `limit` | an even share of what the explicit limits leave, at most 100 000 | |
+| An item's `limit` | at most 100 000, the retrieve body's own; leave it out to read more | `400` |
+| The request's `limit`, if given | the request's total | `400` when the items' limits add up to more |
 | Rows per aggregate frame | 50 000 | |
 
 The `400`s mean the producer is wrong and the `413`s mean split; only the `429` clears by

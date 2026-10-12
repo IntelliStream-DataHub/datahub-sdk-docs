@@ -842,7 +842,7 @@ binary read yet; use `retrieve_datapoints`.
 
 | | `retrieve` | `retrieveBinary` |
 | --- | --- | --- |
-| Rows per request | `limit` per item, at most 100 000 | 1 000 000 across all items, or the request's `limit` if lower |
+| Rows per request | `limit` per item, at most 100 000 | no cap: an item without a `limit` returns its whole window |
 | Paging | `cursor` | none: resend with `start` one millisecond past the last timestamp |
 | Aggregates | those named in `aggregates` | `avg`, `min`, `max` and `sum` always, as `Float64`; not for `text` series |
 
@@ -870,8 +870,10 @@ System.out.println(points + " points");
 
 Frames come in the order of the request's items, one series may span several, and
 `externalIds()` and `seriesIds()` name the series in a frame. A series with no points in its
-window has no frame. A response the server could not finish throws a `DatahubApiException` with
-status `0` rather than returning fewer points, and is safe to send again.
+window has no frame. The whole answer is held in memory before the first frame is returned, so
+bound a long series with `end` or a `limit` and read it in several requests. A response the
+server could not finish throws a `DatahubApiException` with status `0` rather than returning
+fewer points, and is safe to send again.
 `DatapointFrame.parseResponse(byte[], PayloadCodec)` parses a response body you fetched yourself.
 
 ### Latest datapoint {#latest-datapoints}
