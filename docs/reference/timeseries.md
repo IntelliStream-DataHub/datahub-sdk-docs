@@ -615,7 +615,9 @@ instead of JSON. Values are parsed, sorted and de-duplicated on the client, and 
 carries a million points or more, so it is the path for sustained volume. The JSON path stays
 right for modest volume and for the [durable spool](./client#durable-ingest-buffering), which does
 not apply here. Python has it on the synchronous `DataHubClient` only; `AsyncDataHubClient` does
-not.
+not. Java sends its frames at [compression `2`](./binary-datapoints#payload), each Arrow buffer
+zstd in-band, the form a read answers with, so a platform older than 1.1 refuses them; Python and
+Rust send compression `1`.
 
 | | JSON (`ingest`, `insert_datapoints`) | Binary (`ingestBinary`, `insert_datapoints_binary`) |
 | --- | --- | --- |

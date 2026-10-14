@@ -80,15 +80,16 @@ marker, with nothing after it. Little-endian throughout. It is compressed one of
 envelope's byte 7 saying which:
 
 - **Compression `1`**: the whole stream is one zstd frame, and the record batches inside carry
-  their buffers uncompressed. What the SDKs send.
+  their buffers uncompressed. What the Rust and Python SDKs send.
 - **Compression `2`**: the stream is carried as it is, and every record batch compresses its
   buffers in-band, Arrow's body compression with codec `ZSTD` and method `BUFFER`. Each
   non-empty buffer is then its uncompressed length as an `int64`, followed by the zstd stream,
   or `-1` followed by the bytes as they are; an empty buffer stays empty. The envelope's
   decompressed length is the bodies' total with every buffer uncompressed, each padded to 8
   bytes. This is what pyarrow writes with `IpcWriteOptions(compression="zstd")` and reads
-  without being told, what arrow-rs reads with its `zstd` feature, and what a
-  [read](#reading) answers with, relayed from the database as it compressed them.
+  without being told, what arrow-rs reads with its `zstd` feature, what a
+  [read](#reading) answers with, relayed from the database as it compressed them, and what the
+  Java SDK sends.
 
 The stream is read by a minimal codec that accepts exactly the subset a plain writer emits and
 refuses the rest, with the `reason` on the right:
