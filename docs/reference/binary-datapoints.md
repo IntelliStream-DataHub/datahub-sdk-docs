@@ -1,29 +1,31 @@
 ---
 sidebar_position: 4.5
 title: Binary datapoint frames
-description: The wire format of POST /timeseries/data/binary, the high-throughput datapoint insert, for anyone producing frames outside the SDKs.
+description: The wire format of POST /timeseries/data/binary and POST /timeseries/data/list/binary, the high-throughput datapoint insert and read, for anyone producing or reading frames outside the SDKs.
 ---
 
 # Binary datapoint frames
 
 `POST /timeseries/data/binary` is the high-throughput form of
 [`POST /timeseries/data`](./timeseries#write-datapoints). The body is one or more
-**datapoint frames**: a 28-byte envelope, a directory of the series in the frame, and a
-zstd-compressed Arrow IPC stream in one canonical schema per value type, rows sorted by series
-and timestamp. Nothing is parsed as text, so a request carries up to a million points in a few
-megabytes.
+**datapoint frames**: a 28-byte envelope, a directory of the series in the frame, and an Arrow
+IPC stream in one canonical schema per value type, zstd-compressed whole or buffer by buffer,
+rows sorted by series and timestamp. Nothing is parsed as text, so a request carries up to a
+million points in a few megabytes. [`POST /timeseries/data/list/binary`](#reading) answers a
+read in the same frames, and its answer is a valid body to post back.
 
 The SDKs build frames for you, see [binary ingest](./timeseries#binary-ingest): `ingestBinary` in
 Java, `insert_datapoints_binary` in Rust and in Python's synchronous client. This page is the
 byte-level contract for everyone else: a producer with pyarrow or arrow-rs, or a gateway
-forwarding frames it did not build.
+forwarding frames it did not build. Java reads them with `retrieveBinary`, see
+[binary read](./timeseries#binary-read).
 
 | | |
 | --- | --- |
 | Method and path | `POST /timeseries/data/binary` |
 | `Content-Type` | `application/vnd.intellistream.datapoint-block` |
 | `Content-Encoding` | None (or `identity`). Compression lives inside each frame; any other body-level encoding is a `415`. |
-| Body | One or more frames back to back, the last ending exactly at the end of the body. |
+| Body | One or more frames back to back, the last ending exactly at the end of the body, or followed by a read's `DHDE` end marker, so a read's answer posts back as it is. |
 | Success | `204`, no body. Every frame in the request was validated and published. |
 | Failure | An [`application/problem+json`](#responses) document, and **nothing** was inserted. |
 
@@ -36,17 +38,17 @@ All integers are little-endian.
 | 0 | 4 | Magic, the ASCII bytes `DHDP`. |
 | 4 | 1 | Version, `1`. |
 | 5 | 1 | Value type id: `1` bigint, `2` float, `3` numeric, `4` text, `5` decimal32, `6` mixed, `7` float32. |
-| 6 | 1 | Codec, `1` = Arrow IPC stream. `0` is reserved. |
-| 7 | 1 | Compression, `1` = zstd. Required: `0` is refused with `uncompressed-frame`. |
+| 6 | 1 | Codec, `1` = Arrow IPC stream. `2` = Arrow IPC stream of [aggregates](#aggregate-schema), sent by reads only; ingest refuses it with `unsupported-codec`. `0` is reserved. |
+| 7 | 1 | Compression: `1` = zstd on the whole payload, `2` = zstd on each Arrow buffer in-band, see [the payload](#payload). Required: `0` is refused with `uncompressed-frame`. |
 | 8 | 4 | `u32` row count, at least 1. |
 | 12 | 4 | `u32` series count, the number of distinct series ids in the payload. |
 | 16 | 4 | `u32` directory length in bytes. |
 | 20 | 4 | `u32` payload length in bytes, as carried (compressed). |
-| 24 | 4 | `u32` payload length in bytes after decompression. |
+| 24 | 4 | `u32` decompressed length in bytes: at compression `1` the whole payload, at `2` the record batch bodies with every buffer uncompressed. |
 | 28 | | The [directory](#directory), then the [payload](#payload). |
 
-The zstd level is the sender's choice. The API decompresses the payload into exactly the
-declared number of bytes, and a stream that ends early or runs long is refused.
+The zstd level is the sender's choice. The API decompresses into exactly the declared number of
+bytes, and a stream or a buffer that ends early or runs long is refused.
 
 ## The directory {#directory}
 
@@ -73,8 +75,21 @@ alone. See [access control](./datasets#access-control).
 
 ## The payload {#payload}
 
-One zstd frame containing one Arrow IPC **stream**: one schema message, one or more record
-batches, and the end-of-stream marker, with nothing after it. Little-endian throughout.
+One Arrow IPC **stream**: one schema message, one or more record batches, and the end-of-stream
+marker, with nothing after it. Little-endian throughout. It is compressed one of two ways, the
+envelope's byte 7 saying which:
+
+- **Compression `1`**: the whole stream is one zstd frame, and the record batches inside carry
+  their buffers uncompressed. What the Rust and Python SDKs send.
+- **Compression `2`**: the stream is carried as it is, and every record batch compresses its
+  buffers in-band, Arrow's body compression with codec `ZSTD` and method `BUFFER`. Each
+  non-empty buffer is then its uncompressed length as an `int64`, followed by the zstd stream,
+  or `-1` followed by the bytes as they are; an empty buffer stays empty. The envelope's
+  decompressed length is the bodies' total with every buffer uncompressed, each padded to 8
+  bytes. This is what pyarrow writes with `IpcWriteOptions(compression="zstd")` and reads
+  without being told, what arrow-rs reads with its `zstd` feature, what a
+  [read](#reading) answers with, relayed from the database as it compressed them, and what the
+  Java SDK sends.
 
 The stream is read by a minimal codec that accepts exactly the subset a plain writer emits and
 refuses the rest, with the `reason` on the right:
@@ -84,7 +99,7 @@ refuses the rest, with the `reason` on the right:
 | Every message uses the continuation-marker framing (`0xFFFFFFFF`, then the metadata length), metadata version V4 or newer. | `payload-invalid` |
 | Exactly one schema message, before any record batch, with no body. | `payload-invalid` |
 | The schema matches the [canon](#schemas) for the frame's value type: field count, names, types with their parameters, nullability; no dictionary encoding, no children. Custom metadata is ignored. | `schema-mismatch` |
-| No dictionary batches; record batch bodies are not compressed in-band; no variadic buffers. | `payload-invalid` |
+| No dictionary batches; no variadic buffers. Record batch bodies are compressed in-band at compression `2`, every batch, with zstd by buffer, and not at `1`. | `payload-invalid` |
 | Buffers lie inside the body, 8-byte aligned; a non-nullable field declares zero nulls; `Utf8` offsets never decrease or run past the data. | `payload-invalid` |
 | Nothing after the end-of-stream marker. | `trailing-bytes` |
 | The rows of all batches add up to the envelope's row count. | `row-count-mismatch` |
@@ -120,6 +135,22 @@ be 128-bit with exactly that precision and scale. These are the storage types, w
 server casts nothing on the way in. See [value types](./timeseries#value-types) for which type
 to give a series.
 
+### Aggregate frames {#aggregate-schema}
+
+A read item with `aggregates` and a `granularity` is answered with codec `2`. The value type byte
+is still the series' type, but the schema is the same for every type, all fields non-nullable:
+
+| Field | Arrow type | Meaning |
+| --- | --- | --- |
+| `timeseries_id` | `Int64` | The series. |
+| `timestamp` | `Timestamp(MILLISECOND, "UTC")` | The bucket start. |
+| `avg` | `Float64` | Time-weighted average. |
+| `min`, `max`, `sum` | `Float64` | In that order. |
+
+All four aggregates are present whatever `aggregates` named. There is one row per bucket that
+holds a point. A `text` series has no aggregates (`400`), and a `mixed` series aggregates its
+numeric values only.
+
 ## Caps {#caps}
 
 Fixed in the format, not deployment policy, except the last row:
@@ -128,6 +159,7 @@ Fixed in the format, not deployment policy, except the last row:
 | --- | --- | --- |
 | Rows per frame, numeric types | 100 000 | `400 row-count-mismatch` |
 | Rows per frame, `text` or `mixed` | 10 000 | `400 row-count-mismatch` |
+| Rows per aggregate frame (reads only) | 50 000 | |
 | Series per frame | 10 000 | `400 directory-invalid` |
 | External id in the directory | 1 024 bytes | `400 directory-invalid` |
 | Text value | 64 characters and 256 bytes | `400 value-invalid` |
@@ -139,6 +171,10 @@ Fixed in the format, not deployment policy, except the last row:
 A frame is published as one message, so the 4 MiB keeps it under the broker's limit with room
 to spare. 100 000 float points are about 2.4 MB decompressed and a few hundred KB compressed, so
 a full frame is comfortably inside it; a producer only needs to split on the row cap.
+
+A [read](#reading) answers in frames within the same per-frame caps, but the request caps (32
+frames, 64 MiB) do not apply to its response. To post an answer back, split it at frame
+boundaries so each request stays under them.
 
 ## Responses {#responses}
 
@@ -203,6 +239,47 @@ Quotas are charged after validation, so a refused request costs nothing. The
 [`ingested bytes`](./limits#daily-ingest-quotas) quota counts **decompressed** bytes on this
 path: compressing harder does not stretch the allowance.
 
+## Reading frames {#reading}
+
+`POST /timeseries/data/list/binary` takes the same JSON body as
+[`POST /timeseries/data/list`](./timeseries#retrieve-datapoints) and answers in frames.
+
+| | |
+| --- | --- |
+| Method and path | `POST /timeseries/data/list/binary` |
+| `Content-Type` | `application/json`: a `DataRetriever` of `RetrieveFilter` items, each with `start` or `end` |
+| `Accept` | `application/vnd.intellistream.datapoint-block, application/problem+json`, so a refusal comes back as a problem document |
+| Success | `200`, `application/vnd.intellistream.datapoint-block`: zero or more frames back to back, at compression `2`, then the 4-byte end marker, the ASCII bytes `DHDE`. Nothing follows the marker. |
+| Failure | Before the first byte: a `400` problem document (invalid filter, items' limits over the request's `limit`, a `cursor`, aggregates of a `text` series, or a series that is unknown or unreadable unless `ignoreUnknownIds` is set), or a `500` on a server failure. After that, the body just ends early. |
+
+**A body without `DHDE` was cut short**, inside a frame or between two, and is an error, not a
+shorter answer. The request is a read, so send it again.
+
+- Frames come in the order of `items`, and one series' rows may span several consecutive frames.
+  The server currently puts one series in each frame; read the [directory](#directory) rather than
+  relying on it.
+- The frames carry the Arrow record batches as the database compressed them, each buffer zstd
+  in-band (compression `2`), relayed without being decoded on the way; the reader decompresses.
+  A frame holds as many whole batches as fit under its row cap, so most hold fewer rows than
+  the cap: never expect full frames.
+- The answer, end marker included, is a valid body for `POST /timeseries/data/binary` as long
+  as it holds no aggregate frame and stays under the request caps, split at frame boundaries if
+  not. Java's `ingestFrames` does that.
+- A series with no points in its window sends no frame, so a body of `DHDE` alone is valid.
+- Rows are sorted by timestamp, oldest first, and each item returns at most its `limit` from
+  `start`, or every point in its window when it has none. A point sent twice is read once.
+- Values come in [value frames](#schemas) (codec `1`, the series' canonical schema, as on ingest);
+  an item with `aggregates` and a `granularity` in [aggregate frames](#aggregate-schema) (codec `2`).
+- There is no cursor, and a `cursor` in an item is a `400`. To read on, send the request again with
+  `start` one millisecond past the last timestamp you got.
+
+| Read limit | Value |
+| --- | --- |
+| Rows per request | None. An item without a `limit` returns every point in its window, streamed as it is read, so bound a long series with `end` |
+| An item's `limit` | At most 100 000, the retrieve body's own ceiling; leave it out, or send `null`, to read more of one series |
+| The request's top-level `limit`, if given | The request's total: items' limits adding up to more is a `400`, and the items without one share what is left |
+| Rows per frame | At most 100 000 numeric, 10 000 `text` or `mixed`, 50 000 aggregate; whole database blocks, so usually fewer |
+
 ## Producing frames from pyarrow {#pyarrow}
 
 :::info Needs a sandbox
@@ -210,10 +287,11 @@ The example writes into `engine_temperature`, which section **A** of
 [Seed a sandbox](/guides/seed-a-sandbox) creates.
 :::
 
-An IPC stream written by pyarrow or arrow-rs with the schema above, no in-band compression and
-no dictionary encoding is exactly what the codec accepts. What is left is the envelope and the
-zstd wrap. The example resolves the series, picks the schema its value type calls for, writes an
-hour of readings and reads them back:
+An IPC stream written by pyarrow or arrow-rs with the schema above and no dictionary encoding is
+exactly what the codec accepts. What is left is the envelope and the zstd wrap, or compression
+`2` with pyarrow's `IpcWriteOptions(compression="zstd")` and no wrap. The example takes the
+first way: it resolves the series, picks the schema its value type calls for, writes an hour of
+readings and reads them back:
 
 ```python
 import struct
@@ -242,7 +320,7 @@ table = pa.table({
 
 # 3. The IPC stream, then zstd around it.
 sink = pa.BufferOutputStream()
-with ipc.new_stream(sink, schema) as writer:          # default options: no in-band compression
+with ipc.new_stream(sink, schema) as writer:          # default options: no in-band compression, so compression 1
     writer.write_table(table)
 raw = sink.getvalue().to_pybytes()
 payload = zstandard.ZstdCompressor(level=9).compress(raw)
@@ -295,3 +373,37 @@ let body: Vec<u8> = writer.build(9)?.bytes;        // zstd level; one frame, rea
 
 `build` refuses a frame over the [caps](#caps). Check `is_full_for(id)` before each `add` and
 start a new writer when it says so; frames go in one body back to back.
+
+## Reading frames with pyarrow {#pyarrow-read}
+
+This reads back the hour the example above wrote, frame by frame, and checks the end marker.
+The read answers at compression `2`, which pyarrow undoes by itself; the outer zstd step is for
+frames from elsewhere:
+
+```python
+import struct
+import pyarrow.ipc as ipc, requests, zstandard
+
+r = requests.post(f"{BASE}/timeseries/data/list/binary", headers={
+        **HEADERS, "Accept": "application/vnd.intellistream.datapoint-block, application/problem+json"},
+    json={"items": [{"externalId": "engine_temperature", "start": t0,
+                     "end": t0 + rows * 1000, "limit": 10_000}]})
+assert r.status_code == 200, r.text
+body, pos, total = r.content, 0, 0
+while body[pos:pos + 4] != b"DHDE":
+    if pos + 28 > len(body):
+        raise IOError("response cut short; send the request again")
+    magic, version, type_id, codec, compression, n_rows, n_series, dir_len, pay_len, raw_len = \
+        struct.unpack_from("<4sBBBBIIIII", body, pos)
+    if pos + 28 + dir_len + pay_len > len(body):
+        raise IOError("response cut short; send the request again")
+    payload = body[pos + 28 + dir_len : pos + 28 + dir_len + pay_len]
+    if compression == 1:                       # the whole stream zstd-wrapped
+        payload = zstandard.ZstdDecompressor().decompress(payload, max_output_size=raw_len)
+    table = ipc.open_stream(payload).read_all()   # compression 2: the buffers decompress in pyarrow
+    total += table.num_rows                    # codec 1: timeseries_id, timestamp, value
+    pos += 28 + dir_len + pay_len
+assert pos + 4 == len(body), "bytes after the end marker"
+print(total, "readings in the hour")
+assert total == 3600, total
+```

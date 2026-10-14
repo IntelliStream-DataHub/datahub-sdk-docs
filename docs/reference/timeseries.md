@@ -615,7 +615,9 @@ instead of JSON. Values are parsed, sorted and de-duplicated on the client, and 
 carries a million points or more, so it is the path for sustained volume. The JSON path stays
 right for modest volume and for the [durable spool](./client#durable-ingest-buffering), which does
 not apply here. Python has it on the synchronous `DataHubClient` only; `AsyncDataHubClient` does
-not.
+not. Java sends its frames at [compression `2`](./binary-datapoints#payload), each Arrow buffer
+zstd in-band, the form a read answers with, so a platform older than 1.1 refuses them; Python and
+Rust send compression `1`.
 
 | | JSON (`ingest`, `insert_datapoints`) | Binary (`ingestBinary`, `insert_datapoints_binary`) |
 | --- | --- | --- |
@@ -833,6 +835,60 @@ for c in points.get_items() {
 </TabItem>
 </Tabs>
 
+### Binary read {#binary-read}
+
+`retrieveBinary` in Java sends the same `DataRetriever` as `retrieve` to
+[`POST /timeseries/data/list/binary`](./binary-datapoints#reading) and gets the points back as
+Arrow frames, so a large read costs no JSON and no object per point. Python and Rust have no
+binary read yet; use `retrieve_datapoints`.
+
+| | `retrieve` | `retrieveBinary` |
+| --- | --- | --- |
+| Rows per request | `limit` per item, at most 100 000 | no cap: an item without a `limit` returns its whole window |
+| Paging | `cursor` | none: resend with `start` one millisecond past the last timestamp |
+| Aggregates | those named in `aggregates` | `avg`, `min`, `max` and `sum` always, as `Float64`; not for `text` series |
+
+```java
+import ai.intellistream.datahub.api.binary.DatapointFrame;
+
+RetrieveFilter series = new RetrieveFilter();
+series.setExternalId("engine_temperature");
+series.setStart(ZonedDateTime.now().minusHours(1));
+series.setLimit(100_000);
+
+DataRetriever<RetrieveFilter> request = new DataRetriever<>();
+request.setItems(List.of(series));
+
+long points = 0;
+for (DatapointFrame frame : client.timeseries().retrieveBinary(request)) {
+    for (int row = 0; row < frame.rowCount(); row++) {
+        long timestamp = frame.timestamp(row);           // epoch millis
+        String value = frame.valueAsString(row);         // frame.avg(row) etc. when frame.aggregates()
+    }
+    points += frame.rowCount();
+}
+System.out.println(points + " points");
+```
+
+Frames come in the order of the request's items, one series may span several, and
+`externalIds()` and `seriesIds()` name the series in a frame. A series with no points in its
+window has no frame. The whole answer is held in memory before the first frame is returned, so
+bound a long series with `end` or a `limit` and read it in several requests. A response the
+server could not finish throws a `DatahubApiException` with status `0` rather than returning
+fewer points, and is safe to send again.
+`DatapointFrame.parseResponse(byte[], PayloadCodec)` parses a response body you fetched yourself.
+
+The frames hold the Arrow record batches as the database compressed them, each buffer zstd
+in-band, relayed by the server untouched and decompressed by the SDK; a frame holds as many
+whole batches as fit under its row cap, so most hold fewer rows than the cap. The frames write
+back as they are, to the same or another instance, in as many requests as the
+[caps](./limits#binary-frames) need; aggregate frames are refused:
+
+```java
+List<DatapointFrame> frames = source.timeseries().retrieveBinary(request);
+target.timeseries().ingestFrames(frames);
+```
+
 ### Latest datapoint {#latest-datapoints}
 
 `POST /timeseries/data/latest` returns the most recent point of each named series, by id or
@@ -978,6 +1034,7 @@ if (!result.isComplete()) {
 | [Binary ingest](#binary-ingest) | `ingestBinary` / `binaryBuffer` | `insert_datapoints_binary` / `insert_from_lists_binary`, synchronous client only | `insert_datapoints_binary` |
 | Create a `float32`, `numeric`, `decimal32` or `mixed` series | `setValueType` | no, see [value types](#value-types) | `set_value_type` |
 | Read datapoints (raw and [aggregated](#retrieve-datapoints)) | `retrieve` / `retrieveAggregated` | `retrieve_datapoints` | `retrieve_datapoints` |
+| [Binary read](#binary-read) | `retrieveBinary` | no | no |
 | [Latest datapoint](#latest-datapoints) | `timeseries().latest` | `retrieve_latest_datapoints` | `retrieve_latest_datapoint` |
 | Delete datapoints | `deleteDatapoints` | `timeseries.delete_datapoints` | `time_series.delete_datapoints` |
 | [Live datapoint tail](./subscriptions#live-tail) | — | `timeseries.listen_datapoints` | `time_series.listen_datapoints` |
@@ -985,6 +1042,7 @@ if (!result.isComplete()) {
 Java is the one with `ingest`, the chunking, parallelising, retrying path described above, and
 with `binaryBuffer`. Python and Rust chunk and send concurrently too, and retry through the
 durable spool when buffering is on; with it off, the first failed request is the call's error.
-All three have the [binary path](#binary-ingest), Python on its synchronous client only. Python
+All three have the [binary path](#binary-ingest), Python on its synchronous client only; only Java
+has the [binary read](#binary-read). Python
 can create a series of only three [value types](#value-types). Java has no
 [live datapoint tail](./subscriptions#live-tail); use `subscriptions().listen` there.
