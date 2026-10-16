@@ -166,9 +166,11 @@ A wide window can exceed one response. Each returned collection carries a `nextC
 there is more (`getNextCursor()` in Java, `next_cursor` in Python and Rust); pass it back as
 `cursor` to fetch the next page.
 
-For a very large read in Java, [`retrieveBinary`](../reference/timeseries.md#binary-read) returns
-the points as Arrow frames, every point in the window when an item has no `limit`. It has no
-cursor: resend with `start` one millisecond past the last timestamp.
+For a very large read, the [binary read](../reference/timeseries.md#binary-read) returns the
+points as Arrow frames, every point in the window when an item has no `limit`: `retrieveBinary`
+in Java, `retrieve_datapoints_binary` in Python and Rust. In Python it converts straight to a
+polars DataFrame, and Python and Rust can also stream it as it arrives. It has no cursor: resend
+with `start` one millisecond past the last timestamp.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
