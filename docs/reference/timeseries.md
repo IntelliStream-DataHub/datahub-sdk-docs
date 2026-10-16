@@ -615,9 +615,14 @@ instead of JSON. Values are parsed, sorted and de-duplicated on the client, and 
 carries a million points or more, so it is the path for sustained volume. The JSON path stays
 right for modest volume and for the [durable spool](./client#durable-ingest-buffering), which does
 not apply here. Python has it on the synchronous `DataHubClient` only; `AsyncDataHubClient` does
-not. Java sends its frames at [compression `2`](./binary-datapoints#payload), each Arrow buffer
-zstd in-band, the form a read answers with, so a platform older than 1.1 refuses them; Python and
-Rust send compression `1`.
+not. All three send their frames at [compression `2`](./binary-datapoints#payload), each Arrow
+buffer zstd in-band, the form a read answers with, which the platform stores without
+decompressing; a platform older than 1.1 refuses them. Python and Rust can send compression `1`,
+one zstd stream around the whole payload, with `compression="payload"` or
+`FrameCompression::Payload`. The server stores the same points either way.
+
+Python and Rust also take a table straight from Arrow: `insert_dataframe_binary` in Python,
+`insert_table_binary` in Rust, below.
 
 | | JSON (`ingest`, `insert_datapoints`) | Binary (`ingestBinary`, `insert_datapoints_binary`) |
 | --- | --- | --- |
@@ -669,13 +674,49 @@ client.timeseries.insert_datapoints_binary([
         [intellistream_datahub_sdk.DatapointString(now, "1500")], ts="engine_rpm"),
 ])
 
-# or from arrays, tuned: zstd level 1, 3 or 9 (default 9; the client pays for it)
+# or from arrays, tuned: zstd level 1, 3 or 9 (default 3; the client pays for it)
 client.timeseries.insert_from_lists_binary(
     timestamps=[now], values=[92.4], ts="engine_temperature", zstd_level=3)
 ```
 
-Both run on the Rust implementation, so they check and retry as the Rust tab describes and raise
-`DataHubException` where Rust returns an error. `zstd_level` is the only option Python passes.
+`insert_dataframe_binary` takes a whole table: a polars or pandas DataFrame (pandas 2.2 or
+later), a pyarrow Table, or anything else with `__arrow_c_stream__`, read without copying. Every
+column but the timestamp is a series, named by its external id, and it returns the number of
+points sent:
+
+```python
+import polars as pl
+
+frame = pl.DataFrame({
+    "timestamp": pl.datetime_range(now, now + pd.Timedelta(seconds=2), "1s",
+                                   time_unit="ms", eager=True),
+    "engine_temperature": [92.4, 92.6, 92.5],
+    "engine_rpm":         [1500.0, None, 1510.0],   # null: no point at that timestamp
+})
+sent = client.timeseries.insert_dataframe_binary(frame)   # 5
+```
+
+- **The timestamp.** Name it with `timestamp=`. Without it, the SDK takes the pandas index when it
+  is a timestamp, then a column named `timestamp`, then the only timestamp-typed column. It has
+  to carry a time zone and whole milliseconds, or be `Int64` epoch milliseconds.
+- **Gaps.** A null is no point at that timestamp, so a ragged table works. pandas exports `NaN`
+  as null; polars keeps `NaN`, which is then stored as a value.
+- **Order.** Rows need not be sorted, and a timestamp repeated within a series keeps its last
+  value.
+- **Refusals**, before anything is sent: 404 naming a column that is not a series you can read,
+  422 for a naive or sub-millisecond timestamp or a column its series cannot hold (a float
+  column for a `bigint` series, say). A `mixed` series takes a numeric column as numbers and a
+  string column as text.
+- **Size.** 100 million float points from polars took about 3 seconds, against about 75 through
+  `insert_from_lists_binary`. A table larger than one request is not atomic: a refusal can leave
+  the earlier requests stored.
+
+`to_polars(wide=True)` on a [binary read](#binary-read) gives back exactly this shape, so a read
+writes straight back.
+
+All three run on the Rust implementation, so they check and retry as the Rust tab describes and
+raise `DataHubException` where Rust returns an error. Each takes `zstd_level` and `compression`
+(`"buffers"`, the default, or `"payload"`).
 
 </TabItem>
 <TabItem value="rust" label="Rust">
@@ -701,10 +742,35 @@ api.time_series
     .insert_datapoints_binary(&by_external_id, &BinaryIngestOptions::default())
     .await?;
 
-// or tuned: zstd level 1, 3 or 9 (default 9; the client pays for it)
+// or tuned: zstd level 1, 3 or 9 (default 3; the client pays for it)
 api.time_series
     .insert_datapoints_binary(&by_external_id, &BinaryIngestOptions::new().zstd_level(3))
     .await?;
+```
+
+`insert_table_binary` takes Arrow record batches instead: a timestamp column and one column per
+series, named by its external id. Columns already in the series' type are sliced rather than
+copied, and nulls, ordering, repeated timestamps and refusals behave as for Python's
+`insert_dataframe_binary`. It needs the `arrow-array` crate at the SDK's version (59):
+
+```rust
+use std::sync::Arc;
+use arrow_array::{ArrayRef, Float64Array, RecordBatch, TimestampMillisecondArray};
+
+let n = 1_000_000;
+let timestamps = TimestampMillisecondArray::from_iter_values(
+    (0..n).map(|i| now.timestamp_millis() + i * 1000))
+    .with_timezone("UTC");                                  // a time zone is required
+let temperature = Float64Array::from_iter_values((0..n).map(|i| 90.0 + (i % 50) as f64 / 10.0));
+let batch = RecordBatch::try_from_iter([
+    ("timestamp", Arc::new(timestamps) as ArrayRef),
+    ("engine_temperature", Arc::new(temperature) as ArrayRef),
+])?;
+
+let sent = api.time_series
+    .insert_table_binary(&[batch], "timestamp", &BinaryIngestOptions::default())
+    .await?;
+println!("{} points in {} frames", sent.points, sent.frames);
 ```
 
 Two things are caught before any request is sent and returned as the error: a series that does
@@ -748,11 +814,13 @@ outcome. `add` takes a `double`, `long` or `String` value, or a `Datapoint`.
 `BinaryIngestOptions.defaults()` returns the defaults. The wire format, caps and every
 `reason` the endpoint answers with are on [Binary datapoint frames](./binary-datapoints).
 
-Rust's `BinaryIngestOptions` has three knobs, each a public field and a builder method of the
-same name: `zstd_level` (default `9`, as above), `max_retries` (`3`, for 429, 5xx and network
-failures) and `request_concurrency` (`4`, requests in flight when a call needs more than one).
-Frames are always compressed in parallel, and the first failed request ends the call, as
-`failFast` would. Python passes `zstd_level` and leaves the other two at their defaults.
+Rust's `BinaryIngestOptions` has four knobs, each a public field and a builder method of the
+same name: `zstd_level` (default `3`; Java's is `9`), `compression` (`FrameCompression::Buffers`,
+compression `2`, or `FrameCompression::Payload`, compression `1`), `max_retries` (`3`, for 429,
+5xx and network failures) and `request_concurrency` (`4`, requests in flight when a call needs
+more than one). Frames are always compressed in parallel, and the first failed request ends the
+call, as `failFast` would. Python passes `zstd_level` and `compression` and leaves the other two
+at their defaults.
 
 ## Retrieve datapoints
 
@@ -837,16 +905,21 @@ for c in points.get_items() {
 
 ### Binary read {#binary-read}
 
-`retrieveBinary` in Java sends the same `DataRetriever` as `retrieve` to
-[`POST /timeseries/data/list/binary`](./binary-datapoints#reading) and gets the points back as
-Arrow frames, so a large read costs no JSON and no object per point. Python and Rust have no
-binary read yet; use `retrieve_datapoints`.
+`retrieveBinary` in Java and `retrieve_datapoints_binary` in Python and Rust send the same
+request as the JSON read to [`POST /timeseries/data/list/binary`](./binary-datapoints#reading)
+and get the points back as Arrow frames, so a large read costs no JSON and no object per point.
+Python has it on the synchronous `DataHubClient` only.
 
-| | `retrieve` | `retrieveBinary` |
+| | JSON read (`retrieve`, `retrieve_datapoints`) | Binary read (`retrieveBinary`, `retrieve_datapoints_binary`) |
 | --- | --- | --- |
 | Rows per request | `limit` per item, at most 100 000 | no cap: an item without a `limit` returns its whole window |
-| Paging | `cursor` | none: resend with `start` one millisecond past the last timestamp |
+| Paging | `cursor` | none: resend with `start` one millisecond past the last timestamp; a `cursor` is a 400 |
+| A series with no points | an empty collection | left out of the answer |
+| A series that does not exist or you cannot read | empty | a 400 for the whole request |
 | Aggregates | those named in `aggregates` | `avg`, `min`, `max` and `sum` always, as `Float64`; not for `text` series |
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
 
 ```java
 import ai.intellistream.datahub.api.binary.DatapointFrame;
@@ -888,6 +961,97 @@ back as they are, to the same or another instance, in as many requests as the
 List<DatapointFrame> frames = source.timeseries().retrieveBinary(request);
 target.timeseries().ingestFrames(frames);
 ```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+`retrieve_datapoints_binary` takes one `RetrieveFilter` or a list and returns a
+`BinaryReadResult`: one `BinaryDatapoints` per series that had points, in the order of the
+request. `to_polars()` makes one table of them all:
+
+```python
+import pandas as pd
+
+last_hour = intellistream_datahub_sdk.RetrieveFilter(
+    ts="engine_temperature",
+    start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=1),
+    end=pd.Timestamp.now(tz="UTC"))     # no limit: every point in the window
+
+result = client.timeseries.retrieve_datapoints_binary(last_hour)
+df = result.to_polars()                 # timeseries_id, timestamp, value: one row per point
+print(f"{df.height} points", result.external_ids)   # {timeseries_id: external_id}
+```
+
+- **`to_polars(wide=False)`**, the default, is one long table: `timeseries_id`, `timestamp` and
+  the value columns. Every series has to share those columns.
+- **`to_polars(wide=True)`** is one row per timestamp and one column per series, named by its
+  external id, with nulls where a series has no point. Series of different value types sit side
+  by side. It is exactly the shape [`insert_dataframe_binary`](#binary-ingest) takes, so a read
+  writes straight back.
+- **Each `BinaryDatapoints`** is an Arrow table of one series, `timestamp` then `value` (or
+  `value_numeric` and `value_text` for `mixed`, or `avg`, `min`, `max` and `sum` for
+  aggregates). polars, pyarrow and pandas 3 take it without copying (`pl.DataFrame(series)`,
+  `pyarrow.table(series)`), and it has `to_polars()` and `to_pandas()`.
+
+polars and pyarrow are optional: they are imported only when you convert. The whole answer is
+held in memory, so for a window too large to hold, or to start on the rows as they arrive, use
+`retrieve_datapoints_binary_stream`. It returns a single-use reader: iterate it for one
+`BinaryDatapoints` per frame, a long series coming as several consecutive parts, or read it as
+one Arrow stream with `to_polars()`.
+
+```python
+reader = client.timeseries.retrieve_datapoints_binary_stream(last_hour)
+points = sum(len(part) for part in reader)
+```
+
+A response that breaks off raises `DataHubException` (502) from the reader **after** the parts
+that arrived, so treat what was already taken as incomplete; `retrieve_datapoints_binary` raises
+before returning anything. Sending the request again is safe either way.
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+`retrieve_datapoints_binary` takes the same `DataWrapper<RetrieveFilter>` as
+`retrieve_datapoints` and returns one `BinaryDatapoints` per series that had points: `timestamps`
+in epoch milliseconds and `values` as a `BinaryValues` of the series' type. Decimals stay exact,
+as unscaled `i128` values and a scale.
+
+```rust
+use chrono::Utc;
+use futures::StreamExt;
+use intellistream_datahub_sdk::generic::{DataWrapper, RetrieveFilter};
+use intellistream_datahub_sdk::timeseries::BinaryValues;
+
+let last_hour = RetrieveFilter {
+    external_id: Some("engine_temperature".into()),
+    start: Some(Utc::now() - chrono::Duration::hours(1)),
+    end: Some(Utc::now()),                           // no limit: every point in the window
+    ..Default::default()
+};
+let request = DataWrapper::from(vec![last_hour]);
+
+for series in api.time_series.retrieve_datapoints_binary(&request).await? {
+    if let BinaryValues::Float(values) = &series.values {
+        println!("{}: {} points, first {}", series.external_id, series.len(), values[0]);
+    }
+}
+
+// or frame by frame, as the response arrives
+let mut stream = api.time_series.stream_datapoints_binary(&request).await?;
+let mut points = 0;
+while let Some(part) = stream.next().await {
+    points += part?.len();     // a long series comes as several consecutive parts
+}
+```
+
+`stream_datapoints_binary` decodes frames on several threads as the body downloads and yields
+them in order. A refusal is its `Err` before there is a stream; a response that breaks off is an
+error item **after** the parts that arrived, so treat those as incomplete. Dropping the stream
+closes the connection. `retrieve_datapoints_binary` collects the stream and joins each series'
+parts, so it is all or nothing.
+
+</TabItem>
+</Tabs>
 
 ### Latest datapoint {#latest-datapoints}
 
@@ -1031,10 +1195,11 @@ if (!result.isComplete()) {
 | Update | `timeseries().update` | `timeseries.update` | `time_series.update` |
 | Delete | `timeseries().delete` | `timeseries.delete` | `time_series.delete` |
 | Write datapoints | `insertDatapoints` / `ingest` | `insert_datapoints` / `insert_from_lists` | `insert_datapoint` / `insert_datapoints` |
-| [Binary ingest](#binary-ingest) | `ingestBinary` / `binaryBuffer` | `insert_datapoints_binary` / `insert_from_lists_binary`, synchronous client only | `insert_datapoints_binary` |
+| [Binary ingest](#binary-ingest) | `ingestBinary` / `binaryBuffer` | `insert_dataframe_binary` / `insert_datapoints_binary` / `insert_from_lists_binary`, synchronous client only | `insert_datapoints_binary` / `insert_table_binary` |
 | Create a `float32`, `numeric`, `decimal32` or `mixed` series | `setValueType` | no, see [value types](#value-types) | `set_value_type` |
 | Read datapoints (raw and [aggregated](#retrieve-datapoints)) | `retrieve` / `retrieveAggregated` | `retrieve_datapoints` | `retrieve_datapoints` |
-| [Binary read](#binary-read) | `retrieveBinary` | no | no |
+| [Binary read](#binary-read) | `retrieveBinary` | `retrieve_datapoints_binary` / `retrieve_datapoints_binary_stream`, synchronous client only | `retrieve_datapoints_binary` / `stream_datapoints_binary` |
+| Write read frames back as they are | `ingestFrames` | no | no |
 | [Latest datapoint](#latest-datapoints) | `timeseries().latest` | `retrieve_latest_datapoints` | `retrieve_latest_datapoint` |
 | Delete datapoints | `deleteDatapoints` | `timeseries.delete_datapoints` | `time_series.delete_datapoints` |
 | [Live datapoint tail](./subscriptions#live-tail) | — | `timeseries.listen_datapoints` | `time_series.listen_datapoints` |
@@ -1042,7 +1207,8 @@ if (!result.isComplete()) {
 Java is the one with `ingest`, the chunking, parallelising, retrying path described above, and
 with `binaryBuffer`. Python and Rust chunk and send concurrently too, and retry through the
 durable spool when buffering is on; with it off, the first failed request is the call's error.
-All three have the [binary path](#binary-ingest), Python on its synchronous client only; only Java
-has the [binary read](#binary-read). Python
+All three have the [binary path](#binary-ingest) and the [binary read](#binary-read), Python on
+its synchronous client only. Only Java posts the frames of a read back as they are; in Python, a
+read's `to_polars(wide=True)` goes back in through `insert_dataframe_binary`. Python
 can create a series of only three [value types](#value-types). Java has no
 [live datapoint tail](./subscriptions#live-tail); use `subscriptions().listen` there.
