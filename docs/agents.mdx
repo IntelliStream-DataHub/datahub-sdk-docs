@@ -1,14 +1,14 @@
 ---
 sidebar_position: 4.5
 title: Agents
-description: A flow that hands your events to a model with the MCP tools, on the flow service - the definition, the agent processor, the transcript endpoint and the attention events it raises.
+description: A flow that hands your events to a model with the MCP tools, on the flow service - the definition, the agent processor, the transcript endpoint and the flagged events it writes.
 ---
 
 # Agents
 
 An agent is a flow on the flow service whose working step is a model: it reads a window of
-events, lets the model act on them with the [MCP tools](./mcp-server), and raises an
-**attention** event when the model decides a person should look. The console's Agents form
+events, lets the model act on them with the [MCP tools](./mcp-server), and writes a
+**flagged** event when the model decides a person should look. The console's Agents form
 builds one; this page is the REST surface behind that form, for anyone driving agents from
 their own code. There are no SDK methods for it.
 
@@ -35,14 +35,14 @@ A flow whose definition has `"kind": "agent"` and whose steps are fixed:
       "properties": { "type": ["error"], "timeField": "createdTime", "excludeSource": ["agent:*"] } },
     { "id": "agent", "type": "agent", "terminate": ["done"],
       "properties": {
-        "instructions": "For each event, look up the related resource and raise attention with a summary.",
+        "instructions": "For each event, look up the related resource and flag it with a summary.",
         "tools": ["event_get", "resource_get", "event_create"] } },
-    { "id": "attention", "type": "write-events",
-      "properties": { "type": "agent", "subType": "attention", "source": "agent:pump_watch" } }
+    { "id": "flagged", "type": "write-events",
+      "properties": { "type": "agent", "subType": "flagged", "source": "agent:pump_watch" } }
   ],
   "connections": [
     { "from": "events", "relationship": "success", "to": "agent" },
-    { "from": "agent", "relationship": "attention", "to": "attention" }
+    { "from": "agent", "relationship": "flagged", "to": "flagged" }
   ],
   "trigger": { "type": "schedule", "cron": "0 */15 * * * *", "timezone": "Europe/Oslo", "delay": "PT1M" },
   "execution": { "maxAttempts": 2, "timeout": "PT20M" }
@@ -72,17 +72,17 @@ Listed by `GET /catalog/processors`, category `agent`.
 | Relationship | Carries | |
 | --- | --- | --- |
 | `done` | The items, when the model finishes with `done`. | May be terminated. |
-| `attention` | One item per run, holding the attention event row. | Must be connected or terminated. |
+| `flagged` | One item per run, holding the flagged event row. | Must be connected or terminated. |
 | `failure` | The items, when the iteration cap or the model's output limit is hit, or the model server fails. | Fails the run when unconnected. |
 
 Each item leaving the step carries `agent.outcome`, `agent.summary`, `agent.iterations`,
 `agent.tokens.input`, `agent.tokens.output` and `agent.toolCalls`.
 
 The model always has a built-in `finish` tool, and calling it is how a run ends. `outcome` is
-`done` or `attention`:
+`done` or `flagged`:
 
 ```json
-{ "outcome": "attention", "summary": "pump_12 raised three errors in a row and its bearing temperature is climbing." }
+{ "outcome": "flagged", "summary": "pump_12 raised three errors in a row and its bearing temperature is climbing." }
 ```
 
 ### Which tools the model gets {#tools}
@@ -169,16 +169,16 @@ A server that does not answer is a `503`, problem type `tools-unavailable`.
 the run's identity can reach. Rows are served from the run store while the run is live and from
 history afterwards, and kept with the run's history, 90 days by default.
 
-## The attention event {#attention-event}
+## The flagged event {#flagged-event}
 
-When the model finishes with `attention`, the `write-events` step writes one event into the
+When the model finishes with `flagged`, the `write-events` step writes one event into the
 flow's data set:
 
 ```json
 {
   "externalId": "agent:pump_watch:<runId>",
   "type": "agent",
-  "subType": "attention",
+  "subType": "flagged",
   "status": "open",
   "source": "agent:pump_watch",
   "eventTime": "<when the run finished>",
@@ -190,7 +190,7 @@ The console dismisses one by writing the same `externalId` with status `dismisse
 ones still open, `POST /events/latest` with:
 
 ```json
-{ "filter": { "type": ["agent"], "subType": ["attention"] }, "status": ["open"] }
+{ "filter": { "type": ["agent"], "subType": ["flagged"] }, "status": ["open"] }
 ```
 
 ## Cost and data {#cost}
