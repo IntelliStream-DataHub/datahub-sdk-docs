@@ -665,8 +665,9 @@ Two responses are worth recognising by shape:
 - **A `warnings` array beside `items` on a `2xx`**: the write succeeded, and the ids in it
   are in a data steward's queue. The field is absent when empty.
 
-Both shapes, and the rules behind them, are in
-[External ids & naming](./external-ids).
+The naming shapes, and the rules behind them, are in
+[External ids & naming](./external-ids); the schema and lifecycle ones in
+[Policies & governance](./policies).
 
 ### Unknown fields are refused {#unknown-fields}
 
