@@ -177,9 +177,8 @@ A data set that does not exist, or a node that is not a data set, is a `400` nam
 delay.
 
 A policy attached to a data set also governs every data set below it in the `BELONGS_TO`
-hierarchy. For naming and lifecycle, the nearest policy wins. Schema policies add up once they are
-enforced, so a node
-is held to the tenant's and every ancestor's.
+hierarchy. For naming and lifecycle, the nearest policy wins. Schema policies add up once they
+are enforced, so a node is held to the tenant's and every ancestor's.
 
 Two active naming policies on the same data set (or two tenant-wide ones), or two lifecycle
 policies there selecting the same data, are refused with a `409` (`.../errors/duplicate`) on
