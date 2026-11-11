@@ -6,9 +6,9 @@ title: Policies & governance
 # Policies & governance
 
 A **policy** is a rule data is held to, and a node in the same graph as resources. Its
-[`kind`](#kinds) says what it is: a naming convention, a partial schema, or a lifecycle. Naming and
-schema policies are enforced on writes; lifecycle policies are stored and validated, and
-enforcement follows.
+[`kind`](#kinds) says what it is: a naming convention, a partial schema, or a lifecycle. All three are
+enforced: naming and schema policies on writes, and lifecycle policies by
+[freezing old data](#freeze) against change and [deleting it](#retention) once it is old enough.
 
 A policy applies where it is [attached](#attachment): to the data sets in its `enforcedOn` and
 every data set below them, or, attached to none, to the whole tenant.
@@ -58,7 +58,7 @@ Only `NAMING_CONVENTION` is enforced; the others record intent. The catalogue pr
 | --- | --- | --- |
 | `NAMING` | `metadata` | The [naming convention](./external-ids#the-naming-policy). A create with no `kind` and `metadata.kind: "naming"` is one too. Enforced. |
 | `SCHEMA` | `schema` | What nodes of one type label must or should carry. [Enforced](#schema-enforcement). |
-| `LIFECYCLE` | `lifecycle` | When data freezes and when it is deleted. Stored and validated, not enforced yet. |
+| `LIFECYCLE` | `lifecycle` | When data freezes and when it is deleted. [Freeze](#freeze) enforced on writes, [retention](#retention) by a nightly sweep. |
 | none | `metadata` | A legacy policy, recorded and not enforced. |
 
 A `SCHEMA` policy, here "a car must have a number of seats":
@@ -101,7 +101,8 @@ A `LIFECYCLE` policy:
 ```
 
 `dataKinds` is any of `DATAPOINTS`, `EVENTS`, `FILES` and `NODES`; `typeLabel` (`ASSET`,
-`TIMESERIES` or `RESOURCE`) and `labels` narrow it. Ages are ISO-8601 durations of at least
+`TIMESERIES` or `RESOURCE`) and `labels` narrow nodes and datapoints only, so a selector that
+narrows and also lists `EVENTS` or `FILES` is a `400`. Ages are ISO-8601 durations of at least
 `P1D`, measured on the data's own time, and `deleteAfter` is no shorter than `freezeAfter`.
 Data sets and policies are never deleted. A rule that breaks any of this is a `400` naming the
 field, for example `schema.rules[0].field`.
@@ -139,6 +140,103 @@ and an edge that goes with a deleted node is not judged.
   ]
 }
 ```
+
+### Audit what is already stored {#audit}
+
+A write is judged only on what it changes, so data stored before a rule existed is held to it
+only by an audit. `POST /policies/{id}/audit` (no body) judges every node a `SCHEMA` policy
+covers, on every rule: the nodes in its attached data sets and every data set below them, or the
+whole tenant when it is attached to none.
+
+```java
+import ai.intellistream.datahub.models.policy.PolicyAuditResult;
+
+PolicyAuditResult result = client.policies().audit(5677892L);
+System.out.println(result.evaluated() + " judged, " + result.raised() + " raised, "
+        + result.resolved() + " resolved" + (result.truncated() ? ", more remain" : ""));
+```
+
+| Field | Notes |
+| --- | --- |
+| `evaluated` | Nodes judged. |
+| `raised` | Broken rules recorded as open [findings](./events#policy-findings), `MUST` rules broken by older data included. |
+| `resolved` | Open findings closed with a `RESOLVED` event: the node passes now, was deleted, or the rule was removed from the policy. |
+| `truncated` | `true` when the policy covers more nodes than one audit judges (`datahub.policy.audit.max-nodes`, 20 000 by default); the rest wait for the next. |
+
+The audit also runs daily on its own; call it after changing a policy to see the result now.
+Findings are written as events, so they reach `events().filter` seconds after the call returns.
+It needs the same grant as any other policy change. A policy that is not `SCHEMA` is a `400`, one
+that does not exist a `404`.
+
+### How lifecycle freezes data {#freeze}
+
+Data older than `freezeAfter` cannot be changed or deleted. Age is measured on the data's own
+time: a datapoint's timestamp, an event's `eventTime`, a node's or file's creation time.
+
+| Write | Refused when |
+| --- | --- |
+| Node update or delete (assets, time series, resources) | The node is frozen. Deleting a time series is also refused when its datapoints may be frozen, judged on the series' creation time. |
+| Datapoint insert (JSON) | Any point in the batch is older than the cutoff. The whole batch is refused. |
+| Datapoint insert ([binary](./binary-datapoints#responses)) | A frame carries such a point. |
+| [Datapoint delete](./timeseries#delete-datapoints) | The window has no `inclusiveBegin`, or starts before the cutoff. |
+| Event create, update or delete | The event is dated into a frozen period (on update: its old or its new state). |
+| File update or delete | The file is frozen. A folder delete is refused if any file below it is. |
+
+Data sets and policies are never governed by a lifecycle, edges stay mutable, and
+[policy findings](./events#policy-findings) are exempt. A refusal is a `409` and nothing is
+written; `frozen` names what was refused, by external id, or as a series and timestamp:
+
+```json
+{
+  "type": "https://intellistream.ai/errors/frozen-data",
+  "title": "Conflict",
+  "status": 409,
+  "detail": "Datapoints of engine_temperature older than 2026-10-12T00:00:00Z are frozen by a lifecycle policy. Nothing was written.",
+  "frozen": ["engine_temperature@2026-09-01T00:00:00Z"]
+}
+```
+
+The lifecycle that governs a piece of data is the nearest one up the `BELONGS_TO` hierarchy whose
+selector matches it, else the tenant-wide one. Two that match at the same distance combine to
+the shorter freeze and the longer retention, and one without `deleteAfter` keeps data forever.
+
+### How lifecycle deletes data {#retention}
+
+A nightly sweep deletes what is older than `deleteAfter`, per the lifecycle governing it:
+
+- assets, time series and resources, through the ordinary delete. A node still read by a
+  [subscription](./subscriptions), or one whose removal would strand the graph, is skipped and
+  counted;
+- datapoints before the cutoff;
+- events;
+- files, moved to the trash and purged later.
+
+Data sets, policies and functions are never deleted. A policy changed within the activation
+delay (a day by default) is not acted on yet, so a mistyped retention can be fixed first.
+
+`GET /policies/{id}/retention/preview` counts what the sweep would delete now because of this
+policy, deleting nothing. Only data it governs is counted, and a policy inside its activation
+delay previews as nothing.
+
+```java
+import ai.intellistream.datahub.models.policy.RetentionRun;
+
+RetentionRun preview = client.policies().retentionPreview(5677892L);
+System.out.println(preview.nodes() + " nodes, " + preview.events() + " events, sample "
+        + preview.sample());
+```
+
+| Field | Notes |
+| --- | --- |
+| `nodes`, `events`, `files` | How many are past their retention. |
+| `datapointSeries` | Time series whose datapoints before the cutoff go. |
+| `skipped` | Nodes that cannot go: still subscribed, or the only link between others and the graph. |
+| `truncated` | `true` when there is more than one sweep handles; the rest go the next night. |
+| `sample` | External ids of some of the nodes and files. |
+
+It needs the same grant as any other policy change; a policy that is not `LIFECYCLE` is a `400`.
+Each sweep that did something records an event of type
+[`policy_retention_run`](./events#policy-retention-runs) with the same counts.
 
 ## Read, create, update, delete
 
@@ -276,5 +374,7 @@ DataWrapper<GovernanceTemplateDTO> one = client.governance().getTemplateById(12L
 | Update (`POST /policies/update`) | `policies().update` | — | — |
 | Delete (`POST` or `DELETE /policies/delete`) | `policies().delete` | — | — |
 | [Naming dry-run](#naming-check) (`POST /policies/naming/check`) | `policies().checkNaming` | — | — |
+| [Audit a schema policy](#audit) (`POST /policies/{id}/audit`) | `policies().audit` | — | — |
+| [Retention preview](#retention) (`GET /policies/{id}/retention/preview`) | `policies().retentionPreview` | — | — |
 | List governance templates (`GET /governance/templates`) | `governance().listTemplates` | — | — |
 | Get a governance template (`GET /governance/templates/{id}`) | `governance().getTemplateById` | — | — |

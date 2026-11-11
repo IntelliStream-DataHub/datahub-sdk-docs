@@ -132,6 +132,15 @@ and to the model.
 | `dataset_update` | Update one data set by id. Only provided fields change |
 | `dataset_delete` | Delete by id or externalId. Does **not** cascade to members |
 
+### Policies
+
+| Tool | What it does |
+| --- | --- |
+| `policy_list` | Read-only. For an optional `dataSetId`, `typeLabel` and `labels`: the naming convention in force, the schema rules such a node must or should satisfy, and per kind of data the lifecycle's `freezeAfter` and `deleteAfter` |
+
+Call `policy_list` before writing into a data set, so the agent's writes pass the
+[policies](/reference/policies) first time instead of learning them from a `400` or a `409`.
+
 ### Resources
 
 A resource is any node in the graph that is not a data set or a time series: equipment, work

@@ -864,6 +864,10 @@ Each item names one series by `externalId` or `id`, and both window bounds are o
 
 A bound is either ISO-8601 or epoch milliseconds, on the [timestamp rules](#write-datapoints).
 
+Under a lifecycle policy with `freezeAfter`, a window with no `inclusiveBegin`, or one starting
+before the freeze cutoff, is a `409` [`frozen-data`](./policies#freeze) and nothing is deleted.
+Start the window at or after the cutoff.
+
 Like a series delete, this is handed off and completes shortly after the call returns, and it
 cannot be undone.
 

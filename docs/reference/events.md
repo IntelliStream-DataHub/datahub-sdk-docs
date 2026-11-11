@@ -559,8 +559,8 @@ if let Some(cursor) = page.next_cursor() {
 
 ## Policy findings {#policy-findings}
 
-A **policy finding**, a naming-policy violation that was allowed through and recorded for a
-steward, is an ordinary event. There is no findings endpoint and no findings client: they are
+A **policy finding**, a naming or schema policy violation that was allowed through (or found by
+an [audit](./policies#audit)) and recorded for a steward, is an ordinary event. There is no findings endpoint and no findings client: they are
 written to the event store like anything else, so everything on this page already works on
 them.
 
@@ -576,7 +576,7 @@ The encoding is a wire contract, so you can read findings without a policy-aware
 | `description` | What is wrong, in words. |
 | `relatedResources` | The entity the finding is about, by node id. |
 | `dataSetId` | That entity's data set. |
-| `metadata` | `offendingValue`, `suggestion` (when one could be derived), `raisedBy`, and `rule` on a schema finding. |
+| `metadata` | `offendingValue`, `suggestion` (when one could be derived), `raisedBy`, and on a schema finding `rule` and `level` (`MUST` or `SHOULD`). |
 
 Note the external id is keyed on the entity's **node id**, not its external id. The external
 id is the offending value here, the thing a steward is most likely to change, and keying on
@@ -712,6 +712,14 @@ non-conforming value is a new fact and is appended, which is also all "reopening
 For the steward's side of this, how to resolve a finding, what resolving means, and why
 findings are raised for resources but never for events, see
 [Findings](./external-ids#findings).
+
+### Retention runs {#policy-retention-runs}
+
+Each nightly [retention sweep](./policies#retention) that deleted something records one event
+of `type` `policy_retention_run`, `source` `datahub_policy_retention`, and `status` `DONE` (or
+`DRY_RUN` when the sweep only counted). Its `metadata` holds the counts as strings: `nodes`,
+`datapointSeries`, `events`, `files`, `skipped` and `truncated`. Filter on the type to see what
+retention removed after it is gone.
 
 ## Full-text search {#search}
 

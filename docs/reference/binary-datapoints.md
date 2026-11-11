@@ -168,17 +168,18 @@ Every `type` below is prefixed `https://intellistream.ai/errors/`.
 | `404` | `unknown-timeseries` | `unknown-timeseries` | `timeseriesIds` do not exist in this tenant. Re-resolve them. |
 | `413` | `request-too-large` | `frame-too-large`, `too-many-frames`, `request-too-large` | Over a [cap](#caps). Split; a retry as-is never succeeds. A body over the compressed cap is refused before any frame is read, without a `reason`. |
 | `415` | `unsupported-media-type` | `unsupported-content-encoding` | A `Content-Encoding` header. The wrong `Content-Type` is also a `415`, from the framework, without a `reason`. |
+| `409` | `frozen-data` | `frozen` | `timeseriesIds` in `frameIndex` carry datapoints older than a [lifecycle policy's](./policies#freeze) freeze age. Nothing was published; drop those points. |
 | `422` | `value-type-mismatch` | `value-type-mismatch` | `timeseriesIds` in `frameIndex` have another value type than the envelope declares. |
 | `422` | `external-id-mismatch` | `external-id-mismatch` | `timeseriesIds` in `frameIndex` have another external id than the directory says. Drop them from your cache and resolve again. |
 | `429` | `too-many-in-flight` | `too-many-in-flight` | This API instance is already validating its limit of binary requests; `Retry-After` is one second and [`retry`](./client#problem-documents) is `same-request`. |
 | `429` | `rate-limit-exceeded`, `ingest-quota-exceeded` | | The ordinary [rate limit](./limits#rate-limits) or [daily quota](./limits#daily-ingest-quotas), with no `reason`. |
 
-Two of the seven binary types are the API's own rather than this endpoint's: an oversized request
-is `request-too-large` and a rejected `Content-Encoding` is `unsupported-media-type` whichever
-path produced it, so a client that already handles them needs nothing new here. The other five
-are specific to binary frames.
+Three of the eight binary types are the API's own rather than this endpoint's: an oversized
+request is `request-too-large`, a rejected `Content-Encoding` is `unsupported-media-type`, and
+a write to frozen data is `frozen-data` whichever path produced it, so a client that already
+handles them needs nothing new here. The other five are specific to binary frames.
 
-All seven used to be one type, `datapoint-block-rejected`, which therefore answered `400`, `404`,
+All but `frozen-data`, which is newer, used to be one type, `datapoint-block-rejected`, which therefore answered `400`, `404`,
 `413`, `415`, `422` and `429`; RFC 9457 gives a type one status. A client matching on that type
 matches nothing now. `reason` is unchanged, so one matching on `reason` still works.
 
