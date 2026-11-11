@@ -5,13 +5,16 @@ title: Policies & governance
 
 # Policies & governance
 
-A **policy** is a rule a data set is held to: read-only, field masking, a naming convention.
-Each one is an instance of a policy **type**, and each is a node in the same graph as
-resources.
+A **policy** is a rule data is held to, and a node in the same graph as resources. Today one
+kind is enforced: the [naming policy](./external-ids#the-naming-policy). The other
+[types](#types) are recorded and attached, but nothing checks them yet.
 
-A **governance template** describes compliance rules (retention, access restrictions, required
-metadata). Templates are read-only over the API; a policy names one through `templateId`, and
-the template's metadata is merged into the policy.
+A policy applies where it is [attached](#attachment): to the data sets in its `enforcedOn`, or,
+attached to none, to the whole tenant.
+
+A **governance template** is a named set of policy metadata. Templates are read-only over the
+API; a policy names one through `templateId`, and the template's metadata is merged into the
+policy. The policy, not the template, decides what is enforced.
 
 The Java client reaches both through `client.policies()` and `client.governance()`.
 [`datasets().policies()`](./datasets#client-coverage) lists the same catalogue from the data
@@ -43,8 +46,8 @@ DataWrapper<Policy> types = client.policies().listTypes();
 | `HAS_REQUIREMENT` | One data set | Marks a data set that must meet a compliance requirement. |
 | `NAMING_CONVENTION` | Tenant-wide, overridable per data set | Enforces the [external-id naming convention](./external-ids#the-naming-policy) at write time. Applies to resources and data sets; events are exempt. |
 
-Attaching a policy where its type does not allow is refused on create, over the whole batch,
-rather than accepted and quietly enforcing nothing.
+Only `NAMING_CONVENTION` is enforced; the others record intent. Attaching a policy where its
+type does not allow is refused on create, over the whole batch.
 
 ## Read, create, update, delete
 
@@ -53,18 +56,25 @@ DataWrapper<Policy> some = client.policies().list(100);
 DataWrapper<Policy> one = client.policies().getById(5677892L);
 
 Policy readOnly = new Policy();
-readOnly.setName("IS_WRITE_PROTECTED");             // the type it instantiates
+readOnly.setName("Oslo read only");
 readOnly.setExternalId("plant_oslo_read_only");     // optional
+readOnly.setEnforcedOn(List.of(                     // optional; leave out for tenant-wide
+        IdCollection.createFromExternalId("plant_oslo")));
 client.policies().create(List.of(readOnly));
 ```
 
-A policy's `type` is read back from its `name`, so name it after the type. An `externalId` you
-leave out is generated. `templateId` names a [governance template](#governance-templates).
+An `externalId` you leave out is generated. `templateId` names a
+[governance template](#governance-templates).
+
+`type` is `NAMING_CONVENTION` on a naming policy and null on every other one. It is no longer
+read from the policy's `name`. `type` and `value` are deprecated: still accepted on a request,
+so older clients keep working, but they change nothing.
 
 `update` is partial, on the same field verbs as
 [`resources().update`](./resources#update): `set`, `setNull`, and `add` / `remove` for
 `metadata`. Only the fields named in each entry's `update` block change; a field you leave out
-keeps its stored value, `deactivated` included.
+keeps its stored value, `deactivated` included. A `templateId` that names no template is a
+`400`; updating a policy that does not exist is a `404`.
 
 ```java
 import ai.intellistream.datahub.models.forms.UpdatePolicyForm;
@@ -80,6 +90,35 @@ client.policies().update(List.of(off));
 ```java
 client.policies().delete(List.of(IdCollection.createFromExternalId("plant_oslo_read_only")));
 ```
+
+## Where a policy applies {#attachment}
+
+`enforcedOn` lists the data sets a policy is attached to, each as an `id` and `externalId`. An
+empty list means the policy is tenant-wide. It is filled on the `/policies` reads (`list`,
+`getById`, and the responses of `create` and `update`); a policy read through `resources` comes
+back with `enforcedOn` null, meaning not loaded, not tenant-wide.
+
+On create, list the data sets in `enforcedOn` (by `id` or `externalId`), or name one in
+`dataSetId`. On update, `enforcedOn` takes `set` (replace the list; an empty `set` makes the
+policy tenant-wide), `add` and `remove`. Only the difference is applied: data sets already
+attached stay as they are.
+
+```java
+UpdatePolicyForm attach = new UpdatePolicyForm();
+attach.setExternalId("plant_oslo_read_only");
+attach.getUpdate().getEnforcedOn()
+        .add(List.of(IdCollection.createFromExternalId("plant_bergen")))
+        .remove(List.of(IdCollection.createFromExternalId("plant_oslo")));
+client.policies().update(List.of(attach));
+```
+
+A data set that does not exist, or a node that is not a data set, is a `400` naming the
+`enforcedOn` entry; nothing is attached. A change takes effect on the next write, with no cache
+delay. Two naming policies on the same data set (or two tenant-wide ones) resolve to the one with
+the lowest id.
+
+Detaching a policy, or deleting a data set a policy is attached to, is never refused as
+stranding the graph: the policy is not counted as a connection.
 
 ## Dry-run a name against the naming policy {#naming-check}
 
