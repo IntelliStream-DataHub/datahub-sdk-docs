@@ -6,9 +6,9 @@ title: Policies & governance
 # Policies & governance
 
 A **policy** is a rule data is held to, and a node in the same graph as resources. Its
-[`kind`](#kinds) says what it is: a naming convention, a partial schema, or a lifecycle. Today
-the [naming policy](./external-ids#the-naming-policy) is enforced; schema and lifecycle
-policies are stored and validated, and enforcement follows.
+[`kind`](#kinds) says what it is: a naming convention, a partial schema, or a lifecycle. Naming and
+schema policies are enforced on writes; lifecycle policies are stored and validated, and
+enforcement follows.
 
 A policy applies where it is [attached](#attachment): to the data sets in its `enforcedOn` and
 every data set below them, or, attached to none, to the whole tenant.
@@ -57,7 +57,7 @@ Only `NAMING_CONVENTION` is enforced; the others record intent. The catalogue pr
 | `kind` | Rules in | What it does |
 | --- | --- | --- |
 | `NAMING` | `metadata` | The [naming convention](./external-ids#the-naming-policy). A create with no `kind` and `metadata.kind: "naming"` is one too. Enforced. |
-| `SCHEMA` | `schema` | What nodes of one type label must or should carry. Stored and validated, not enforced yet. |
+| `SCHEMA` | `schema` | What nodes of one type label must or should carry. [Enforced](#schema-enforcement). |
 | `LIFECYCLE` | `lifecycle` | When data freezes and when it is deleted. Stored and validated, not enforced yet. |
 | none | `metadata` | A legacy policy, recorded and not enforced. |
 
@@ -108,6 +108,37 @@ field, for example `schema.rules[0].field`.
 
 On update, `schema` and `lifecycle` are plain values that replace the stored spec whole; a
 spec of the other kind is a `400`.
+
+### How schema rules are enforced {#schema-enforcement}
+
+Every node write is judged: create and update on `/resources`, `/assets`, `/timeseries`,
+`/functions` and `/datasets`, a graph import, and the MCP tools. A node is held to a policy
+when its type label is the target's and it carries every one of the target's labels.
+
+- A broken **`MUST`** rule is a `400` with `type: ".../errors/schema-policy"`. Nothing in the
+  batch is written. Each `violations` entry carries `index`, `externalId`, `policy`, `rule`,
+  `level` and `reason`.
+- A broken **`SHOULD`** rule is accepted. The response's `warnings` names it (with `rule`), and
+  a [finding](./events#policy-findings) is recorded.
+
+An update is judged only on the rules that look at something it changes: the metadata keys it
+sets or removes, the fields it sets, the relationship types of the edges it deletes or
+re-points. So data written before a rule existed stays editable; a car with no seat count can
+still have its description fixed. Changing a node's labels or data set judges every rule,
+since either can bring it under a policy it was not under. Adding an edge never breaks a rule,
+and an edge that goes with a deleted node is not judged.
+
+```json
+{
+  "type": "https://intellistream.ai/errors/schema-policy",
+  "status": 400,
+  "detail": "1 schema rule(s) broken by 1 node(s). Nothing was written.",
+  "violations": [
+    {"index": 0, "externalId": "car_17", "policy": "cars_have_seats", "rule": "seats",
+     "level": "MUST", "reason": "Missing metadata 'numberOfSeats' (MUST, rule 'seats' of policy 'cars_have_seats')."}
+  ]
+}
+```
 
 ## Read, create, update, delete
 
@@ -177,8 +208,8 @@ A data set that does not exist, or a node that is not a data set, is a `400` nam
 delay.
 
 A policy attached to a data set also governs every data set below it in the `BELONGS_TO`
-hierarchy. For naming and lifecycle, the nearest policy wins. Schema policies add up once they
-are enforced, so a node is held to the tenant's and every ancestor's.
+hierarchy. For naming and lifecycle, the nearest policy wins. Schema policies add up, so a node
+is held to the tenant's and every ancestor's.
 
 Two active naming policies on the same data set (or two tenant-wide ones), or two lifecycle
 policies there selecting the same data, are refused with a `409` (`.../errors/duplicate`) on

@@ -656,6 +656,9 @@ Two responses are worth recognising by shape:
 - **`400` with `type: ".../errors/naming-policy"`**: one or more external ids broke the
   configured [naming policy](./external-ids#the-naming-policy). Nothing was created; the
   `violations` array names each one and suggests a replacement.
+- **`400` with `type: ".../errors/schema-policy"`**: a node broke a `MUST` rule of a
+  [schema policy](./policies#schema-enforcement). Nothing was written; each `violations` entry
+  names the node, the `policy` and the `rule`.
 - **A `warnings` array beside `items` on a `2xx`**: the write succeeded, and the ids in it
   are in a data steward's queue. The field is absent when empty.
 

@@ -571,12 +571,12 @@ The encoding is a wire contract, so you can read findings without a policy-aware
 | `type` | Always `policy_finding`. Matched exactly, never by prefix, this is the one filter separating findings from the tenant's real events. |
 | `subType` | Which policy fired, by its external id. |
 | `source` | `datahub_policy_<policy external id>`, truncated to 128 characters. |
-| `externalId` | `policy_finding_<policy external id>_<node id>`, the correlation key every event in one finding's lifecycle shares. |
+| `externalId` | `policy_finding_<policy external id>_<node id>`, the correlation key every event in one finding's lifecycle shares. A schema finding names its rule too: `policy_finding_<policy external id>_<rule id>_<node id>`. |
 | `status` | `OPEN` or `RESOLVED`, what *this event* asserts, not the finding's current state. |
 | `description` | What is wrong, in words. |
 | `relatedResources` | The entity the finding is about, by node id. |
 | `dataSetId` | That entity's data set. |
-| `metadata` | `offendingValue`, `suggestion` (when one could be derived), `raisedBy`. |
+| `metadata` | `offendingValue`, `suggestion` (when one could be derived), `raisedBy`, and `rule` on a schema finding. |
 
 Note the external id is keyed on the entity's **node id**, not its external id. The external
 id is the offending value here, the thing a steward is most likely to change, and keying on
