@@ -5,12 +5,13 @@ title: Policies & governance
 
 # Policies & governance
 
-A **policy** is a rule data is held to, and a node in the same graph as resources. Today one
-kind is enforced: the [naming policy](./external-ids#the-naming-policy). The other
-[types](#types) are recorded and attached, but nothing checks them yet.
+A **policy** is a rule data is held to, and a node in the same graph as resources. Its
+[`kind`](#kinds) says what it is: a naming convention, a partial schema, or a lifecycle. Today
+the [naming policy](./external-ids#the-naming-policy) is enforced; schema and lifecycle
+policies are stored and validated, and enforcement follows.
 
-A policy applies where it is [attached](#attachment): to the data sets in its `enforcedOn`, or,
-attached to none, to the whole tenant.
+A policy applies where it is [attached](#attachment): to the data sets in its `enforcedOn` and
+every data set below them, or, attached to none, to the whole tenant.
 
 A **governance template** is a named set of policy metadata. Templates are read-only over the
 API; a policy names one through `templateId`, and the template's metadata is merged into the
@@ -46,8 +47,67 @@ DataWrapper<Policy> types = client.policies().listTypes();
 | `HAS_REQUIREMENT` | One data set | Marks a data set that must meet a compliance requirement. |
 | `NAMING_CONVENTION` | Tenant-wide, overridable per data set | Enforces the [external-id naming convention](./external-ids#the-naming-policy) at write time. Applies to resources and data sets; events are exempt. |
 
-Only `NAMING_CONVENTION` is enforced; the others record intent. Attaching a policy where its
-type does not allow is refused on create, over the whole batch.
+Only `NAMING_CONVENTION` is enforced; the others record intent. The catalogue predates
+[kinds](#kinds), which are what a new policy should use.
+
+## Policy kinds {#kinds}
+
+`kind` is set on create and never changes.
+
+| `kind` | Rules in | What it does |
+| --- | --- | --- |
+| `NAMING` | `metadata` | The [naming convention](./external-ids#the-naming-policy). A create with no `kind` and `metadata.kind: "naming"` is one too. Enforced. |
+| `SCHEMA` | `schema` | What nodes of one type label must or should carry. Stored and validated, not enforced yet. |
+| `LIFECYCLE` | `lifecycle` | When data freezes and when it is deleted. Stored and validated, not enforced yet. |
+| none | `metadata` | A legacy policy, recorded and not enforced. |
+
+A `SCHEMA` policy, here "a car must have a number of seats":
+
+```json
+{
+  "name": "Cars have seats",
+  "kind": "SCHEMA",
+  "schema": {
+    "target": {"typeLabel": "ASSET", "labels": ["CAR"]},
+    "rules": [
+      {"id": "seats", "kind": "METADATA_KEY", "key": "numberOfSeats", "level": "MUST"}
+    ]
+  }
+}
+```
+
+| Rule field | Notes |
+| --- | --- |
+| `id` | Lower-case letters, digits and `_`, at most 64, unique in the policy. |
+| `kind` | `METADATA_KEY` (needs `key`), `FIELD` (needs `field`) or `RELATIONSHIP` (needs `relationshipType` and `direction`, `OUT` or `IN`; `otherTypeLabel` is optional). |
+| `field` | `name`, `description` or `source` on every type, plus `geoLocation` on `ASSET` and `unit` or `unitExternalId` on `TIMESERIES`. |
+| `level` | `MUST`: a write that breaks the rule is rejected. `SHOULD`: it is accepted with a finding. |
+
+`target.typeLabel` is `ASSET`, `TIMESERIES`, `RESOURCE` (a plain resource), `DATASET` or
+`FUNCTION`; `target.labels` are free labels a node must all carry.
+
+A `LIFECYCLE` policy:
+
+```json
+{
+  "name": "Keep sensor data a year",
+  "kind": "LIFECYCLE",
+  "lifecycle": {
+    "selector": {"dataKinds": ["DATAPOINTS", "EVENTS"]},
+    "freezeAfter": "P30D",
+    "deleteAfter": "P365D"
+  }
+}
+```
+
+`dataKinds` is any of `DATAPOINTS`, `EVENTS`, `FILES` and `NODES`; `typeLabel` (`ASSET`,
+`TIMESERIES` or `RESOURCE`) and `labels` narrow it. Ages are ISO-8601 durations of at least
+`P1D`, measured on the data's own time, and `deleteAfter` is no shorter than `freezeAfter`.
+Data sets and policies are never deleted. A rule that breaks any of this is a `400` naming the
+field, for example `schema.rules[0].field`.
+
+On update, `schema` and `lifecycle` are plain values that replace the stored spec whole; a
+spec of the other kind is a `400`.
 
 ## Read, create, update, delete
 
@@ -114,8 +174,16 @@ client.policies().update(List.of(attach));
 
 A data set that does not exist, or a node that is not a data set, is a `400` naming the
 `enforcedOn` entry; nothing is attached. A change takes effect on the next write, with no cache
-delay. Two naming policies on the same data set (or two tenant-wide ones) resolve to the one with
-the lowest id.
+delay.
+
+A policy attached to a data set also governs every data set below it in the `BELONGS_TO`
+hierarchy. For naming and lifecycle, the nearest policy wins. Schema policies add up once they are
+enforced, so a node
+is held to the tenant's and every ancestor's.
+
+Two active naming policies on the same data set (or two tenant-wide ones), or two lifecycle
+policies there selecting the same data, are refused with a `409` (`.../errors/duplicate`) on
+whichever create, update, attach or re-activation would make the second.
 
 Detaching a policy, or deleting a data set a policy is attached to, is never refused as
 stranding the graph: the policy is not counted as a connection.

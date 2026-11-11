@@ -89,9 +89,9 @@ client that never inspects the `warnings` array will therefore never notice the 
 which is the case worth designing for: on an import, treat a non-empty `warnings` array as work
 to do rather than noise.
 
-Resolution is tenant-first with a per-data-set override: a data set's own naming policy wins
-if it has one, otherwise the tenant's. The override **replaces** the tenant policy rather
-than merging with it.
+Resolution is tenant-first with a per-data-set override that is inherited down the `BELONGS_TO`
+hierarchy: a data set's own naming policy wins if it has one, otherwise the nearest ancestor's,
+otherwise the tenant's. The override **replaces** the tenant policy rather than merging with it.
 
 :::caution The naming policy never applies to events
 Only the charset floor does. An event external id is not a name someone chose, it is the
