@@ -174,8 +174,8 @@ faster only while the API has cores to parse the requests on.
 ## Binary ingest {#binary-ingest}
 
 Past a few thousand points a second, JSON is the bottleneck: every value is text the API has
-to parse. `ingestBinary` in Java and `insert_datapoints_binary` in Python and Rust send the same
-readings as zstd-compressed Arrow frames to
+to parse. `ingestBinary` in Java, `insert_dataframe_binary` in Python and
+`insert_datapoints_binary` in Rust send the same readings as zstd-compressed Arrow frames to
 [`POST /timeseries/data/binary`](/reference/binary-datapoints), a million points or more per
 request, parsed and sorted on the client. Pick it when the volume is sustained; keep the JSON
 path when you want the [durable spool](/reference/client#durable-ingest-buffering), which the
@@ -219,15 +219,18 @@ if (n < 3600) throw new IllegalStateException("expected 3600 readings, got " + n
 </TabItem>
 <TabItem value="python" label="Python">
 
-`insert_from_lists_binary` takes the same arrays as `insert_from_lists`.
+`insert_dataframe_binary` takes a pandas or polars DataFrame, or anything else that speaks
+Arrow, without copying it: one column per series, named by its external id, beside a timestamp
+column or index.
 
 ```python
 # the same million readings, as Arrow frames
-client.timeseries.insert_from_lists_binary(
-    timestamps=pd.date_range("2026-01-01", periods=1_000_000, freq="s", tz="UTC"),
-    values=90 + 5 * np.random.rand(1_000_000),
-    ts="engine_temperature",
-    zstd_level=3)          # 1, 3 or 9 (default 9): client CPU against bytes on the wire
+df = pd.DataFrame(
+    {"engine_temperature": 90 + 5 * np.random.rand(1_000_000)},
+    index=pd.date_range("2026-01-01", periods=1_000_000, freq="s", tz="UTC"))
+sent = client.timeseries.insert_dataframe_binary(
+    df, zstd_level=3)      # 1, 3 or 9 (default 3): client CPU against bytes on the wire
+print(f"sent {sent:,} points")
 
 # read the first hour back: 3 600 readings
 rf = intellistream_datahub_sdk.RetrieveFilter(
@@ -260,7 +263,7 @@ dw.add_item(DatapointsCollection {
     ..Default::default()
 });
 api.time_series
-    .insert_datapoints_binary(&dw, &BinaryIngestOptions::new().zstd_level(3))   // 1, 3 or 9 (default 9)
+    .insert_datapoints_binary(&dw, &BinaryIngestOptions::new().zstd_level(3))   // 1, 3 or 9 (default 3)
     .await?;
 
 // read the first hour back: 3 600 readings
@@ -299,7 +302,9 @@ try (BinaryIngestBuffer buffer = client.timeseries().binaryBuffer()) {
 ```
 
 Python and Rust have no such buffer: collect the readings and send them with
-`insert_datapoints_binary`. The options and the buffer's other methods are in the
+`insert_dataframe_binary` or `insert_datapoints_binary`. The options, Python's
+`insert_datapoints_binary` and `insert_from_lists_binary`, Rust's `insert_table_binary` for
+Arrow record batches and the buffer's other methods are in the
 [Time series reference](/reference/timeseries#binary-ingest).
 
 ## Then chart the trend

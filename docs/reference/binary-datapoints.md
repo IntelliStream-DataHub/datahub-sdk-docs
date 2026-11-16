@@ -15,10 +15,11 @@ million points in a few megabytes. [`POST /timeseries/data/list/binary`](#readin
 read in the same frames, and its answer is a valid body to post back.
 
 The SDKs build frames for you, see [binary ingest](./timeseries#binary-ingest): `ingestBinary` in
-Java, `insert_datapoints_binary` in Rust and in Python's synchronous client. This page is the
-byte-level contract for everyone else: a producer with pyarrow or arrow-rs, or a gateway
-forwarding frames it did not build. Java reads them with `retrieveBinary`, see
-[binary read](./timeseries#binary-read).
+Java, `insert_datapoints_binary` and `insert_table_binary` in Rust, and `insert_datapoints_binary`
+and `insert_dataframe_binary` in Python's synchronous client. This page is the byte-level contract
+for everyone else: a producer with pyarrow or arrow-rs, or a gateway forwarding frames it did not
+build. The SDKs read them too: `retrieveBinary` in Java and `retrieve_datapoints_binary` in
+Python and Rust, see [binary read](./timeseries#binary-read).
 
 | | |
 | --- | --- |
@@ -80,7 +81,8 @@ marker, with nothing after it. Little-endian throughout. It is compressed one of
 envelope's byte 7 saying which:
 
 - **Compression `1`**: the whole stream is one zstd frame, and the record batches inside carry
-  their buffers uncompressed. What the Rust and Python SDKs send.
+  their buffers uncompressed. What the Rust and Python SDKs send when asked for
+  `"payload"`.
 - **Compression `2`**: the stream is carried as it is, and every record batch compresses its
   buffers in-band, Arrow's body compression with codec `ZSTD` and method `BUFFER`. Each
   non-empty buffer is then its uncompressed length as an `int64`, followed by the zstd stream,
@@ -88,8 +90,8 @@ envelope's byte 7 saying which:
   decompressed length is the bodies' total with every buffer uncompressed, each padded to 8
   bytes. This is what pyarrow writes with `IpcWriteOptions(compression="zstd")` and reads
   without being told, what arrow-rs reads with its `zstd` feature, what a
-  [read](#reading) answers with, relayed from the database as it compressed them, and what the
-  Java SDK sends.
+  [read](#reading) answers with, relayed from the database as it compressed them, and what all
+  three SDKs send by default.
 
 The stream is read by a minimal codec that accepts exactly the subset a plain writer emits and
 refuses the rest, with the `reason` on the right:

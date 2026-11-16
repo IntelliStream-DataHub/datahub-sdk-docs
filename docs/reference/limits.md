@@ -344,8 +344,9 @@ Things to check in your own configuration:
   request at a time. Each request can carry 100 000 points that the API holds in memory while
   it parses them, so raise it with care. Java's counterpart is `parallelism` on
   [IngestOptions](./timeseries#ingestoptions).
-- **The binary path has no size knob to get wrong**: `ingestBinary` (Java) and
-  `insert_datapoints_binary` (Rust, Python) cut frames and requests under the
+- **The binary path has no size knob to get wrong**: `ingestBinary` (Java),
+  `insert_datapoints_binary` (Rust, Python), `insert_table_binary` (Rust) and
+  `insert_dataframe_binary` (Python) cut frames and requests under the
   [binary frame caps](#binary-frames) themselves. Rust tunes it with `BinaryIngestOptions`:
-  `zstd_level` (`9`), `max_retries` (`3`) and `request_concurrency` (`4`). Python takes only
-  `zstd_level=`.
+  `zstd_level` (`3`), `compression` (`Buffers`), `max_retries` (`3`) and `request_concurrency`
+  (`4`). Python takes `zstd_level=` and `compression=`.
