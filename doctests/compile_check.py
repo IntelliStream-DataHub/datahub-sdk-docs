@@ -283,6 +283,8 @@ def rust_project(workdir: Path, sdk: Path) -> Path:
         # What the pages import, as the tutorial's Cargo.toml tells a reader to add them.
         "tokio = { version = \"1\", features = [\"full\"] }\n"
         "chrono = \"0.4\"\nserde_json = \"1\"\nsysinfo = \"0.33\"\nhostname = \"0.4\"\n"
+        # The SDK's own arrow-array, so a RecordBatch built on the page is the type it takes.
+        "arrow-array = \"59.3\"\nfutures = \"0.3\"\n"
     )
     cargo_toml = workdir / "Cargo.toml"
     if not cargo_toml.exists() or cargo_toml.read_text(encoding="utf-8") != wanted:
