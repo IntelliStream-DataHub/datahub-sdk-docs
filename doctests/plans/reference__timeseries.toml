@@ -36,7 +36,7 @@ page = "docs/reference/timeseries.md"
 
 [blocks]
 python = 11
-java = 17
+java = 19
 rust = 11
 
 [python]
@@ -58,10 +58,10 @@ client = intellistream_datahub_sdk.DataHubClient.from_env()
 
 [java]
 disabled = "Java scenario not written yet."
-# Independent examples, as for Python. #16 is a list of IngestResult's method signatures,
+# Independent examples, as for Python. #18 is a list of IngestResult's method signatures,
 # not code.
 independent = true
-exclude = [16]
+exclude = [18]
 
 [owns]
 timeseries = ["book_value_usd", "engine_temperature"]
