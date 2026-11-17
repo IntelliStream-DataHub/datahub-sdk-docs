@@ -121,6 +121,28 @@ Three endpoints are new for agents. The rest of the flow API is unchanged: save 
 | `GET /agents/tools` | What the tool servers advertise, asked as the caller. |
 | `GET /runs/{id}/transcript?attempt=&after=` | A run's transcript, the conversation between the model and the tools. |
 
+### Whose access a run uses {#run-identity}
+
+A deployment acts as one of two identities, and `GET /flows/{id}/deployment` says which:
+`identity` is `deployer` or `client`, `runAs` the person's subject or the client's name.
+
+- **`deployer`.** `POST /flows/{id}/deployment/authorize` returns an `authorizationUrl`; the
+  caller's browser goes there to grant an offline token in Keycloak, and the runs act as them. The deployment lasts as long as that
+  offline session: each run renews it, and Keycloak ends it after its *Offline Session Idle*
+  time without a run (30 days by default), at its *Offline Session Max* age if the realm sets
+  one, or when the person is disabled or revokes it. A run carries the person's access as it
+  is at the time.
+- **`client`.** `PUT /flows/{id}/deployment` with `"runAs": "<name>"` names a client registered
+  in the organization's flow settings (`PUT /tenant/settings/flow/clients/{name}` on the API),
+  and runs take `client_credentials` tokens for it. Nothing lapses; the caller must hold every
+  group the client holds.
+
+When Keycloak refuses the identity, `identityState` turns from `ok` to
+`needs-reauthorisation`, with the reason in `identityStateReason`. The schedule stops, the run
+fails without a retry, and no failure event is written, since the run cannot write as anyone.
+`PUT /flows/{id}/deployment` without `runAs` keeps the identity it has and does not clear the
+state; authorize again, or name a client. Windows missed in between are not run.
+
 ### `GET /agents/tools` {#agents-tools}
 
 Needs `/flows/read`. Returns the API server's tools and, when the service is configured with
