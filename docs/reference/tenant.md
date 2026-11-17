@@ -209,11 +209,60 @@ never a secret's value, a client's secret or a tool server's credential.
 }
 ```
 
-`secrets` are the named values a flow refers to as `${secrets.<name>}`, and `clients` the
-Keycloak clients a flow may be deployed to run as; each has a `PUT` and a `DELETE` of its own
-under `/flow/secrets/{name}` and `/flow/clients/{name}`. `mcpServers` are the
-[tool servers agents may call](../agents#tool-servers). The fields of the kind of authentication
-a server does not use are left out.
+`secrets` are the named values a flow refers to as [`${secrets.<name>}`](#flow-secrets), and
+`clients` the [Keycloak clients a flow may be deployed to run as](#flow-clients). `mcpServers`
+are the [tool servers agents may call](../agents#tool-servers). The fields of the kind of
+authentication a server does not use are left out. Reading needs `/settings/flow/read`; every
+`PUT` and `DELETE` below needs `/settings/flow/write`, answers `204`, and reports a bad name or
+field as a `400` with field errors.
+
+A secret's or a client's `name` is lowercase letters, digits and dashes, starting with a letter
+or digit, at most 63 characters.
+
+### `PUT /tenant/settings/flow/secrets/{name}` {#flow-secrets}
+
+Stores the value under `name`, replacing any value it had. `value` is required and is never
+returned.
+
+```json
+{ "value": "…" }
+```
+
+A step refers to it as `${secrets.<name>}`, in a property marked sensitive, where the whole value
+must be that one reference; the flow service resolves it when the run starts. A run that refers
+to a secret the organization does not have fails with `MISSING_SECRET`.
+
+### `DELETE /tenant/settings/flow/secrets/{name}` {#flow-secrets-delete}
+
+Removes the secret; also `204` when there was none. Flows that refer to it fail their next run.
+
+### `PUT /tenant/settings/flow/clients/{name}` {#flow-clients}
+
+Registers a confidential Keycloak client under `name`, replacing it when the name is taken.
+
+```json
+{ "clientId": "datahub-nightly", "clientSecret": "…" }
+```
+
+Both fields are required every time, since the secret is never returned: a pair stored half old
+and half new would fail only when a run first tries it. `clientId` is the client id Keycloak
+shows, not its internal UUID. The client's service-account user must be a member of the
+organization with `DATAHUB_ACCESS` and the groups its flows need.
+
+The credentials are not tried here. A deployment that names the client,
+`PUT /flows/{id}/deployment` with `"runAs": "<name>"` on the flow service, takes a token with
+them and checks that the client may write the flow's data set, and that the caller holds every
+group the client holds ([whose access a run uses](../agents#run-identity)). A replaced secret
+is used from the next token on.
+
+### `DELETE /tenant/settings/flow/clients/{name}` {#flow-clients-delete}
+
+Removes the registration; also `204` when nothing was registered. The client stays in Keycloak:
+disable it or rotate its secret there to end its access. Flows that run as it fail and show
+`needs-reauthorisation` until they are deployed again.
+
+A removed or replaced secret or client secret stays in Vault's version history until Vault rolls
+it out, so removing one is no substitute for rotating it at its source.
 
 ### `PUT /tenant/settings/flow/mcp-servers/{name}` {#flow-mcp-servers}
 
