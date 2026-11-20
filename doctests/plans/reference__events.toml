@@ -16,7 +16,7 @@ page = "docs/reference/events.md"
 
 [blocks]
 python = 8
-java = 8
+java = 9
 rust = 8
 
 [python]
