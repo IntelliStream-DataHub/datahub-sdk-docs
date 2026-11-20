@@ -557,6 +557,52 @@ if let Some(cursor) = page.next_cursor() {
 </TabItem>
 </Tabs>
 
+### Latest per lifecycle {#latest}
+
+Events that share an `externalId` are one lifecycle, each a transition (`open`, then
+`resolved`). `POST /events/latest` returns the **latest** event of every lifecycle the `filter`
+matches, the one with the newest `eventTime`, and keeps it only when its status is one of
+`status`. So `"status": ["open"]` answers "which lifecycles are still open", which
+[`/events/filter`](#filtering) with a status cannot: every lifecycle that was ever opened has an
+`open` event.
+
+| Field | Meaning |
+| --- | --- |
+| `filter` | Which events are considered, the same criteria as `/events/filter`. Setting `status` here is a `400`. |
+| `status` | Keep a lifecycle only when its latest event has one of these. Case-insensitive, `*` and `%` are wildcards. Omit for any status. |
+| `limit` | Lifecycles per page, default 100, at most 1000. |
+| `cursor` | The previous page's `nextCursor`. No `nextCursor` means no more pages. |
+
+Results come newest first by the latest event's `eventTime`. Your data set access and the
+filter apply **before** the latest event is chosen, so you get the latest event you can see,
+not a lifecycle's latest event elsewhere. On a large event table, a `filter.eventTime` window is
+what bounds the scan.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+LatestEventsQuery query = new LatestEventsQuery();
+query.getFilter().setType(List.of("alarm"));
+query.setStatus(List.of("open"));
+
+DataWrapper<EventModel> open = client.events().latest(query);
+```
+
+</TabItem>
+<TabItem value="http" label="HTTP">
+
+```bash
+curl -fsS -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"filter": {"type": ["alarm"]}, "status": ["open"], "limit": 100}' \
+  "$API/events/latest"
+```
+
+</TabItem>
+</Tabs>
+
+The Python and Rust clients do not have this call yet; send the request above over HTTP.
+
 ## Policy findings {#policy-findings}
 
 A **policy finding**, a naming-policy violation that was allowed through and recorded for a
@@ -583,6 +629,11 @@ id is the offending value here, the thing a steward is most likely to change, an
 it would mean renaming a resource silently abandoned its finding and started a second stream.
 
 ### Fetch the queue
+
+To list only the outstanding findings, let the server fold for you with
+[`POST /events/latest`](#latest): `"filter": {"type": ["policy_finding"]}`, `"status": ["OPEN"]`.
+The rest of this section does the same fold on the client, which is what the Python and Rust
+clients need until they have that call.
 
 Filter on the type, ascending by `eventTime`, and page with [`cursor`](#paging):
 
@@ -686,7 +737,8 @@ let open: Vec<_> = current.values().filter(|e| e.status.as_deref() == Some("OPEN
 A stored `OPEN` event means *this was raised*, not *this is outstanding*. Filtering the query
 on `status: "OPEN"` returns the raise of every finding that has since been resolved, the
 resolve is a separate, later event, and narrowing the query hides it. Open-ness is a
-conclusion drawn from the stream, not a fact the store holds, so fetch and fold.
+conclusion drawn from the stream, not a fact the store holds, so fetch and fold, or use the
+top-level `status` of [`/events/latest`](#latest), which tests only the latest event.
 
 Order ascending for the same reason: replay out of order and a stale `OPEN` overwrites the
 `RESOLVED` that followed it. Keep folding across pages too, a `RESOLVED` on page 3 closes a
@@ -925,7 +977,8 @@ api.events.delete(&vec![EventIdCollection::from_external_id("door_open")]).await
 
 ## What each client covers {#client-coverage}
 
-The three clients cover every event endpoint, the facet endpoints included.
+The three clients cover every event endpoint, the facet endpoints included, except
+[`/events/latest`](#latest), which only the Java client has so far.
 
 | Operation | Java | Python | Rust |
 | --- | --- | --- | --- |
@@ -936,6 +989,7 @@ The three clients cover every event endpoint, the facet endpoints included.
 | Filter | `events().filter` | `events.filter` | `events.filter` |
 | Filter with `sort` | `EventRetreiver.sort` | `sort_by` / `sort_order` | `set_sort` |
 | Filter with paging | `EventRetreiver.cursor` | `cursor` | `set_cursor` |
+| [Latest per lifecycle](#latest) | `events().latest` | not yet | not yet |
 | [Advanced filter](#advanced-filters) | `EventRetreiver.setAdvancedFilter` | `advanced_filter` | `set_advanced_filter` |
 | Update | `events().update` | `events.update` | `events.update` |
 | Full-text search | `events().search` | `events.search` | `events.search` |
