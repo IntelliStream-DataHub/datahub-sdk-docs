@@ -159,10 +159,10 @@ connection unless the platform runs with `datahub.outbound.allow-private-network
 
 ## Endpoints {#endpoints}
 
-Three endpoints are new for agents. The rest of the flow API is unchanged: save and validate
-(`POST /flows`, `POST /flows/validate`, `PUT /flows/{id}`), deployment
-(`PUT /flows/{id}/deployment`), and runs (`POST /flows/{id}/runs`, `POST /previews`,
-`GET /runs`, `GET /runs/{id}`, cancel and rerun).
+Three endpoints are new for agents. The rest is the [flow API](./flows), the same for agents as
+for any flow: [save and validate](./flows#flows), [deployment](./flows#deployment), and
+[runs](./flows#runs-section), with the [run lifecycle](./flows#lifecycle) and
+[limits](./flows#limits) a run can hit.
 
 | Endpoint | |
 | --- | --- |
