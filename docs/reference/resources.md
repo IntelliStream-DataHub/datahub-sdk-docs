@@ -998,7 +998,8 @@ Against the [rate-limit](./limits#rate-limits) budget, export is a read and impo
 An **asset** is the node type that can be a navigation root and the only one that carries a
 `geoLocation`. It has its own endpoint family, and every call in it is the pipeline above with
 the `ASSET` type pinned: the same ACLs, the same [naming policy](./external-ids#the-naming-policy),
-the same [create checks](#create-resources-and-relations), the same status codes. Reach for it
+the same [create checks](#create-resources-and-relations), the same status codes. The one
+difference is that update and delete reach only assets, see the table. Reach for it
 when a call should only ever see assets, and for `/resources` when one call carries or returns
 several node types.
 
@@ -1010,8 +1011,8 @@ several node types.
 | `GET /assets?limit=` | [filter](#filter) | The first `limit` assets, newest first, no criteria. Never returns a `nextCursor`: it is the first page and nothing more. `limit` defaults to 1000 and caps at 10 000. |
 | `POST /assets/filter` | [filter](#filter) | The same criteria, the same paging. A `nodeType` in the body is replaced, see below. |
 | `POST /assets/search` | [search](#search) | Same replacement, and the `filter` block is applied exactly as on [`/resources/search`](#search-filter). |
-| `POST /assets/update` | [update](#update) | Takes `nodes` and `relations` exactly as `/resources/update` does. |
-| `POST` or `DELETE /assets/delete` | [delete](#delete) | `204`, and the same [connectivity check](#delete). |
+| `POST /assets/update` | [update](#update) | Takes `nodes` and `relations` as `/resources/update` does, but every node entry must name an asset. An `id` (or `externalId` when there is no `id`) that does not exist or belongs to another node type is a `404`, and nothing in the batch is written. |
+| `POST` or `DELETE /assets/delete` | [delete](#delete) | `204`, and the same [connectivity check](#delete). Ids that do not exist or are not assets are skipped, not deleted. |
 
 ```http
 POST /assets/create
@@ -1057,11 +1058,17 @@ DataWrapper<Asset> newest = client.assets().list(100);
 DataWrapper<Asset> some = client.assets().byIds(List.of(
         IdCollection.createFromExternalId("plant_oslo")));
 DataWrapper<Asset> one = client.assets().getById(some.getItems().get(0).getId());
+
+UpdateAssetForm rename = new UpdateAssetForm().setExternalId("plant_oslo");
+rename.getUpdate().getName().set("Oslo Plant (renamed)");
+client.assets().update(List.of(rename));
 ```
 
-`filter`, `search`, `update` and `delete` take the same forms as their `resources()`
-counterparts. The update echo is a `GraphDataWrapper<NodeModel, EdgeProxy>`, not an asset one,
-because an update may touch a relation whose other end is not an asset.
+`filter`, `search` and `delete` take the same forms as their `resources()` counterparts.
+`update` takes `UpdateAssetForm` entries (`ai.intellistream.datahub.models`): an `id` or
+`externalId`, and an `update` block holding only the asset's own fields. The update echo is
+a `GraphDataWrapper<NodeModel, EdgeProxy>`, not an asset one, because an update may touch a
+relation whose other end is not an asset.
 
 Python and Rust have the same service as `assets` (`client.assets`, `api.assets`), with
 `create`, `get_by_id`, `by_ids`, `list`, `filter`, `search`, `update` and `delete`. Reads come
@@ -1161,6 +1168,16 @@ let hits = api.functions.search_by_query("rolling average").await?;
 
 </TabItem>
 </Tabs>
+
+Writes reach only functions, following the same rules as [their asset counterparts](#assets):
+
+| Endpoint | Worth knowing |
+| --- | --- |
+| `POST /functions/update` | An entry that does not exist or is another node type is a `404`, and nothing in the batch is written. The fields are the asset ones minus `geoLocation`: a function has nowhere to store one, so a body naming it is a `400`. |
+| `POST` or `DELETE /functions/delete` | `204`. Ids that do not exist or are not functions are skipped, not deleted. |
+
+In Java, `client.functions().update(...)` takes `UpdateFunctionForm` entries
+(`ai.intellistream.datahub.function`), built the same way as `UpdateAssetForm`.
 
 ## What each client covers {#client-coverage}
 
