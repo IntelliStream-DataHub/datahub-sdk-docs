@@ -67,7 +67,8 @@ a plain boolean.
 Settings are granted per **scope**, through Keycloak organization groups:
 `/settings/<scope>/read` and `/settings/<scope>/write`, or `/settings/*/read` and
 `/settings/*/write` for every scope. Read and write are separate grants, and write does not
-imply read. The one scope is `llm`.
+imply read. The scopes are `llm`, the [model configuration](#llm-settings), and `flow`, the
+[flow settings](#flow-settings).
 
 `GET /tenant/settings/permissions` says which grants you hold, with wildcards resolved, so
 every scope the platform knows is listed by name. The endpoint is ungated.
@@ -188,6 +189,124 @@ the record as `TenantLlmSettings.EFFORT_LEVELS`.
 The API instance that served the write refreshes immediately. Other instances and services
 cache the tenant registry and pick the change up within five minutes.
 
+## Flow settings {#flow-settings}
+
+The credentials your organization's flows and [agents](../agents) may use, under
+`/tenant/settings/flow`. No client wraps these; call them over REST. Every one is write-only
+for what is secret: `GET /tenant/settings/flow` returns names, client ids, URLs and header names,
+never a secret's value, a client's secret or a tool server's credential.
+
+```json
+{
+  "secrets": ["erp-api-key"],
+  "clients": [ { "name": "nightly", "clientId": "datahub-nightly" } ],
+  "mcpServers": [
+    { "name": "crm", "url": "https://tools.example.com/mcp", "auth": "header", "headerName": "Authorization" },
+    { "name": "erp", "url": "https://erp.example.com/mcp", "auth": "client-credentials",
+      "tokenUrl": "https://auth.example.com/oauth2/token", "clientId": "datahub-agents",
+      "scope": "tools.read", "resource": "https://erp.example.com/mcp" }
+  ]
+}
+```
+
+`secrets` are the named values a flow refers to as [`${secrets.<name>}`](#flow-secrets), and
+`clients` the [Keycloak clients a flow may be deployed to run as](#flow-clients). `mcpServers`
+are the [tool servers agents may call](../agents#tool-servers). The fields of the kind of
+authentication a server does not use are left out. Reading needs `/settings/flow/read`; every
+`PUT` and `DELETE` below needs `/settings/flow/write`, answers `204`, and reports a bad name or
+field as a `400` with field errors.
+
+A secret's or a client's `name` is lowercase letters, digits and dashes, starting with a letter
+or digit, at most 63 characters.
+
+### `PUT /tenant/settings/flow/secrets/{name}` {#flow-secrets}
+
+Stores the value under `name`, replacing any value it had. `value` is required and is never
+returned.
+
+```json
+{ "value": "…" }
+```
+
+A step refers to it as `${secrets.<name>}`, in a property marked sensitive, where the whole value
+must be that one reference; the flow service resolves it when the run starts. A run that refers
+to a secret the organization does not have fails with `MISSING_SECRET`.
+
+### `DELETE /tenant/settings/flow/secrets/{name}` {#flow-secrets-delete}
+
+Removes the secret; also `204` when there was none. Flows that refer to it fail their next run.
+
+### `PUT /tenant/settings/flow/clients/{name}` {#flow-clients}
+
+Registers a confidential Keycloak client under `name`, replacing it when the name is taken.
+
+```json
+{ "clientId": "datahub-nightly", "clientSecret": "…" }
+```
+
+Both fields are required every time, since the secret is never returned: a pair stored half old
+and half new would fail only when a run first tries it. `clientId` is the client id Keycloak
+shows, not its internal UUID. The client's service-account user must be a member of the
+organization with `DATAHUB_ACCESS` and the groups its flows need.
+
+The credentials are not tried here. A deployment that names the client,
+`PUT /flows/{id}/deployment` with `"runAs": "<name>"` on the flow service, takes a token with
+them and checks that the client may write the flow's data set, and that the caller holds every
+group the client holds ([whose access a run uses](../agents#run-identity)). A replaced secret
+is used from the next token on.
+
+### `DELETE /tenant/settings/flow/clients/{name}` {#flow-clients-delete}
+
+Removes the registration; also `204` when nothing was registered. The client stays in Keycloak:
+disable it or rotate its secret there to end its access. Flows that run as it fail and show
+`needs-reauthorisation` until they are deployed again.
+
+A removed or replaced secret or client secret stays in Vault's version history until Vault rolls
+it out, so removing one is no substitute for rotating it at its source.
+
+### `PUT /tenant/settings/flow/mcp-servers/{name}` {#flow-mcp-servers}
+
+Registers the server, replacing it when the name is taken. Needs `/settings/flow/write`.
+`name` is lowercase letters, digits and dashes, starting with a letter or digit, at most 24
+characters; it is the prefix of the server's tools, `crm__ticket_get`.
+
+```json
+{ "url": "https://tools.example.com/mcp", "auth": "header", "headerName": "X-Api-Key", "headerValue": "…" }
+```
+
+```json
+{ "url": "https://erp.example.com/mcp", "auth": "client-credentials",
+  "tokenUrl": "https://auth.example.com/oauth2/token", "clientId": "datahub-agents", "clientSecret": "…",
+  "scope": "tools.read", "resource": "https://erp.example.com/mcp" }
+```
+
+| Field | | |
+| --- | --- | --- |
+| `url` | required | The server's Streamable HTTP endpoint, called as given. |
+| `auth` | `header` | `header` or `client-credentials`; saving one kind drops what was stored for the other. |
+| `headerName` | `Authorization` | `header`: the header the credential travels in. One the client sets itself (`Accept`, `Content-Type`, `Mcp-Session-Id`, `MCP-Protocol-Version`, `Host` and the like) is refused. |
+| `headerValue` | | `header`: the credential, a single line, sent as it is (`Bearer …`). |
+| `tokenUrl` | required | `client-credentials`: the token endpoint. |
+| `clientId` | required | `client-credentials`: the client. |
+| `clientSecret` | | `client-credentials`: its secret, a single line. |
+| `scope` | | `client-credentials`: sent when given, space-separated as the endpoint expects it. |
+| `resource` | | `client-credentials`: an absolute URI, sent when given. |
+
+`headerValue` and `clientSecret` are never returned, and absent or blank means **keep the stored
+one**, so a server can be re-pointed without retyping its credential. One is required when
+nothing of that kind is stored under the name, when `auth` switches kind, and, for a secret, when
+`clientId` changes. Problems are a `400` with field errors, as for the other settings.
+
+`url` and `tokenUrl` are checked for where they point, not for whether anything answers: one that
+resolves to a private, loopback or link-local address is refused unless the deployment allows
+private networks, and so is plain `http`. Nothing is called on save; `GET /agents/tools` on the
+flow service shows what the server answers.
+
+### `DELETE /tenant/settings/flow/mcp-servers/{name}` {#flow-mcp-servers-delete}
+
+Removes the registration, credential included; `204`, also when nothing was registered under the
+name. An agent whose `tools` still name the server fails its next run until it is edited.
+
 ## What each client covers {#client-coverage}
 
 | Operation | Java | Python | Rust |
@@ -196,3 +315,4 @@ cache the tenant registry and pick the change up within five minutes.
 | Settings permissions (`GET /tenant/settings/permissions`) | `tenant().settingsPermissions` | `tenant.settings_permissions` | `tenant.settings_permissions` |
 | Read model configuration (`GET /tenant/settings/llm`) | `tenant().llmSettings` | `tenant.llm_settings` | `tenant.llm_settings` |
 | Change model configuration (`PUT /tenant/settings/llm`) | `tenant().updateLlmSettings` | `tenant.update_llm_settings` | `tenant.update_llm_settings` |
+| Flow settings (`/tenant/settings/flow`, secrets, clients and tool servers) | REST only | REST only | REST only |

@@ -1,0 +1,771 @@
+---
+sidebar_position: 4.4
+title: Flows
+description: The flow service's REST API - saving and versioning flow definitions, deploying them as a person or a registered client, starting, previewing and following runs, their records, and the failure events they write.
+---
+
+# Flows
+
+A flow is a versioned pipeline of processors that reads DataHub data, transforms it and
+writes it back, on a schedule, when events arrive, or on request. Flows run on their own
+service, `intellistream-flow`, and this page is its REST API. The console's **Flows** and
+**Agents** pages are built on it; [agents](./agents) are flows whose working step is a model.
+
+| | |
+| --- | --- |
+| Service | `intellistream-flow`, its own base URL beside the API's (port 8084 locally) |
+| Authentication | the same bearer JWT as the API, with `DATAHUB_ACCESS`, on every request but the [deploy callback](#deploy-callback) |
+| Tenant | read from the token's organization, as the API does |
+| Needs | the organization's `flow` feature, the `/flows/read` or `/flows/write` organization group, and [data set access](./reference/datasets#access-control) to each flow's data set |
+| SDKs | none: no client has flow methods, so every example below is plain HTTP |
+
+The examples use `$FLOW` for the service's base URL and `$TOKEN` for an access token.
+
+## Access {#access}
+
+Every flow belongs to one data set, named by its definition's `dataSet`, and that data set
+decides who sees it. What a caller may do is asked of the API for their own token
+(`GET /me/grants` and `GET /me/datasets`) and cached for 45 seconds per token, so a change of
+grants in Keycloak can take that long to show here.
+
+| To | Takes |
+| --- | --- |
+| See a flow, its versions, deployment, runs, records and live view | `/flows/read` and read access to the flow's data set |
+| Create, change, validate, delete, deploy, preview, start, cancel or re-run | `/flows/write` and write access to the flow's data set; to both data sets when a change moves it |
+| Read an agent run's [transcript](./agents#transcript) | `/flows/write` and write access to the flow's data set |
+
+`DATAHUB_ADMIN` may do everything. A flow in a data set you cannot read does not exist for you:
+lists leave it out and a direct request is a `404`, never a `403`. Changing a flow first finds it
+as a reader, so a write-only caller gets `404` too.
+
+A flow whose data set was deleted is switched off (`disabledReason: DATASET_DELETED`) and is
+shown only to callers with write access to every data set, who may move it by saving it into
+another data set, or delete it.
+
+Saving also calls the API **as you**, forwarding your token: it resolves the data sets the
+definition names and creates the series a `write-timeseries` step declares, so the API's own
+access rules apply to those as well.
+
+## Errors {#errors}
+
+Every error is an [RFC 9457 problem](./reference/client#problem-documents)
+(`application/problem+json`) with the API's problem types, so one handler serves both services.
+Every `type` is prefixed `https://intellistream.ai/errors/`.
+
+| Status | `type` | When |
+| --- | --- | --- |
+| `400` | `validation-failed` | The definition is invalid. `fields` lists every problem, each a `field` (a JSON Pointer into the definition, `#/processors/1/properties/max`) and a `message`. |
+| `400` | `bad-request` | A parameter or body is out of range, or a version no longer schedules. |
+| `400` | `malformed-cursor` | The `cursor` is not one this service returned. |
+| `401` | `token-rejected` | The API refused your token when asked for your grants. |
+| `401` | `token-expiring` | Your token expires too soon for a [preview](#previews) to run as you. |
+| `403` | `unknown-tenant` | No tenant for the token's organization. Retrying will not help. |
+| `403` | `feature-disabled` | The organization's `flow` feature is off; `feature` is `flow`. |
+| `403` | `forbidden` | You lack `/flows/read` or `/flows/write`, or a registered client holds groups you do not. |
+| `403` | `dataset-forbidden` | You lack the data set access the request takes. |
+| `404` | `not-found` | No such flow, version, deployment or run, or one you may not see. |
+| `409` | `duplicate` | A flow with that `externalId` exists. |
+| `409` | `conflict` | Another save landed during yours, the flow is not deployed or is switched off, or the run has already ended. |
+| `503` | `tenant-provisioning` | The flow tables are not there yet. `Retry-After: 30`. |
+| `503` | `permissions-unavailable` | The API could not be asked for your grants, or the settings store did not answer. `Retry-After: 5`. |
+| `503` | `identity-provider-unavailable` | Keycloak could not be asked for a registered client's token. `Retry-After: 5`. |
+| `503` | `busy` | The instance that took a preview has no free run slot. `Retry-After: 10`. |
+| `503` | `tools-unavailable` | A platform tool server did not answer ([`GET /agents/tools`](./agents#agents-tools)). `Retry-After: 5`. |
+
+## Paging {#paging}
+
+Lists answer `{ "items": [...], "nextCursor": "..." }`. Pass `nextCursor` back as `cursor` for
+the next page; it is absent on the last one. A cursor belongs to its listing, and one from
+another listing is a `400`.
+
+| Listing | `limit` default | Most |
+| --- | --- | --- |
+| `GET /flows`, `GET /runs`, `GET /runs/overview` | 100 (also for `0` or less) | 1000 |
+| `GET /runs/{id}/records` | 1000 | 10000; `0` or less is a `400` |
+
+## The definition {#definition}
+
+A flow is saved as one JSON document, exactly as written, and an unknown field is an error. Every
+field, every processor's properties and the `${...}` references are in the platform
+documentation's <a href="/data-platform-documentation/using/flow-definition">Flow definition
+reference</a>. What the endpoints below depend on:
+
+```json
+{
+  "schemaVersion": 1,
+  "externalId": "pump-12-flow-clamped",
+  "dataSet": "plant-a",
+  "name": "Pump 12 flow, clamped",
+  "parameters": { "maxFlow": { "type": "number", "default": 250 } },
+  "processors": [
+    { "id": "read", "type": "read-timeseries", "properties": { "timeseries": "pump-12.flow" } },
+    { "id": "clamp", "type": "clamp", "properties": { "min": 0, "max": "${parameters.maxFlow}" } },
+    { "id": "write", "type": "write-timeseries", "properties": { "target": "${timeseries.externalId}_clamped" } }
+  ],
+  "connections": [
+    { "from": "read", "relationship": "success", "to": "clamp" },
+    { "from": "clamp", "relationship": "success", "to": "write" }
+  ],
+  "trigger": { "type": "schedule", "cron": "0 0 * * * *", "timezone": "Europe/Oslo", "delay": "PT5M" },
+  "execution": { "maxAttempts": 3, "timeout": "PT10M" }
+}
+```
+
+| Field | |
+| --- | --- |
+| `externalId` | The flow's id in the organization and in every path below. Cannot change. |
+| `dataSet` | The data set that decides [access](#access). |
+| `kind` | `flow` (the default) or `agent`; see [Agents](./agents#definition). |
+| `parameters` | Values a run is given, by name; a [run](#start) may override them. A scheduled or event-triggered flow needs a default for each. |
+| `trigger` | When runs start; see [triggers](#triggers). Absent means manual, with no window. |
+| `execution` | `maxConcurrentRuns` (default 1, at least 1), `maxAttempts` (attempts of a whole run, default 2, 1 to 10) and `timeout` (default `PT15M`, `PT20M` for a flow with an `agent` step, at most `PT1H`). |
+
+Trigger and execution settings take effect when a version is [deployed](#deployment), not when
+it is saved.
+
+### Triggers {#triggers}
+
+Every run covers a **window** of data time, `[start, end)`.
+
+| `type` | Runs | Fields |
+| --- | --- | --- |
+| `manual` | Only when [started](#start). | `window`: the window of a run started without one, ending now. Without it, a run must be given its window. |
+| `schedule` | At every tick of a six-field cron expression (seconds first). | `cron`, `timezone` (default UTC), `delay` (after the tick, so late data arrives), `window`. The tick at T covers the time since the tick before it, or `[T - window, T)` when `window` is set. |
+| `events` | A little after events that `match` asks for are recorded. | `match` (unset: every event), `debounce` (default `PT10S`, from the first matching event to the tick, so a burst is one run), `delay` (default `PT10S`), `window` (for a run started by hand). The run covers the time since the previous tick, or since the deployment. |
+
+`match` takes `externalId`, `type`, `subType`, `status` and `source` (lists of values, `*` and
+`%` as wildcards), `metadata` (`key=value` or a bare key, all required) and `excludeSource`
+(patterns never matched, `agent:*`). Fields are ANDed and the values of one field ORed. A
+`trigger-events` step reads the events that woke the run. An operator can switch event triggers
+off for the deployment, and an event-triggered flow then runs only when started.
+
+A schedule moves on when its tick's run is **created**, not when it finishes, and a tick's run
+has an id derived from the flow and the tick, so a tick is never run twice or skipped. Ticks
+missed while the service was down are worked off oldest first. Ticks missed while a flow was
+switched off, or while its identity [needed re-authorisation](#identity), are not run.
+
+## Endpoints {#endpoints}
+
+| Method and path | | Takes |
+| --- | --- | --- |
+| `GET /flows` | [List flows](#list) | read |
+| `POST /flows` | [Create a flow](#create) | write |
+| `POST /flows/validate` | [Validate without saving](#validate) | write |
+| `GET /flows/{id}` | [One flow](#get) | read |
+| `PUT /flows/{id}` | [Save the next version](#update) | write |
+| `DELETE /flows/{id}` | [Delete a flow](#delete) | write |
+| `GET /flows/{id}/versions`, `/versions/{n}` | [Versions](#versions) | read |
+| `GET /flows/{id}/deployment` | [The deployment](#deployment) | read |
+| `PUT /flows/{id}/deployment` | [Deploy, switch on or off, run as a client](#deploy) | write |
+| `POST /flows/{id}/deployment/authorize` | [Deploy as yourself](#authorize) | write |
+| `GET /clients` | [Registered clients](#clients) | write |
+| `POST /flows/{id}/runs` | [Start a run](#start) | write |
+| `POST /flows/{id}/runs/rerun` | [Re-run failed runs](#rerun-failed) | write |
+| `POST /previews` | [Preview](#previews) | write |
+| `GET /runs` | [List runs](#runs) | read |
+| `GET /runs/overview` | [One row per deployed flow](#overview) | read |
+| `GET /runs/{id}` | [One run](#run) | read |
+| `POST /runs/{id}/cancel` | [Cancel](#cancel) | write |
+| `POST /runs/{id}/rerun` | [Re-run one](#rerun) | write |
+| `GET /runs/{id}/records` | [What a run did](#records) | read |
+| `GET /runs/{id}/events` | [Follow a run live](#live) | read |
+| `GET /runs/{id}/transcript` | [An agent run's transcript](./agents#transcript) | write |
+| `GET /records/lookup` | [Which run wrote a value](#lookup) | read |
+| `GET /catalog/processors` | [The processors](#catalog) | any caller |
+| `GET /agents/tools` | [The tools an agent may use](./agents#agents-tools) | read |
+
+*read* is `/flows/read` and read access to the flow's data set; *write* is `/flows/write` and
+write access to it ([Access](#access)). `{id}` is a flow's `externalId` under `/flows` and a
+run's UUID under `/runs`.
+
+## Flows {#flows}
+
+### The flow object {#flow-object}
+
+```json
+{
+  "externalId": "pump-12-flow-clamped",
+  "name": "Pump 12 flow, clamped",
+  "dataSet": "plant-a",
+  "dataSetId": "8121977413926912",
+  "kind": "flow",
+  "version": 3,
+  "deployedVersion": 2,
+  "enabled": true,
+  "createdBy": "<subject>",
+  "createdAt": "2026-11-02T09:14:00Z",
+  "updatedBy": "<subject>",
+  "updatedAt": "2026-11-20T13:40:12Z",
+  "definition": { "schemaVersion": 1, "...": "..." }
+}
+```
+
+| Field | |
+| --- | --- |
+| `version` | The current (latest saved) version. |
+| `deployedVersion` | The deployed version; absent when it was never deployed. |
+| `enabled` | Whether the deployment is switched on. |
+| `disabledReason` | Why the service switched it off, such as `DATASET_DELETED`; absent otherwise. |
+| `dataSetId` | A string, as every node id on the wire. |
+| `definition` | The current version's definition. Left out of lists. |
+| `createdSeries` | On a save only: the series it created for `write-timeseries` steps. |
+
+### `GET /flows` {#list}
+
+The flows you may see, by `externalId`, [paged](#paging). `kind=flow` or `kind=agent` narrows
+it; anything else is a `400`.
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" "$FLOW/flows?kind=flow&limit=50"
+```
+
+### `POST /flows` {#create}
+
+The body is the definition itself, `Content-Type: application/json`. `201` with the flow at
+version 1. The series its `write-timeseries` steps declare and that do not exist yet are created,
+as you, in the data sets they name, and listed in `createdSeries`.
+
+```bash
+curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  --data-binary @pump-12-flow-clamped.json "$FLOW/flows"
+```
+
+`400 validation-failed` lists everything wrong at once; `403 dataset-forbidden` without write
+access to the flow's data set or to a data set a series would be created in; `409 duplicate`
+when the `externalId` is taken.
+
+### `POST /flows/validate` {#validate}
+
+Checks a definition exactly as a save would and saves nothing. Always `200` for a definition,
+valid or not:
+
+```json
+{
+  "valid": false,
+  "problems": [ { "field": "#/trigger/cron", "message": "Required for a schedule: a six-field cron expression such as \"0 0 * * * *\" (seconds first)." } ],
+  "series": []
+}
+```
+
+`series` lists the series a save would create. A data set you may not write is still a `403`.
+
+### `GET /flows/{id}` {#get}
+
+The flow with its current definition.
+
+### `PUT /flows/{id}` {#update}
+
+The body is the whole definition, saved as the next version; its `externalId` must be `{id}`.
+`200` with the flow. Saving never changes what is deployed: [deploy](#deploy) the new version
+for runs to use it. `409 conflict` when someone else saved in between; reload and save again.
+
+### `DELETE /flows/{id}` {#delete}
+
+`204`. Deletes the flow with its versions, deployment and queued runs, and revokes the offline
+token its runs acted with. The records and history of finished runs expire with the organization's
+flow retention (90 days by default), and its [failure events](#failure-events) stay, as events do.
+
+### Versions {#versions}
+
+`GET /flows/{id}/versions` lists every version, newest first, without definitions;
+`GET /flows/{id}/versions/{n}` returns one with its definition.
+
+```json
+[ { "version": 3, "createdBy": "<subject>", "createdAt": "2026-11-20T13:40:12Z" } ]
+```
+
+## Deployment {#deployment}
+
+A flow runs once a version of it is **deployed**: switched on, with an identity its runs act
+as. Its runs call the API as that identity, so they reach exactly what it may reach.
+
+`GET /flows/{id}/deployment`, `404` when it was never deployed:
+
+```json
+{
+  "version": 2,
+  "enabled": true,
+  "trigger": { "type": "schedule", "cron": "0 0 * * * *", "timezone": "Europe/Oslo", "delay": "PT5M" },
+  "maxConcurrentRuns": 1,
+  "maxAttempts": 3,
+  "timeout": "PT10M",
+  "identity": "deployer",
+  "runAs": "<subject>",
+  "identityState": "ok",
+  "deployedBy": "<subject>",
+  "deployedAt": "2026-11-20T13:45:00Z",
+  "nextTick": "2026-11-20T14:00:00Z",
+  "nextDueAt": "2026-11-20T14:05:00Z",
+  "lastTick": "2026-11-20T13:00:00Z"
+}
+```
+
+| Field | |
+| --- | --- |
+| `trigger` | The trigger as deployed, a window given as a parameter resolved to its default. |
+| `identity` | `deployer` (a person) or `client` (a registered client). |
+| `runAs` | The person's subject, or the client's name. |
+| `identityState` | `ok`, or `needs-reauthorisation` with the reason in `identityStateReason`. |
+| `nextTick`, `nextDueAt` | A schedule's next tick and when its run is due (tick plus `delay`). |
+
+### Whose access a run uses {#identity}
+
+| `identity` | Deployed with | Lasts |
+| --- | --- | --- |
+| `deployer` | [`POST .../deployment/authorize`](#authorize): you grant an offline token in Keycloak and the runs act as you, with your access as it is at the time of each run. | As long as that offline session: each run renews it. It ends after the realm's *Offline Session Idle* time without a run (30 days by default), at its *Offline Session Max* age if the realm sets one, or when you are disabled or revoke it. |
+| `client` | [`PUT .../deployment`](#deploy) with `runAs` naming a client registered in the [flow settings](./reference/tenant#flow-clients). Runs take `client_credentials` tokens for it. | Until the client is removed or its secret rotated without updating the settings. |
+
+When Keycloak refuses the identity, `identityState` turns to `needs-reauthorisation`, the
+schedule stops, the run fails with `IDENTITY_REJECTED` without a retry, and no failure event is
+written, since the run cannot write as anyone. Authorize again, or name a client, to recover.
+Keycloak being unreachable is different: the run fails with `AUTH` and is retried.
+
+### `PUT /flows/{id}/deployment` {#deploy}
+
+Every field is optional:
+
+```json
+{ "version": 2, "enabled": true, "runAs": "nightly" }
+```
+
+| Field | Default | |
+| --- | --- | --- |
+| `version` | the current one | Must still compile with the service's processors, or `400`. |
+| `enabled` | `true` | `false` switches the flow off: no ticks, and runs still waiting end `CANCELLED` with `FLOW_DISABLED` instead of starting. |
+| `runAs` | keep the identity | A registered client's name. |
+
+Without `runAs` the runs keep the identity they have: changing the version or switching the
+flow on or off is not a new authorisation, and does not clear `needs-reauthorisation`. A flow
+that has no identity yet is a `409`: deploy it with [`authorize`](#authorize) or with `runAs`.
+A run in progress finishes on the version it started with.
+
+Naming a client checks, before anything is stored, that the client is registered, that Keycloak
+issues it a token, that the API accepts that token, that the client may write the flow's data set,
+and that **you hold every group the client holds** (a client with `DATAHUB_ADMIN` takes an admin
+to assign), so assigning a client is never a way around the data set ACL.
+
+| Answer | When |
+| --- | --- |
+| `400 bad-request` | `runAs` is not a valid name, the client is not registered, Keycloak refused it, or the API refused its token. |
+| `403 forbidden` | The client holds groups you do not; the message lists them. |
+| `403 dataset-forbidden` | The client may not write the flow's data set, where a failed run writes its event. |
+| `503 identity-provider-unavailable` | Keycloak could not be asked. |
+
+Switching from `deployer` to `client` revokes the stored offline token.
+
+```bash
+curl -X PUT -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"runAs": "nightly"}' "$FLOW/flows/pump-12-flow-clamped/deployment"
+```
+
+### `POST /flows/{id}/deployment/authorize` {#authorize}
+
+Deploys as yourself. Body optional, `{ "version": 2, "enabled": true }`, defaults as above. `200`:
+
+```json
+{ "authorizationUrl": "https://keycloak.example.com/realms/.../protocol/openid-connect/auth?..." }
+```
+
+Send the **browser** there; the URL is returned as JSON rather than as a redirect because a
+`fetch` with a bearer token cannot follow one into a sign-in page. Keycloak asks for
+`openid offline_access organization:<alias>`, so whoever deploys needs the `offline_access`
+realm role. Nothing is stored until the browser comes back, which must be within 10 minutes.
+`400` when the version no longer compiles; `403` and `404` as for any write.
+
+### The callback {#deploy-callback}
+
+`GET /flows/deployment/callback` is where Keycloak sends the browser back. It carries no bearer
+token and is not for clients to call; the signed `state` it carries is what it trusts. Before
+storing anything it checks that the token belongs to the person who started the deployment, to
+the right organization, and may write the flow's data set. Then it sends the browser on to the
+console's page for the flow with `?deployed=1`, or `?deployError=<code>`, or, when the service
+has no console URL configured, answers a short HTML page (`200` deployed, `400` not).
+
+| `deployError` | |
+| --- | --- |
+| `invalid-state` | The state was tampered with or older than 10 minutes. |
+| `flow-gone` | The flow was deleted meanwhile. |
+| `denied`, `no-code`, `code-rejected` | Keycloak did not authorise, sent no code, or refused it. |
+| `offline-access-missing` | No offline token: the person lacks the `offline_access` role. |
+| `wrong-user` | Signed in as someone other than who started the deployment. |
+| `wrong-organization`, `token-invalid` | The token is for another organization, or unusable. |
+| `dataset-forbidden` | The person may not write the flow's data set. |
+| `keycloak-unavailable`, `api-unavailable` | Keycloak or the API did not answer. Try again. |
+| `deploy-failed` | The version no longer compiles, or the deployment could not be saved. |
+
+### `GET /clients` {#clients}
+
+The names of the [registered clients](./reference/tenant#flow-clients) a `runAs` may name,
+sorted: `{ "clients": ["nightly"] }`. Takes `/flows/write`; whether you may assign one is
+checked when you do.
+
+## Runs {#runs-section}
+
+### The run object {#run-object}
+
+```json
+{
+  "id": "0193a1f2-5c7e-7b3d-9a41-2f6c8d0e1b55",
+  "flow": "pump-12-flow-clamped",
+  "version": 2,
+  "status": "FAILED",
+  "attempt": 3,
+  "maxAttempts": 3,
+  "trigger": "schedule",
+  "runAs": "<subject>",
+  "preview": false,
+  "window": { "start": "2026-11-20T12:00:00Z", "end": "2026-11-20T13:00:00Z" },
+  "parameters": { "maxFlow": 250 },
+  "processorVersions": { "read-timeseries": "1.0.0", "clamp": "1.0.0", "write-timeseries": "1.0.0" },
+  "errorCode": "PROCESSOR_FAILED",
+  "error": "...",
+  "stats": { "records": 412, "failedProcessor": "read", "log": [ { "time": "...", "processor": "read", "level": "ERROR", "message": "..." } ] },
+  "cancelRequested": false,
+  "createdAt": "2026-11-20T13:05:00Z",
+  "startedAt": "2026-11-20T13:05:01Z",
+  "finishedAt": "2026-11-20T13:05:03Z"
+}
+```
+
+| Field | |
+| --- | --- |
+| `status` | `PENDING`, `RUNNING`, `SUCCEEDED`, `FAILED` or `CANCELLED`; see [the lifecycle](#lifecycle). |
+| `attempt`, `maxAttempts` | The current attempt, from 1. |
+| `trigger` | `schedule`, `events`, `manual`, `rerun` or `preview`. |
+| `triggeredBy` | Who started a `manual`, `rerun` or `preview` run. |
+| `parameters` | The values it was started with until it has run, then every parameter as resolved. |
+| `processorVersions` | Every processor type in the flow with the version that ran. |
+| `stats` | `records` (how many it produced), `failedProcessor`, and the run's `log`, at most 200 lines (`logTruncated: true` past that). |
+| `notBefore` | On a `PENDING` run: when it may start, as a retry waits out its back-off. |
+| `cancelRequested` | A cancel was asked of a running run. |
+
+### `POST /flows/{id}/runs` {#start}
+
+Starts a run of the **deployed** version now, on the instance that took the request if it has a
+free slot. Body optional:
+
+```json
+{ "window": { "start": "2026-11-20T00:00:00Z", "end": "2026-11-20T12:00:00Z" }, "parameters": { "maxFlow": 300 } }
+```
+
+Without a `window`, a schedule's run covers its latest due tick, and a manual or events trigger's
+run its `window` ending now. `201` with the run. `400` when there is no window to use, or a window
+whose start is not before its end, or `parameters` is not an object of values; `409` when the flow
+is not deployed or is switched off.
+
+```bash
+curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{}' "$FLOW/flows/pump-12-flow-clamped/runs"
+```
+
+### `POST /previews` {#previews}
+
+Runs a saved version, or a definition that was never saved, **as you**, writing nothing: its
+sinks report what they would write. Give one of the two:
+
+```json
+{ "flow": "pump-12-flow-clamped", "version": 3, "window": { "start": "...", "end": "..." }, "parameters": {} }
+```
+
+```json
+{ "definition": { "schemaVersion": 1, "...": "..." } }
+```
+
+`202` with the run, already started: follow it at [`/runs/{id}/events`](#live). An unsaved
+definition is checked exactly as a save would check it, data set access included, but no series
+is created.
+
+| | |
+| --- | --- |
+| Window | The last hour, when none is given. |
+| Attempts | One. A preview is never re-run, and never writes a failure event or moves a schedule. |
+| Where | Only on the instance that took the request, with your token, which cannot be refreshed. Its timeout is cut to what your token has left less 30 seconds; with under a minute left the request is a `401 token-expiring`. With no free slot it is a `503 busy`. If that instance shuts down, the preview ends `CANCELLED` with `SHUTDOWN`. |
+| Listed | Apart from real runs: `GET /runs?preview=true`. |
+
+### `GET /runs` {#runs}
+
+The runs you may see, newest first, [paged](#paging). `flow=<externalId>` narrows to one flow;
+`preview=true` lists previews instead of real runs. The first page starts with the runs not yet
+ended; finished runs come from the history, kept for the organization's flow retention (90 days
+by default).
+
+### `GET /runs/overview` {#overview}
+
+One row per deployed flow you may read, by `externalId`, [paged](#paging), `kind=flow|agent`
+optional:
+
+```json
+{
+  "items": [
+    {
+      "flow": "pump-12-flow-clamped",
+      "name": "Pump 12 flow, clamped",
+      "version": 2,
+      "health": "PROBLEM",
+      "reasons": ["LAST_RUN_FAILED"],
+      "enabled": true,
+      "nextDueAt": "2026-11-20T14:05:00Z",
+      "running": 0,
+      "queued": 0,
+      "lastRun": { "id": "...", "status": "FAILED", "errorCode": "PROCESSOR_FAILED", "finishedAt": "..." }
+    }
+  ]
+}
+```
+
+| `health` | |
+| --- | --- |
+| `PROBLEM` | `LAST_RUN_FAILED`, `NEEDS_REAUTHORISATION`, or `SWITCHED_OFF` (by the service, with a `disabledReason`). |
+| `WARNING` | `RETRYING`, `BACKLOG` (a run has waited over 5 minutes to start) or `OVERDUE` (a due tick is over 5 minutes late). |
+| `OK` | Nothing found. |
+| `OFF` | Switched off by a person. |
+
+`runningOn` and `runningSince` say where and since when a run is running; `waitingSince` is when
+the oldest waiting run was queued, which is how far behind the flow is.
+
+### `GET /runs/{id}` {#run}
+
+One run, wherever it is: in the run store while it is queued, running or just ended, in the
+history after.
+
+### `POST /runs/{id}/cancel` {#cancel}
+
+A `PENDING` run is cancelled at once. A `RUNNING` one is asked to stop at its next heartbeat
+(within about 15 seconds) and shows `cancelRequested: true` until it has. `200` with the run;
+`409` when it has already ended.
+
+### `POST /runs/{id}/rerun` {#rerun}
+
+A new run over the same window with the same parameters, of the version deployed **now**. `201`.
+The new run's id is derived from the old one's, so asking twice makes one run. `400` for a
+preview; `409` when the flow is not deployed or is switched off.
+
+### `POST /flows/{id}/runs/rerun` {#rerun-failed}
+
+Re-runs many failed runs of one flow in one go:
+
+```json
+{ "runs": ["0193a1f2-5c7e-7b3d-9a41-2f6c8d0e1b55", "..."] }
+```
+
+`200` with `{ "requeued": 12 }`. Between 1 and 10000 ids. A run that did not fail, belongs to
+another flow, or was already re-run is skipped, so asking twice queues nothing the second time.
+The new runs start as slots free up. `409` when the flow is not deployed or is switched off.
+
+### `GET /runs/{id}/records` {#records}
+
+What a run did, every attempt, in order, [paged](#paging): one record per thing a processor did
+to an item.
+
+```json
+{
+  "time": "2026-11-20T13:05:02.118Z",
+  "attempt": 1,
+  "sequence": 0,
+  "ordinal": 3,
+  "processor": "write",
+  "processorType": "write-timeseries",
+  "action": "send",
+  "itemId": "...",
+  "parentItemIds": [],
+  "relationship": "success",
+  "contentKind": "timeseries",
+  "size": 60,
+  "hash": "1583027744218837127",
+  "changedAttributes": {},
+  "transitUri": "datahub://timeseries/pump-12.flow_clamped?from=2026-11-20T12:00:00Z&to=2026-11-20T13:00:00Z",
+  "durationMillis": 41,
+  "truncated": false
+}
+```
+
+| `action` | |
+| --- | --- |
+| `receive` | Content read from outside the flow (with `transitUri`). |
+| `send` | Content written outside the flow (with `transitUri`); with a `relationship`, the item ended there. |
+| `create`, `fork`, `clone` | A new item; a derived one (`parentItemIds`); a copy for a relationship that feeds several steps. |
+| `attributes_modified`, `content_modified` | The item changed. |
+| `route` | Sent on along `relationship`. |
+| `drop` | The item ended: on a terminated `relationship`, or removed. |
+| `truncated` | The attempt hit the per-run record cap and kept no more. |
+
+Records hold the content's size and hash, never the content itself. `transitUri` is
+`datahub://timeseries/<externalId>?from=...&to=...` or `datahub://events/<externalId>`.
+
+### `GET /runs/{id}/events` {#live}
+
+The run's live view as newline-delimited JSON (`application/x-ndjson`), for `fetch` or `curl -N`.
+Each line is one object with a `type`:
+
+```json
+{"type":"run","run":{"id":"...","status":"RUNNING","attempt":1,"...":"..."}}
+{"type":"records","records":[{"action":"receive","...":"..."}]}
+{"type":"end","run":"0193a1f2-5c7e-7b3d-9a41-2f6c8d0e1b55"}
+```
+
+| `type` | |
+| --- | --- |
+| `run` | The [run](#run-object), first, and again whenever its status or attempt changes. |
+| `records` | Records that landed since the last line, in order. |
+| `end` | The run ended and its records have landed, or the view gave up after the run's timeout plus 5 minutes. Nothing follows. |
+
+The view polls about once a second, and keeps reading for a moment after the run ends, as the
+last records land shortly after.
+
+```bash
+curl -N -H "Authorization: Bearer $TOKEN" "$FLOW/runs/0193a1f2-5c7e-7b3d-9a41-2f6c8d0e1b55/events"
+```
+
+### `GET /records/lookup` {#lookup}
+
+Which run last recorded writing a series at an instant, for a link from a chart to the run:
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  "$FLOW/records/lookup?timeseries=pump-12.flow_clamped&at=2026-11-20T12:30:00Z"
+```
+
+`{ "run": "<uuid>", "flow": "pump-12-flow-clamped" }`: the latest `send` of the series whose window
+covers `at`, by a flow you may read. Neither field when there is none. It answers what a run
+wrote, not what is stored now: two writes close together may land in either order. Both
+parameters are required.
+
+## The run lifecycle {#lifecycle}
+
+| Status | |
+| --- | --- |
+| `PENDING` | Queued: waiting for a slot, for its `delay`, or for a retry's back-off (`notBefore`). |
+| `RUNNING` | An instance holds it under a lease renewed every heartbeat. |
+| `SUCCEEDED` | Every step finished and its records are durable. |
+| `FAILED` | It failed and its attempts are used up, or it cannot be retried. |
+| `CANCELLED` | Cancelled, switched off before it started, or its data set was deleted. |
+
+**Retries.** A failed attempt with attempts left (`maxAttempts`, default 2) goes back to
+`PENDING` with `attempt` one higher, after a back-off that doubles per attempt (30 seconds,
+then 60, up to 15 minutes by default) and is spread randomly over its upper half. A run whose
+instance dies is taken back when its lease expires and retried the same way (`LEASE_LOST`). A
+step's own `retry` in the definition retries one invocation within the attempt, before the
+attempt fails. An instance that shuts down hands its runs back to the queue.
+
+| `errorCode` | | Retried |
+| --- | --- | --- |
+| `PROCESSOR_FAILED` | A step threw on every attempt of its own `retry`. | yes |
+| `ITEM_FAILED` | An item went to a relationship that fails the run, such as a sink's `failure`. | yes |
+| `MEMORY_LIMIT` | The run went over its [memory share](#limits). | yes |
+| `NO_PROGRESS` | A step was handed items and took none. | yes |
+| `INVALID_PARAMETERS` | A parameter was missing or did not fit its type. | yes |
+| `MISSING_SECRET` | The flow refers to a [secret](./reference/tenant#flow-secrets) the organization does not have. | yes |
+| `INVALID_DEFINITION` | The version no longer compiles, for example after a processor was removed. | yes |
+| `TIMEOUT` | The run went past its `timeout`. | yes |
+| `RECORDS_UNPUBLISHED` | Its records could not be made durable in time. | yes |
+| `LEASE_LOST` | The instance running it stopped renewing its lease. | yes |
+| `AUTH` | Keycloak could not be reached for the run's identity. | yes |
+| `INTERNAL` | The service itself failed. | yes |
+| `IDENTITY_REJECTED` | Keycloak refused the identity; the deployment needs [re-authorisation](#identity). | no |
+| `CANCELLED` | Cancelled while running. | no |
+| `FLOW_DISABLED` | The flow was switched off before the run started. | no |
+| `DATASET_DELETED` | The flow's data set is gone; the flow is switched off. | no |
+| `SHUTDOWN`, `NO_CAPACITY` | A preview's instance shut down, or had no room. | no |
+
+## Limits a run can hit {#limits}
+
+| Limit | Default | What happens |
+| --- | --- | --- |
+| Memory | An equal share of the instance's run memory budget: half its heap, split over its run slots (8 by default) | Content over the share fails the run at once with `MEMORY_LIMIT`. A flow never states its own memory; the operator sizes the instance. Narrow the window, or cap what a source reads per item (`read-timeseries` `maxPointsPerItem`). |
+| Records | 100000 per attempt | Further records are dropped and a `truncated` record ends the attempt's records. The run itself goes on. |
+| Log | 200 lines per run | `stats.logTruncated: true`. |
+| Timeout | `execution.timeout`, at most `PT1H` | `TIMEOUT`. |
+| Concurrency | `execution.maxConcurrentRuns`, default 1 | Further runs of the flow wait in `PENDING`. |
+| Transcript | 1 MB per agent invocation | A `truncated` transcript row. |
+
+The memory share, record cap and run slots are the deployment's settings, so the defaults may
+differ where you run.
+
+## Failure events {#failure-events}
+
+A run that fails for good writes a DataHub [event](./reference/events) into the flow's data set,
+as the run's identity; a later successful run of the same window resolves it. One lifecycle per
+flow and window, sharing an `externalId`:
+
+```json
+{
+  "externalId": "flow:pump-12-flow-clamped:2026-11-20T12:00:00Z",
+  "type": "flow",
+  "subType": "run-failed",
+  "status": "open",
+  "description": "Flow pump-12-flow-clamped failed for the window 2026-11-20T12:00:00Z to 2026-11-20T13:00:00Z: PROCESSOR_FAILED.",
+  "metadata": {
+    "windowStart": "2026-11-20T12:00:00Z",
+    "windowEnd": "2026-11-20T13:00:00Z",
+    "flow": "pump-12-flow-clamped",
+    "flowVersion": "2",
+    "runId": "0193a1f2-5c7e-7b3d-9a41-2f6c8d0e1b55",
+    "attempts": "3",
+    "errorCode": "PROCESSOR_FAILED",
+    "error": "..."
+  }
+}
+```
+
+| `status` | Written |
+| --- | --- |
+| `open` | When a run fails after its last attempt. |
+| `resolved` | When a later run of the same window succeeds while the latest event is `open`. |
+| `dismissed` | By you, not the service: write an event with the same `externalId` and this status, as the console does. |
+
+A run without a window uses its run id in place of the window start. `error` is cut at 1000
+characters. An event that cannot be written at once (the API or Keycloak down) is written later,
+and a copy written twice collapses into one, since its id is derived from what it says. Previews,
+runs whose identity was refused and runs of a deleted data set write none. To list open failures,
+`POST /events/latest` on the API:
+
+```json
+{ "filter": { "type": ["flow"], "subType": ["run-failed"] }, "status": ["open"] }
+```
+
+## `GET /catalog/processors` {#catalog}
+
+Every processor a definition may use, sorted by category and name. Any caller of the service may
+read it.
+
+```json
+[
+  {
+    "name": "clamp",
+    "displayName": "Clamp",
+    "category": "transform",
+    "version": "1.0.0",
+    "description": "Limits values to a range; every point is kept.",
+    "accepts": ["timeseries"],
+    "relationships": [ { "name": "success", "description": "The clamped series; clamp.count is set.", "whenUnconnected": "required" } ],
+    "properties": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "min": { "title": "Min", "description": "...", "anyOf": [ { "type": "number" }, { "type": "string", "pattern": "^\\$\\{[^}]+\\}$" } ], "x-references": true },
+        "max": { "title": "Max", "description": "...", "anyOf": [ { "type": "number" }, { "type": "string", "pattern": "^\\$\\{[^}]+\\}$" } ], "x-references": true }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  }
+]
+```
+
+| Field | |
+| --- | --- |
+| `category` | `read-write`, `transform`, `detect` or `agent`. |
+| `relationships[].whenUnconnected` | `required` (connect or terminate it), `must-connect` (connect it; it is the step's result), `terminate` (items end there) or `fail-run` (an item sent there fails the run). |
+| `properties` | A JSON Schema for the step's `properties` object. Keywords JSON Schema lacks are `x-` ones: `x-references` (takes `${...}`), `x-sensitive`, `x-lookup`, `x-advanced`, `x-hidden` (JSON only), `x-required`, `x-tabs`, `x-onlyWith`. |
+
+The processors today are `read-timeseries`, `write-timeseries`, `read-events`, `write-events`,
+`trigger-events`, `clamp`, `threshold` and `agent`.
+
+## What each client covers {#client-coverage}
+
+| Operation | Java | Python | Rust |
+| --- | --- | --- | --- |
+| Everything on this page | REST only | REST only | REST only |
+
+The flow service has no SDK methods in any client. The [flow settings](./reference/tenant#flow-settings)
+on the API, which hold its secrets, clients and tool servers, are REST only as well.

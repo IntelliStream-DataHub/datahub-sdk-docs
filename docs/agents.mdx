@@ -1,14 +1,15 @@
 ---
 sidebar_position: 4.5
 title: Agents
-description: A flow that hands your events to a model with the MCP tools, on the flow service - the definition, the agent processor, the transcript endpoint and the flagged events it writes.
+description: A flow that hands your events to a model with the MCP tools, on the flow service - the definition, the agent processor, the tool servers you register, the transcript endpoint and the flagged events it writes.
 ---
 
 # Agents
 
 An agent is a flow on the flow service whose working step is a model: it reads a window of
-events, lets the model act on them with the [MCP tools](./mcp-server), and writes a
-**flagged** event when the model decides a person should look. The console's Agents form
+events, lets the model act on them with the [MCP tools](./mcp-server) and with those of any
+[MCP server your organization registers](#tool-servers), and writes a **flagged** event when
+the model decides a person should look. The console's Agents form
 builds one; this page is the REST surface behind that form, for anyone driving agents from
 their own code. There are no SDK methods for it.
 
@@ -62,7 +63,7 @@ Listed by `GET /catalog/processors`, category `agent`.
 | Property | Default | |
 | --- | --- | --- |
 | `instructions` | | What the model is to do. Required. |
-| `tools` | none | Name patterns of the tools the model may call, `*` and `?` wildcards (`event_*`). Empty means no tools. |
+| `tools` | none | Name patterns of the tools the model may call, `*` and `?` wildcards (`event_*`). A [registered server](#tool-servers)'s tools are `<server>__<tool>`, and a pattern naming a server (`crm__*`) is what connects the run to it; a bare `*` covers the platform's own tools only. Empty means no tools. |
 | `effort` | the service's | The model's reasoning effort. |
 | `maxIterations` | `6` | Model calls per run. |
 | `maxOutputTokens` | | The model's output limit. |
@@ -100,6 +101,54 @@ Every `event_create` call gets `source: agent:<flow externalId>` added, so the a
 can be told apart, and kept out of its next window with `excludeSource` below. A `429` from a tool
 server is waited out once, for its `Retry-After` and at most 10 seconds, then retried.
 
+The platform's servers are called with the run's own token. A registered server is called with
+the credential stored for it, so the same three rules apply to its tools on its own annotations,
+and what it returns is shown to the model and kept in the transcript as it is.
+
+## Tool servers of your own {#tool-servers}
+
+An organization registers an MCP server under a name through the
+[flow settings](./reference/tenant#flow-settings), or under **Agents → Tool servers** in the
+console, and every agent may then name its tools. Three rules tie the two together:
+
+| | |
+| --- | --- |
+| Names | A server's tools are offered as `<server>__<tool>`: `crm__ticket_get` for the `ticket_get` tool of the server registered as `crm`. The name is `[a-z0-9][a-z0-9-]{0,23}`, and a tool name longer than 38 characters, or outside `[A-Za-z0-9_-]`, is left out of the list. |
+| Sessions | The part of a `tools` pattern before its first `__` names the server, and a run opens one session per server its patterns name, when it starts, and closes them when it ends. `*` never reaches a registered server, so a server registered later is not picked up by an existing agent until its `tools` name it. |
+| Validation | Saving or validating a definition checks the names: what comes before `__` must have the shape above and be registered, or the problem is reported at `#/processors/<n>/properties/tools/<i>`. A server removed after the agent was saved fails its next run with `tools name the server "crm", which is not registered`. |
+
+### What the server must speak {#tool-servers-transport}
+
+The [Streamable HTTP](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports)
+transport, at the registered URL as given, nothing appended:
+
+- **Handshake.** `initialize` with `protocolVersion` `2025-06-18`, then `notifications/initialized`.
+  A `Mcp-Session-Id` the server issues is sent back on every later request, with the
+  `MCP-Protocol-Version` it settled on; a session the server has forgotten (`404`) is started
+  over once. A `DELETE` ends the session when one was issued.
+- **Replies** as `application/json` or `text/event-stream`, whichever the server chooses; the
+  request accepts both. A reply is read up to 4 MB and must arrive within the flow service's
+  `external-tool-timeout`, 30 seconds by default.
+- **`tools/list`**, paged with `nextCursor` (up to 20 pages), with the
+  [annotations](./mcp-server#annotations) the platform's own servers carry: `readOnlyHint` and
+  `destructiveHint` decide how a tool is treated, exactly as above.
+- **`tools/call`**, answered with `content` blocks of which the `text` ones are joined into the
+  tool result, and `isError`.
+- **Not supported:** redirects, which are never followed, and requests from the server back to
+  the client (sampling, elicitation), which are passed over. A server that needs them answered
+  cannot be used.
+
+Authentication is one of two kinds, chosen when the server is registered:
+
+| `auth` | On every call |
+| --- | --- |
+| `header` | One fixed header, `headerName` (`Authorization` by default) with the stored `headerValue`. |
+| `client-credentials` | `Authorization: Bearer <token>`, the token taken at `tokenUrl` with the OAuth 2.0 client-credentials grant, the client authenticated with HTTP Basic, asking for `scope` and `resource` ([RFC 8707](https://www.rfc-editor.org/rfc/rfc8707)) when they were given. The token is reused until shortly before it expires, a tenth of its lifetime early and at most a minute, five minutes in all when the endpoint states no `expires_in`, and renewed once when the server answers `401`. |
+
+Where a server may sit is the deployment's decision: a URL that resolves to a private, loopback or
+link-local address, or a plain `http` one, is refused at registration and again before the first
+connection unless the platform runs with `datahub.outbound.allow-private-networks`.
+
 ## `read-events` and `write-events` {#read-write-events}
 
 | Step | Property | |
@@ -110,15 +159,15 @@ server is waited out once, for its `Retry-After` and at most 10 seconds, then re
 
 ## Endpoints {#endpoints}
 
-Three endpoints are new for agents. The rest of the flow API is unchanged: save and validate
-(`POST /flows`, `POST /flows/validate`, `PUT /flows/{id}`), deployment
-(`PUT /flows/{id}/deployment`), and runs (`POST /flows/{id}/runs`, `POST /previews`,
-`GET /runs`, `GET /runs/{id}`, cancel and rerun).
+Three endpoints are new for agents. The rest is the [flow API](./flows), the same for agents as
+for any flow: [save and validate](./flows#flows), [deployment](./flows#deployment), and
+[runs](./flows#runs-section), with the [run lifecycle](./flows#lifecycle) and
+[limits](./flows#limits) a run can hit.
 
 | Endpoint | |
 | --- | --- |
 | `GET /flows?kind=flow\|agent&cursor=&limit=` | The listing, filtered by kind. Omit `kind` for both. Each `FlowView` carries its `kind`. |
-| `GET /agents/tools` | What the tool servers advertise, asked as the caller. |
+| `GET /agents/tools` | What the tool servers advertise: the platform's, asked as the caller, and the registered ones, asked with their own credential. |
 | `GET /runs/{id}/transcript?attempt=&after=` | A run's transcript, the conversation between the model and the tools. |
 
 ### Whose access a run uses {#run-identity}
@@ -146,17 +195,25 @@ state; authorize again, or name a client. Windows missed in between are not run.
 ### `GET /agents/tools` {#agents-tools}
 
 Needs `/flows/read`. Returns the API server's tools and, when the service is configured with
-it, the analysis server's, with hints for a picker:
+it, the analysis server's, then the tools of every [registered server](#tool-servers), with
+hints for a picker:
 
 ```json
 {
   "tools": [
-    { "server": "datahub-api", "name": "event_get", "description": "...", "readOnly": true, "destructive": false }
+    { "server": "datahub-api", "name": "event_get", "description": "...", "readOnly": true, "destructive": false, "external": false },
+    { "server": "crm", "name": "crm__ticket_get", "description": "...", "readOnly": true, "destructive": false, "external": true }
+  ],
+  "unavailable": [
+    { "server": "erp", "error": "erp refused the credential (HTTP 401)" }
   ]
 }
 ```
 
-A server that does not answer is a `503`, problem type `tools-unavailable`.
+`external` marks a registered server's tool, whose `name` carries the server's prefix. A
+platform server that does not answer is a `503`, problem type `tools-unavailable`; a registered
+one that does not answer is listed under `unavailable` with what it said, and the rest of the
+tools are returned.
 
 ### `GET /runs/{id}/transcript` {#transcript}
 
