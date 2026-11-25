@@ -53,8 +53,39 @@ from tutorial_support import wait_for_related
 wait_for_related(client, "sensor_a")
 """
 
+# Look-up, nearest and export read `plant_oslo` and `pump_1`, which a reader made in the
+# create example; independent blocks each start from a swept backend, so they are made again.
+[[python.inject]]
+before = 3
+code = """
+client.resources.create(
+    [intellistream_datahub_sdk.Resource(external_id="plant_oslo", name="Oslo Plant", labels=["Plant"]),
+     intellistream_datahub_sdk.Resource(external_id="pump_1", name="Pump 1", labels=["Pump"])],
+    [intellistream_datahub_sdk.RelForm.by_external_ids("plant_oslo", "pump_1", "CONTAINS")])
+"""
+
+[[python.inject]]
+before = 9
+code = """
+client.resources.create(
+    [intellistream_datahub_sdk.Resource(external_id="plant_oslo", name="Oslo Plant", labels=["Plant"]),
+     intellistream_datahub_sdk.Resource(external_id="pump_1", name="Pump 1", labels=["Pump"])],
+    [intellistream_datahub_sdk.RelForm.by_external_ids("plant_oslo", "pump_1", "CONTAINS")])
+"""
+
+# The export example moves a graph between two tenants' clients; one stack plays both.
+[[python.inject]]
+before = 10
+code = """
+client.resources.create(
+    [intellistream_datahub_sdk.Resource(external_id="plant_oslo", name="Oslo Plant", labels=["Plant"]),
+     intellistream_datahub_sdk.Resource(external_id="pump_1", name="Pump 1", labels=["Pump"])],
+    [intellistream_datahub_sdk.RelForm.by_external_ids("plant_oslo", "pump_1", "CONTAINS")])
+source = target = client
+"""
+
 [owns]
 resources = ["plant_oslo", "pump_1"]
 
-[expect]
-resources = ["plant_oslo", "pump_1"]
+# No [expect]: each block runs against a swept backend, so nothing a block creates is
+# there afterwards. The proof is that every example executed cleanly.

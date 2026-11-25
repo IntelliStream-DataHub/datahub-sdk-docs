@@ -154,10 +154,11 @@ The MCP `edge_get` tool follows the same rule.
 <TabItem value="java" label="Java">
 
 ```java
-DataWrapper<EdgeProxy> one = client.edges().findById(341);
+long edgeId = created.getItems().get(0).getId();   // from the create above
+DataWrapper<EdgeProxy> one = client.edges().findById(edgeId);
 
 GraphDataWrapper<Resource, EdgeProxy> many = client.edges()
-        .byIds(List.of(IdCollection.createFromId(341), IdCollection.createFromId(342)));
+        .byIds(List.of(IdCollection.createFromId(edgeId)));
 
 for (Resource endpoint : many.getNodes()) {
     System.out.println(endpoint.getExternalId());
@@ -168,9 +169,10 @@ for (Resource endpoint : many.getNodes()) {
 <TabItem value="python" label="Python">
 
 ```python
-one = client.edges.get(341)          # EdgeProxy, or None if missing or not readable
+edge_id = created[0].id              # from the create above
+one = client.edges.get(edge_id)      # EdgeProxy, or None if missing or not readable
 
-many = client.edges.by_ids([341, 342])
+many = client.edges.by_ids([edge_id])
 for endpoint in many.nodes:
     print(endpoint.external_id)
 ```
@@ -184,9 +186,10 @@ already hold, which is accepted anywhere an id is.
 ```rust
 use intellistream_datahub_sdk::generic::IdAndExtId;
 
-let one = api.edges.get(341).await?;
+let edge_id = created.get_items()[0].id.unwrap();   // from the create above
+let one = api.edges.get(edge_id).await?;
 
-let many = api.edges.by_ids(&vec![IdAndExtId::from_id(341), IdAndExtId::from_id(342)]).await?;
+let many = api.edges.by_ids(&vec![IdAndExtId::from_id(edge_id)]).await?;
 for endpoint in many.nodes().unwrap_or_default() {
     println!("{}", endpoint.external_id());
 }
@@ -222,14 +225,14 @@ node it held up.
 <TabItem value="java" label="Java">
 
 ```java
-client.edges().delete(List.of(IdCollection.createFromId(341)));
+client.edges().delete(List.of(IdCollection.createFromId(edgeId)));
 ```
 
 </TabItem>
 <TabItem value="python" label="Python">
 
 ```python
-client.edges.delete([341])
+client.edges.delete([edge_id])
 ```
 
 </TabItem>
@@ -238,7 +241,7 @@ client.edges.delete([341])
 ```rust
 use intellistream_datahub_sdk::generic::IdAndExtId;
 
-api.edges.delete(&vec![IdAndExtId::from_id(341)]).await?;
+api.edges.delete(&vec![IdAndExtId::from_id(edge_id)]).await?;
 ```
 
 </TabItem>

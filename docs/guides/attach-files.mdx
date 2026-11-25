@@ -26,6 +26,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 byte[] content = Files.readAllBytes(Path.of("calibration_a12.pdf"));
+long plantA = client.datasets().byIds(List.of(IdCollection.createFromExternalId("plant_a")))
+        .getItems().get(0).getId();
 
 var uploaded = client.files().upload(
     FileUploadRequest.builder()
@@ -33,7 +35,7 @@ var uploaded = client.files().upload(
         .content(content)
         .contentType("application/pdf")
         .externalId("calibration_pump_esp_a12")
-        .dataSetId(42L)
+        .dataSetId(plantA)
         .description("ESP A-12 calibration certificate")
         .build());
 
@@ -46,12 +48,14 @@ System.out.println("stored as id " + uploaded.getItems().get(0).getId());
 ```python
 import intellistream_datahub_sdk
 
+plant_a = client.datasets.by_ids(["plant_a"])[0].id
+
 uploaded = client.files.upload_file(intellistream_datahub_sdk.FileUpload(
     path="calibration_a12.pdf",                # local file
     destination_path="/certificates/2026/",
     external_id="calibration_pump_esp_a12",
     name="calibration_a12.pdf",
-    data_set_id=42,
+    data_set_id=plant_a,
     description="ESP A-12 calibration certificate"))
 ```
 
@@ -60,13 +64,17 @@ uploaded = client.files.upload_file(intellistream_datahub_sdk.FileUpload(
 
 ```rust
 use intellistream_datahub_sdk::files::FileUpload;
+use intellistream_datahub_sdk::generic::IdAndExtId;
+
+let plant_a = api.datasets.by_ids(&vec![IdAndExtId::from_external_id("plant_a")]).await?
+    .get_items()[0].id.unwrap();
 
 // MIME type is inferred from the file content
 let mut upload = FileUpload::new_with_destination_path(
     "calibration_a12.pdf", "/certificates/2026/")?;
 upload.set_external_id("calibration_pump_esp_a12".into());
 upload.set_file_name("calibration_a12.pdf".into());
-upload.set_data_set_id(42);
+upload.set_data_set_id(plant_a);
 upload.set_description("ESP A-12 calibration certificate".into());
 let uploaded = api.files.upload_file(upload).await?;
 ```
@@ -75,7 +83,8 @@ let uploaded = api.files.upload_file(upload).await?;
 </Tabs>
 
 :::tip Link a file to what it documents
-Set `dataSetId` so a file is discoverable from the data set it documents. To point it at the
+Set `dataSetId` so a file is discoverable from the data set it documents; the examples look up
+`plant_a`, the data set the [Datasets reference](/reference/datasets) creates. To point it at the
 resource it documents, the calibration certificate at the pump it certifies, the Python and
 Rust clients take `related_resources`, a list of numeric resource ids; the Java client has no
 field for it.

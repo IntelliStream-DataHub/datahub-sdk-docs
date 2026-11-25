@@ -27,7 +27,7 @@ creates the label.
 import ai.intellistream.datahub.label.LabelForm;
 
 DataWrapper<LabelForm> all = client.labels().list();
-DataWrapper<LabelForm> one = client.labels().getById(5677892L);
+DataWrapper<LabelForm> one = client.labels().getById(all.getItems().get(0).getId());
 ```
 
 `list()` takes no limit and no cursor: it returns the whole vocabulary.
@@ -40,7 +40,8 @@ critical.setName("critical");            // stored as CRITICAL
 critical.setDescription("Needs an operator response within the hour");
 critical.setColor("#cc11cc");
 
-client.labels().create(List.of(critical));
+DataWrapper<LabelForm> created = client.labels().create(List.of(critical));
+long criticalId = created.getItems().get(0).getId();
 ```
 
 A name that already exists is a `409`.
@@ -51,7 +52,7 @@ one case that needs the `id`, since a name used as the lookup key cannot also be
 
 ```java
 LabelForm recolour = new LabelForm();
-recolour.setId(5677892L);
+recolour.setId(criticalId);
 recolour.setColor("#a11");
 client.labels().update(List.of(recolour));
 ```
@@ -68,7 +69,7 @@ client.labels().update(List.of(recolour));
 ## Delete
 
 ```java
-client.labels().delete(List.of(IdCollection.createFromId(5677892L)));
+client.labels().delete(List.of(IdCollection.createFromId(criticalId)));
 ```
 
 The endpoint answers `204` with no body. Two cases are refused with a `400`:

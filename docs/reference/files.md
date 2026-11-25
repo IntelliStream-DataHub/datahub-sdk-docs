@@ -50,13 +50,16 @@ bytes; the Python and Rust clients read a local file.
 They also default the external id to the file name as-is, the same default the server
 applies. External ids are stored verbatim and allow only letters, digits and `. _ : + = -`, so a
 file whose name has a space or another character outside that set needs an explicit external
-id, or the upload is a `400` naming `externalId`.
+id, or the upload is a `400` naming `externalId`. The examples file the report under `plant_a`,
+the data set the [Datasets reference](./datasets) creates.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
 
 ```java
 byte[] content = Files.readAllBytes(Path.of("report.csv"));
+long plantA = client.datasets().byIds(List.of(IdCollection.createFromExternalId("plant_a")))
+        .getItems().get(0).getId();
 
 DataWrapper<IndexNode> uploaded = client.files().upload(
         FileUploadRequest.builder()
@@ -64,7 +67,7 @@ DataWrapper<IndexNode> uploaded = client.files().upload(
                 .content(content)
                 .contentType("text/csv")        // default: application/octet-stream
                 .externalId("report_2026_q2")   // optional
-                .dataSetId(42L)                 // optional
+                .dataSetId(plantA)              // optional
                 .description("Q2 production")   // optional
                 .build());
 ```
@@ -75,12 +78,14 @@ DataWrapper<IndexNode> uploaded = client.files().upload(
 ```python
 import intellistream_datahub_sdk
 
+plant_a = client.datasets.by_ids(["plant_a"])[0].id
+
 upload = intellistream_datahub_sdk.FileUpload(
     path="report.csv",                 # local file
     destination_path="/reports/2026/",
     external_id="report_2026_q2",
     name="q2.csv",
-    data_set_id=42,
+    data_set_id=plant_a,
     description="Q2 production")
 
 uploaded = client.files.upload_file(upload)   # -> list[INode]
@@ -91,12 +96,16 @@ uploaded = client.files.upload_file(upload)   # -> list[INode]
 
 ```rust
 use intellistream_datahub_sdk::files::FileUpload;
+use intellistream_datahub_sdk::generic::IdAndExtId;
+
+let plant_a = api.datasets.by_ids(&vec![IdAndExtId::from_external_id("plant_a")]).await?
+    .get_items()[0].id.unwrap();
 
 // mime type is inferred from the file content
 let mut upload = FileUpload::new_with_destination_path("report.csv", "/reports/2026/")?;
 upload.set_external_id("report_2026_q2".into());
 upload.set_file_name("q2.csv".into());
-upload.set_data_set_id(42);
+upload.set_data_set_id(plant_a);
 upload.set_description("Q2 production".into());
 let uploaded = api.files.upload_file(upload).await?;
 ```
@@ -156,7 +165,7 @@ that writes straight to a path, so a large file never has to sit in memory whole
 <TabItem value="java" label="Java">
 
 ```java
-byte[] bytes = client.files().download("99");
+byte[] bytes = client.files().download("report_2026_q2");
 Files.write(Path.of("q2.csv"), bytes);
 ```
 
@@ -164,23 +173,28 @@ Files.write(Path.of("q2.csv"), bytes);
 <TabItem value="python" label="Python">
 
 ```python
-download = client.files.download(99)
+from pathlib import Path
+
+report = client.files.get_by_external_id("report_2026_q2")[0]
+download = client.files.download(report.id)
 print(download.file_name, download.mime_type, len(download))
 Path("q2.csv").write_bytes(download.content)
 
 # or stream it to disk, which returns the byte count
-written = client.files.download_to_path(99, "q2.csv")
+written = client.files.download_to_path(report.id, "q2.csv")
 ```
 
 </TabItem>
 <TabItem value="rust" label="Rust">
 
 ```rust
-let download = api.files.download(99).await?;
+let report = api.files.get_by_external_id("report_2026_q2").await?;
+let report_id = report.get_items()[0].id.unwrap();
+let download = api.files.download(report_id).await?;
 std::fs::write("q2.csv", &download.bytes)?;
 
 // or stream it to disk, which returns the byte count
-let written = api.files.download_to_path(99, "q2.csv").await?;
+let written = api.files.download_to_path(report_id, "q2.csv").await?;
 ```
 
 </TabItem>
