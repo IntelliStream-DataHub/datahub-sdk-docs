@@ -955,8 +955,11 @@ target.resources.import_graph_from_path("plant_oslo.dhgraph")
 
 ```rust
 use intellistream_datahub_sdk::generic::IdAndExtId;
+use intellistream_datahub_sdk::graph_data_wrapper::GraphDataWrapper;
+use intellistream_datahub_sdk::Node;
 
-let found = source.resources.by_ids(&vec![IdAndExtId::from_external_id("plant_oslo")]).await?;
+let found: GraphDataWrapper<Node> =
+    source.resources.by_ids(&vec![IdAndExtId::from_external_id("plant_oslo")]).await?;
 let plant_id = found.nodes().unwrap_or_default()[0].id().unwrap();
 let graph: Vec<u8> = source.resources.export_graph(plant_id).await?;
 
