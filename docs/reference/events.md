@@ -32,7 +32,7 @@ event even when a `snake_case` policy is rejecting it on resources.
 | `type` | string, 3–128 | Top-level categorization (`alarm`, `work_order`). |
 | `subType` | string, 3–128 | Refinement of `type` (`overpressure`). |
 | `status` | string, 3–128 | Free-form lifecycle marker (`OPEN`, `acknowledged`). No state machine is enforced. |
-| `source` | string, 2–128 | The system of record the event came from (`SAP`, a historian). |
+| `source` | string, 2–128 | The system of record the event came from (`SAP`, a historian). An [agent](../agents#flagged-event) writes `agent:<flow>`. |
 | `description` | string | Prose. [Full-text search](#search) reads it, along with `externalId` and the metadata values. |
 | `metadata` | map&lt;string, string&gt; | Flat key/value. An empty key is dropped rather than rejected. |
 | `dataSetId` | number | Optional. Platform-internal events (say, anomaly detection on a series outside any data set) legitimately have none. |

@@ -14,6 +14,8 @@ against your data model directly instead of you hand-writing an integration laye
 | API | `<api-url>/mcp` (port 8081 locally) | **37 tools** across data sets, resources, relationships, time series, events, labels and units |
 | Analysis | the analysis service's `/mcp` (port 8082 locally) | **one tool**, [`analysis_related_series`](#the-analysis-server) |
 
+DataHub's own [agents](./agents) run on the same tools.
+
 The important part is what they *aren't*: each MCP endpoint is an ordinary Spring endpoint on
 the same security chain as the REST API. There is no separate agent door, no service account
 with blanket access, and no MCP-specific bypass. An agent sees exactly what the identity in
@@ -198,6 +200,10 @@ neighbour ("the time series measuring this pump").
 Use `event_filter` rather than `event_search` for anything time-bounded or exact. Search is
 for when the agent only has words to go on.
 
+`event_create` also takes two optional parameters: `source`, where the event comes from, its
+provenance (`sap`, `agent:pump_watch`), which [filters](/reference/events#filtering) can include
+or exclude events by, and `metadata`, free-form string key/value pairs stored on the event.
+
 ### Labels and units
 
 | Tool | What it does |
@@ -280,6 +286,23 @@ response carries `focusExternalId` and `focusName`, `bucketSeconds` (the aggrega
 the series were resampled to), `maxLagSeconds` (how far the lag scan went), `skipped`
 (candidates that could not be tested) and `message`.
 
+## Tool annotations {#annotations}
+
+Every tool advertises the MCP tool annotations in `tools/list`: `readOnlyHint`,
+`destructiveHint`, `idempotentHint` and `openWorldHint`. `openWorldHint` is `false` on all 38,
+and the other three sort them into three classes:
+
+| Class | Hints | Tools |
+| --- | --- | --- |
+| Read-only | `readOnlyHint: true`, `idempotentHint: true` | `dataset_list`, `dataset_search`, `resource_search`, `resource_get`, `resource_fetch_related`, `resource_fetch_nearest`, `edge_list_types`, `edge_get`, `timeseries_list`, `timeseries_search`, `timeseries_get`, `timeseries_get_latest`, `timeseries_fetch_datapoints`, `event_search`, `event_filter`, `event_get`, `label_list`, `unit_list`, `unit_get`, and the analysis server's `analysis_related_series` |
+| Additive | `readOnlyHint: false`, `destructiveHint: false`, `idempotentHint: false` | `dataset_create`, `resource_create`, `edge_create_type`, `edge_create`, `timeseries_create`, `event_create`, `label_create` |
+| Overwriting | `readOnlyHint: false`, `destructiveHint: true`, `idempotentHint: true` | `dataset_update`, `dataset_delete`, `resource_update`, `resource_delete`, `edge_delete`, `timeseries_update`, `timeseries_delete`, `timeseries_send_datapoint`, `event_update`, `event_delete`, `label_update` |
+
+An update counts as destructive because it overwrites the fields it sets, and so does
+`timeseries_send_datapoint`. A client that follows the hints gets reads and creates: DataHub's
+own [agents](./agents#tools) refuse destructive tools, and treat a tool without
+`readOnlyHint: true` as one that may change data.
+
 ## How results are shaped
 
 The API server is written for a reader with a finite context window, which is not something
@@ -306,7 +329,7 @@ elicitation: a tool cannot open a channel back to the user to confirm a mutating
 `resource_delete`, `event_delete` and `timeseries_send_datapoint` execute the moment they are
 called. If your agent should pause for a human before it writes, **that gate belongs in the
 agent you build**, not in the server. Give the agent a read-only token if it has no business
-writing at all.
+writing at all, and have it read the [annotations](#annotations) if it should refuse on its own.
 
 **The tools spend the REST budget.** `/mcp` sits on the same chain as everything else, so an
 agent's calls count against the same per-minute [rate limit](/reference/limits#rate-limits)
