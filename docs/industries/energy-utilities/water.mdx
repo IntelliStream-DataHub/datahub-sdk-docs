@@ -101,9 +101,9 @@ ResourceNetwork west = client.resources().fetchRelated("zone_west_12", 20);
 ResourceNetwork east = client.resources().fetchRelated("zone_east_07", 20);
 
 Set<String> westUpstream = west.nodes().stream()
-    .map(Resource::getExternalId).collect(Collectors.toSet());
+    .map(NodeModel::getExternalId).collect(Collectors.toSet());
 Set<String> common = east.nodes().stream()
-    .map(Resource::getExternalId).filter(westUpstream::contains).collect(Collectors.toSet());
+    .map(NodeModel::getExternalId).filter(westUpstream::contains).collect(Collectors.toSet());
 
 // common holds main_trunk_north (and source_lake_a) → isolate there
 ```
@@ -131,9 +131,9 @@ let west = api.resources.fetch_related(
 let east = api.resources.fetch_related(
     &RelatedResourcesForm::from_external_id("zone_east_07").with_depth(20)).await?;
 
-let w: HashSet<&str> = west.nodes().iter().map(|n| n.external_id.as_str()).collect();
+let w: HashSet<&str> = west.nodes().iter().map(|n| n.external_id()).collect();
 let common: Vec<&str> = east.nodes().iter()
-    .map(|n| n.external_id.as_str()).filter(|id| w.contains(id)).collect();
+    .map(|n| n.external_id()).filter(|id| w.contains(id)).collect();
 // common holds "main_trunk_north" → isolate there
 ```
 

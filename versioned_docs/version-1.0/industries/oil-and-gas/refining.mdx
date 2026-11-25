@@ -1,0 +1,170 @@
+---
+sidebar_position: 4
+title: Oil & gas — refinery operations
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Oil & gas — refinery operations
+
+**The problem.** A refinery turns crude into products through tightly-coupled units —
+distillation columns, crackers, reformers — each running a delicate balance of
+temperature, pressure and flow. Drift off that balance and the unit makes off-spec
+product (reprocessing cost), burns excess energy (the refinery's second-biggest
+expense after feed), or trips entirely. Operators need the **process KPIs that reveal
+drift** and an alert when a unit heads off-spec, early enough to nudge it back.
+
+What we solve here is keeping units on-spec and energy-efficient by turning raw process
+tags into the few numbers that actually run the plant.
+
+## Set up demo data
+
+New workspace? Run this once (Python) to create the crude unit's energy series with a
+day of hourly readings, so the roll-up in step 1 has data. Safe to re-run.
+
+```python
+import intellistream_datahub_sdk, numpy as np, pandas as pd
+
+client = intellistream_datahub_sdk.DataHubClient.from_env()
+
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id="cdu_1_energy_gj", name="CDU-1 energy", unit="gj", value_type="float")])
+idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=24, freq="1h")
+client.timeseries.insert_from_lists(timestamps=idx, values=np.random.uniform(40, 60, 24), ts="cdu_1_energy_gj")
+```
+
+## 1. Track the process KPIs
+
+Column temperatures, reflux and feed are series; the numbers operators steer by —
+energy per barrel, reflux ratio, separation quality — come from rolling these up.
+See [Query & aggregate](/guides/query-and-aggregate).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+var filter = new RetrieveFilter();
+filter.setExternalId("cdu_1_energy_gj");
+filter.setStart(ZonedDateTime.now().minusDays(1));
+filter.setEnd(ZonedDateTime.now());
+filter.setAggregates(List.of("sum"));
+filter.setGranularity("1h");
+
+var request = new DataRetriever<RetrieveFilter>();
+request.setItems(List.of(filter));
+
+// divide hourly energy by hourly throughput for energy-per-barrel
+client.timeseries().retrieve(request).getItems().get(0).getDatapoints()
+    .forEach(p -> recordEnergyIntensity(p.getTimestamp(), p.getValue()));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import pandas as pd
+
+rf = intellistream_datahub_sdk.RetrieveFilter(
+    ts="cdu_1_energy_gj",
+    start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=1),
+    end=pd.Timestamp.now(tz="UTC"),
+    aggregates=["sum"], granularity="1h")
+
+for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
+    record_energy_intensity(dp.timestamp, dp.sum)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use intellistream_datahub_sdk::generic::{DataWrapper, RetrieveFilter};
+use chrono::Utc;
+
+let filter = RetrieveFilter {
+    external_id: Some("cdu_1_energy_gj".into()),
+    start: Some(Utc::now() - chrono::Duration::days(1)),
+    end: Some(Utc::now()),
+    aggregates: Some(vec!["sum".into()]),
+    granularity: Some("1h".into()),
+    ..Default::default()
+};
+let page = api.time_series
+    .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?;
+let series = &page.get_items()[0];
+for p in &series.datapoints { record_energy_intensity(&p.timestamp, p.sum); }
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Catch a process upset early
+
+When a column's top temperature drifts out of its control band, raise a `process_upset`
+event so the board operator corrects before product goes off-spec or the unit trips.
+See [Turn readings into events](/guides/detect-events).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+EventModel upset = new EventModel();
+upset.setExternalId("process_upset_cdu1_" + System.currentTimeMillis());
+upset.setType("process_upset");
+upset.setStatus("open");
+upset.setMetadata(Map.of("unit", "crude_unit_1", "tag", "column_top_temp", "value_c", "168"));
+upset.setEventTime(ZonedDateTime.now());
+client.events().create(List.of(upset));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+client.events.create([intellistream_datahub_sdk.Event(
+    external_id=f"process_upset_cdu1_{int(pd.Timestamp.now().timestamp())}",
+    type="process_upset", status="open",
+    event_time=pd.Timestamp.now(tz="UTC"),
+    metadata={"unit": "crude_unit_1", "tag": "column_top_temp", "value_c": "168"})])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use intellistream_datahub_sdk::events::Event;
+use chrono::Utc;
+
+let mut upset = Event::new(
+    format!("process_upset_cdu1_{}", Utc::now().timestamp()),
+    "process_upset".into(),
+    Utc::now());
+upset.status = Some("open".into());
+upset.add_metadata("unit".into(), "crude_unit_1".into());
+upset.add_metadata("tag".into(), "column_top_temp".into());
+upset.add_metadata("value_c".into(), "168".into());
+api.events.create(&vec![upset]).await?;
+```
+
+</TabItem>
+</Tabs>
+
+## See the result
+
+Chart the hourly energy you rolled up — the bar chart is the shape the board operator
+watches for drift:
+
+```python
+import matplotlib.pyplot as plt
+
+rf = intellistream_datahub_sdk.RetrieveFilter(ts="cdu_1_energy_gj",
+    start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=1), end=pd.Timestamp.now(tz="UTC"),
+    aggregates=["sum"], granularity="1h")
+vals = [dp.sum for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()]
+plt.bar(range(len(vals)), vals); plt.title("CDU-1 hourly energy (GJ)"); plt.xlabel("hour"); plt.show()
+```
+
+## See also
+
+- [Query & aggregate](/guides/query-and-aggregate) — energy-intensity and yield KPIs.
+- [Turn readings into events](/guides/detect-events) — the upset rule.
+- [Manufacturing — OEE](/industries/manufacturing-process/discrete) — the same roll-up pattern for discrete plants.

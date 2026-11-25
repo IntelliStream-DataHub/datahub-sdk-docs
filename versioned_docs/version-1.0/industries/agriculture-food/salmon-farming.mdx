@@ -1,0 +1,189 @@
+---
+sidebar_position: 2
+title: Aquaculture — salmon farming
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Aquaculture — salmon farming
+
+**The problem.** In a sea-pen salmon farm, the margin between a healthy harvest and a
+catastrophe is thin and fast. Dissolved oxygen can fall through a critical level on a
+warm, still afternoon and suffocate an entire pen within hours. Sea lice spread between
+pens and trip regulatory limits. And feed — the single largest cost — is wasted the
+moment fish stop eating, fouling the water as it sinks. Farmers need to **see a pen
+turning dangerous in time to act**: aerate before an oxygen crash, treat before lice
+escalate, and stop feeding the moment appetite drops.
+
+What we solve here is preventing mass mortality and protecting feed margin on a farm
+where conditions change by the minute.
+
+## Set up demo data
+
+New workspace? Run this once (Python) to create the pen's oxygen/temperature series,
+**create the subscription before we listen**, and feed in oxygen that falls below the
+6 mg/L danger line — so the loop raises a `low_oxygen` alarm. Safe to re-run.
+
+```python
+import intellistream_datahub_sdk, numpy as np, pandas as pd
+
+client = intellistream_datahub_sdk.DataHubClient.from_env()
+
+for s, u in [("pen_h_07_dissolved_oxygen_mg_l", "mg_l"), ("pen_h_07_water_temp_c", "deg_c")]:
+    client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id=s, name=s, unit=u, value_type="float")])
+client.subscriptions.create([intellistream_datahub_sdk.Subscription(
+    external_id="farm_hardanger_pens", name="Hardanger pens",
+    timeseries=["pen_h_07_dissolved_oxygen_mg_l"])])
+idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=120, freq="1min")
+client.timeseries.insert_from_lists(timestamps=idx, values=8 - np.linspace(0, 3, 120),
+    ts="pen_h_07_dissolved_oxygen_mg_l")
+```
+
+## 1. Watch pen conditions live — and aerate before a crash
+
+Dissolved oxygen and temperature per pen stream into a subscription. The instant
+oxygen dips toward the danger line, raise a `low_oxygen` alarm so aerators start while
+there's still time. See [Consume live data](/guides/realtime-subscriptions).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+import ai.intellistream.datahub.sdk.subscriptions.SubscriptionMessage;
+
+try (var stream = client.subscriptions().listen(List.of("farm_hardanger_pens"))
+        .stream((SubscriptionMessage msg) -> {   // auto-acks after each message
+            if (oxygenBelow(msg.payload(), 6.0)) {        // mg/L — danger approaching
+                EventModel alarm = new EventModel();
+                alarm.setExternalId("low_oxygen_h07_" + System.currentTimeMillis());
+                alarm.setType("low_oxygen");
+                alarm.setStatus("critical");
+                alarm.setMetadata(Map.of("pen", "pen_h_07", "do_mg_l", "5.6"));
+                alarm.setEventTime(ZonedDateTime.now());
+                client.events().create(List.of(alarm));   // triggers aeration
+            }
+        })) {
+    awaitShutdown();   // your app lifecycle; closing the stream ends delivery
+}
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+with client.subscriptions.listen(["farm_hardanger_pens"]) as listener:
+    for msg in listener:
+        if oxygen_below(msg.payload, 6.0):            # mg/L — danger approaching
+            client.events.create([intellistream_datahub_sdk.Event(
+                external_id=f"low_oxygen_h07_{int(pd.Timestamp.now().timestamp())}",
+                type="low_oxygen", status="critical",
+                event_time=pd.Timestamp.now(tz="UTC"),
+                metadata={"pen": "pen_h_07", "do_mg_l": "5.6"})])
+        listener.ack([msg.message_id])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use intellistream_datahub_sdk::events::Event;
+use chrono::Utc;
+
+let mut listener = api.subscriptions.listen(&["farm_hardanger_pens"]).await?;
+while let Some(Ok(msg)) = listener.next().await {
+    if oxygen_below(&msg.payload, 6.0) {              // mg/L — danger approaching
+        let mut alarm = Event::new(
+            format!("low_oxygen_h07_{}", Utc::now().timestamp()),
+            "low_oxygen".into(),
+            Utc::now());
+        alarm.status = Some("critical".into());
+        alarm.add_metadata("pen".into(), "pen_h_07".into());
+        alarm.add_metadata("do_mg_l".into(), "5.6".into());
+        api.events.create(&vec![alarm]).await?;       // triggers aeration
+    }
+    listener.ack(&[msg.message_id.as_str()]).await?;
+}
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Protect feed margin
+
+Feed dispensed and biomass are series per pen. Roll them up to a feed-conversion ratio
+(feed in vs growth) so a pen quietly going off its feed shows up before the cost does.
+See [Query & aggregate](/guides/query-and-aggregate).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+var feed = new Timeseries();
+feed.setExternalId("pen_h_07_feed_kg");
+feed.setName("Pen H-07 feed");
+feed.setUnit("kg");
+var biomass = new Timeseries();
+biomass.setExternalId("pen_h_07_biomass_kg");
+biomass.setName("Pen H-07 biomass");
+biomass.setUnit("kg");
+client.timeseries().create(feed, biomass);
+
+client.timeseries().ingest(Map.of(
+    "pen_h_07_feed_kg", List.of(Datapoint.of(Instant.now(), 420.0))));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import intellistream_datahub_sdk
+
+client.timeseries.create([
+    intellistream_datahub_sdk.TimeSeries(value_type="float", external_id="pen_h_07_feed_kg", name="Pen H-07 feed", unit="kg"),
+    intellistream_datahub_sdk.TimeSeries(value_type="float", external_id="pen_h_07_biomass_kg", name="Pen H-07 biomass", unit="kg")])
+client.timeseries.insert_from_lists(
+    timestamps=[pd.Timestamp.now(tz="UTC")], values=[420.0], ts="pen_h_07_feed_kg")
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use intellistream_datahub_sdk::timeseries::TimeSeries;
+use chrono::Utc;
+
+let mut feed = TimeSeries::new("pen_h_07_feed_kg", "Pen H-07 feed");
+feed.unit = Some("kg".into());
+api.time_series.create_one(&feed).await?;
+
+let mut biomass = TimeSeries::new("pen_h_07_biomass_kg", "Pen H-07 biomass");
+biomass.unit = Some("kg".into());
+api.time_series.create_one(&biomass).await?;
+
+api.time_series
+    .insert_datapoint(None, Some("pen_h_07_feed_kg".into()), Utc::now(), "420.0".into())
+    .await?;
+```
+
+</TabItem>
+</Tabs>
+
+## 3. Keep the compliance record
+
+Sea-lice counts and any mortality are `lice_count` and `mortality` events tied to the
+pen — the auditable record the regulator and the vet both need.
+
+## See the result
+
+The falling oxygen trips the loop before a crash:
+
+```text
+low_oxygen_h07_…  → critical     (dissolved oxygen fell below 6 mg/L)
+```
+
+## See also
+
+- [Consume live data](/guides/realtime-subscriptions) — the live pen-monitoring loop.
+- [Turn readings into events](/guides/detect-events) — the low-oxygen and lice rules.
+- [Query & aggregate](/guides/query-and-aggregate) — feed-conversion roll-ups.
+- **[Early warning (advanced)](/advanced/oxygen-crash-early-warning)** — predict the oxygen crash *before* it happens, instead of reacting to it.

@@ -1,0 +1,185 @@
+---
+sidebar_position: 1
+title: Mining — equipment & throughput
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Mining — equipment uptime & throughput
+
+**The problem.** A mine's economics live and die on its haul fleet and processing
+plant. A haul truck stopped on the ramp is tonnes-per-hour evaporating; a crusher that
+fails unexpectedly idles everything behind it. The site needs to **catch equipment
+trending toward failure before it stops the line**, and to see true throughput against
+plan so it can act on the bottleneck rather than the loudest radio call.
+
+What we solve here is unplanned downtime and hidden bottlenecks across a fleet of
+expensive, hard-worked machines.
+
+## Set up demo data
+
+New workspace? Run this once (Python) to create a haul truck's oil-pressure series (sagging
+below its limit) and a crusher throughput series. Safe to re-run.
+
+```python
+import intellistream_datahub_sdk, numpy as np, pandas as pd
+
+client = intellistream_datahub_sdk.DataHubClient.from_env()
+
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id="truck_785_oil_pressure_kpa", name="Truck 785 oil pressure", unit="kpa", value_type="float")])
+idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=60, freq="1min")
+op = np.full(60, 320.0); op[-15:] -= np.linspace(0, 90, 15)      # sags below 250 kPa
+client.timeseries.insert_from_lists(timestamps=idx, values=op, ts="truck_785_oil_pressure_kpa")
+
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id="crusher_01_throughput_tph", name="Crusher 01 throughput", unit="tph", value_type="float")])
+idx2 = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=12, freq="1h")
+client.timeseries.insert_from_lists(timestamps=idx2, values=np.random.uniform(1800, 2200, 12), ts="crusher_01_throughput_tph")
+```
+
+## 1. Spot a machine trending to failure
+
+Haul-truck engine temperature, oil pressure and payload stream in. A drifting reading
+raises an `equipment_warning` before the breakdown, so maintenance is scheduled, not
+scrambled. See [Turn readings into events](/guides/detect-events).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+var series = client.timeseries().retrieve(lastHourOf("truck_785_oil_pressure_kpa"))
+    .getItems().get(0);
+
+if (series.getDatapoints().stream().anyMatch(p -> Double.parseDouble(p.getValue()) < 250.0)) {
+    EventModel warning = new EventModel();
+    warning.setExternalId("equipment_warning_785_" + System.currentTimeMillis());
+    warning.setType("equipment_warning");
+    warning.setStatus("open");
+    warning.setMetadata(Map.of("unit", "truck_785", "signal", "oil_pressure"));
+    warning.setEventTime(ZonedDateTime.now());
+    client.events().create(List.of(warning));
+}
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+points = client.timeseries.retrieve_datapoints(last_hour("truck_785_oil_pressure_kpa"))[0]
+if any(float(dp.value) < 250.0 for dp in points.get_datapoints()):
+    client.events.create([intellistream_datahub_sdk.Event(
+        external_id=f"equipment_warning_785_{int(pd.Timestamp.now().timestamp())}",
+        type="equipment_warning", status="open",
+        event_time=pd.Timestamp.now(tz="UTC"),
+        metadata={"unit": "truck_785", "signal": "oil_pressure"})])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use intellistream_datahub_sdk::events::Event;
+use chrono::Utc;
+
+let page = api.time_series.retrieve_datapoints(&last_hour("truck_785_oil_pressure_kpa")).await?;
+let points = &page.get_items()[0];
+let low = points.datapoints.iter()
+    .any(|p| p.value.unwrap_or(999.0) < 250.0);
+if low {
+    let mut warning = Event::new(
+        format!("equipment_warning_785_{}", Utc::now().timestamp()),
+        "equipment_warning".into(),
+        Utc::now());
+    warning.status = Some("open".into());
+    warning.add_metadata("unit".into(), "truck_785".into());
+    warning.add_metadata("signal".into(), "oil_pressure".into());
+    api.events.create(&vec![warning]).await?;
+}
+```
+
+</TabItem>
+</Tabs>
+
+## 2. See throughput against plan
+
+Payload-per-cycle and cycle counts are series per truck; roll them up to tonnes-per-
+hour by hour and shift to find where the real bottleneck is — the loader, the haul, or
+the crusher. See [Query & aggregate](/guides/query-and-aggregate).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+var filter = new RetrieveFilter();
+filter.setExternalId("crusher_01_throughput_tph");
+filter.setStart(ZonedDateTime.now().minusHours(12));
+filter.setEnd(ZonedDateTime.now());
+filter.setAggregates(List.of("avg"));
+filter.setGranularity("1h");
+
+var request = new DataRetriever<RetrieveFilter>();
+request.setItems(List.of(filter));
+
+client.timeseries().retrieve(request).getItems().get(0).getDatapoints()
+    .forEach(p -> compareToPlan(p.getTimestamp(), p.getValue()));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import pandas as pd
+
+rf = intellistream_datahub_sdk.RetrieveFilter(
+    ts="crusher_01_throughput_tph",
+    start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=12),
+    end=pd.Timestamp.now(tz="UTC"),
+    aggregates=["avg"], granularity="1h")
+
+for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
+    compare_to_plan(dp.timestamp, dp.average)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use intellistream_datahub_sdk::generic::{DataWrapper, RetrieveFilter};
+use chrono::Utc;
+
+let filter = RetrieveFilter {
+    external_id: Some("crusher_01_throughput_tph".into()),
+    aggregates: Some(vec!["avg".into()]),
+    granularity: Some("1h".into()),
+    start: Some(Utc::now() - chrono::Duration::hours(12)),
+    end: Some(Utc::now()),
+    ..Default::default()
+};
+let page = api.time_series
+    .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?;
+let series = &page.get_items()[0];
+for p in &series.datapoints { compare_to_plan(&p.timestamp, p.average); }
+```
+
+</TabItem>
+</Tabs>
+
+## 3. Tie equipment to its place in the flow
+
+Model pit → loader → truck → crusher as a [graph](/guides/model-assets-graph) so a
+crusher fault's [blast radius](/guides/correlate-alarms) — every truck that feeds it —
+is one traversal away when you plan the workaround.
+
+## See the result
+
+The sagging oil pressure trips the predictive rule before the breakdown:
+
+```text
+equipment_warning_785_…  → open   (oil pressure fell below 250 kPa)
+```
+
+## See also
+
+- [Turn readings into events](/guides/detect-events) — the predictive-maintenance rule.
+- [Query & aggregate](/guides/query-and-aggregate) — tonnes-per-hour roll-ups.
+- [Correlate alarms with the graph](/guides/correlate-alarms) — a fault's downstream impact.
+- **[Predictive maintenance (advanced)](/advanced/predictive-maintenance)** — anomaly detection on haul-truck vibration.

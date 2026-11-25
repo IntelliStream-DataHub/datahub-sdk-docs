@@ -28,10 +28,21 @@ const config = {
         docs: {
           sidebarPath: './sidebars.js',
           routeBasePath: '/',          // docs at site root, GitBook-style
+          // `docs/` is the development version, served at /next/. The newest
+          // snapshot in versions.json is the release and is served at '/'.
+          // Leave `lastVersion` out: it defaults to the newest name in
+          // versions.json, so cutting a snapshot moves readers onto it.
+          versions: { current: { label: 'Next (unreleased)' } },
+
           // Adds "Edit this page" to every doc. Docusaurus appends the file's
           // path relative to this site directory. Note the branch here is
           // master, unlike datahub-docs which is main.
           editUrl: 'https://github.com/IntelliStream-DataHub/datahub-sdk-docs/edit/master/',
+          // Send every "Edit this page" to docs/, including from a snapshot once
+          // one exists: a snapshot takes corrections for its own release, but a
+          // new feature belongs in docs/, and the stock link would invite the
+          // wrong edit.
+          editCurrentVersion: true,
         },
         blog: false,                    // SDK docs site — no blog
         theme: { customCss: './src/css/custom.css' },
@@ -77,9 +88,7 @@ const config = {
           // which pushState's the URL and then renders this site's own 404 —
           // the href looks right in the HTML but the click never leaves the SPA.
           { type: 'html', position: 'right', value: '<a class="navbar__item navbar__link" href="/data-platform-documentation/">Platform documentation</a>' },
-          // Simple version indicator. When the docs start tracking multiple releases,
-          // replace this with a docsVersionDropdown via `npm run docusaurus docs:version`.
-          { type: 'html', position: 'right', value: '<span class="badge badge--secondary navbar__version-badge">v1.0</span>' },
+          { type: 'docsVersionDropdown', position: 'right' },
           // This site's own repo, so "GitHub" is unambiguous. The old link went
           // to the SDK code on Gitea; if a code link is wanted too it needs its
           // own item, since the SDK spans three language repos.

@@ -151,3 +151,10 @@ Polling the last hour is fine for a cron job. To react the moment a reading cros
 the line, run this rule inside a [live subscription loop](./realtime-subscriptions.mdx)
 instead of on a timer.
 :::
+
+:::tip Track an alarm through its lifecycle
+The example gives every breach its own `externalId`. To follow one alarm from `open` to
+`resolved` instead, give its events the same `externalId`, and record the fix as a new `resolved`
+event. [`POST /events/latest`](../reference/events.md#latest) with
+`"status": ["open"]` then lists the alarms whose latest event is still `open`.
+:::

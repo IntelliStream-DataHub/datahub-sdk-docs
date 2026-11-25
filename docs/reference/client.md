@@ -42,8 +42,9 @@ client = DataHubClient.from_envfile("/path/to/.env")
 client = DataHubClient(base_url="https://api.intellistream.ai", token="...")
 ```
 
-For `async`/`await`, use `AsyncDataHubClient` instead, same methods, awaited (one is spelled
-differently, see [Units](./units#client-coverage)):
+For `async`/`await`, use `AsyncDataHubClient` instead, same methods, awaited (except the
+[binary datapoint](./binary-datapoints) ingest, `insert_datapoints_binary` and
+`insert_from_lists_binary`, which only `DataHubClient` has):
 
 ```python
 from intellistream_datahub_sdk import AsyncDataHubClient
@@ -74,8 +75,9 @@ let api = blocking::create_api_service();
 ```
 
 The blocking client covers most of the async one, not all of it. It has no `subscriptions`, and
-it lacks `time_series.filter`, `resources.filter`, `resources.get_by_id`,
-`resources.fetch_nearest`, `events.get`, `events.update` and `events.count`. `api.async_api()`
+it lacks `time_series.filter`, `time_series.listen_datapoints`, `resources.filter`,
+`resources.get_by_id`, `resources.fetch_nearest`, `events.get`, `events.update` and
+`events.count`. `api.async_api()`
 hands you the async service for those.
 
 </TabItem>
@@ -86,6 +88,8 @@ hands you the async service for those.
 | Service | Java | Python | Rust |
 | --- | --- | --- | --- |
 | Resources | `client.resources()` | `client.resources` | `api.resources` |
+| [Assets](./resources#assets) | `client.assets()` | `client.assets` | `api.assets` |
+| [Functions](./resources#functions) | `client.functions()` | `client.functions` | `api.functions` |
 | Time series | `client.timeseries()` | `client.timeseries` | `api.time_series` |
 | Datasets | `client.datasets()` | `client.datasets` | `api.datasets` |
 | Events | `client.events()` | `client.events` | `api.events` |
@@ -93,25 +97,23 @@ hands you the async service for those.
 | Files | `client.files()` | `client.files` | `api.files` |
 | Subscriptions | `client.subscriptions()` | `client.subscriptions` | `api.subscriptions` |
 | Edges | `client.edges()` | `client.edges` | `api.edges` |
+| [Labels](./labels) | `client.labels()` | `client.labels` | `api.labels` |
+| [Tenant](./tenant) | `client.tenant()` | `client.tenant` | `api.tenant` |
 
-The Java client adds six more services:
+Assets and functions are the `ASSET`- and `FUNCTION`-labelled resources, typed. A service being
+in a client does not mean every call is: each reference page has a "What each client covers"
+table.
+
+The Java client adds two more services:
 
 | Service | Java | Covers |
 | --- | --- | --- |
-| [Assets](./resources#assets) | `client.assets()` | `/assets`, the `ASSET`-labelled resources, typed |
-| [Functions](./resources#functions) | `client.functions()` | `/functions`, the `FUNCTION`-labelled resources, typed |
-| [Labels](./labels) | `client.labels()` | `/labels`, the tenant's label vocabulary |
 | [Policies](./policies) | `client.policies()` | `/policies`, including the naming dry-run |
 | [Governance templates](./policies#governance-templates) | `client.governance()` | `/governance/templates` |
-| [Tenant](./tenant) | `client.tenant()` | `/tenant/features` and `/tenant/settings` |
 
-:::note Two endpoints no client wraps, on purpose
+:::note One endpoint no client wraps, on purpose
 `GET /stats` is internal to the console and marked hidden: it is not part of the published
-contract, so nothing should call it. The browser datapoint tail
-`/timeseries/datapoints/listen` authenticates with a `?token=` query parameter, which is for a
-page that cannot set a header. Server-side code wants the durable equivalent instead,
-[`subscriptions().listen`](./subscriptions#live-delivery), which authenticates the upgrade with
-the usual `Authorization` header and survives a reconnect.
+contract, so nothing should call it.
 :::
 
 ## Authentication
@@ -419,7 +421,8 @@ response surfaces as an exception/error carrying the HTTP status, the raw body, 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
 
-Methods return `DataWrapper<T>`: `getItems()` holds the results. Non-2xx throws
+Methods return `DataWrapper<T>`: `getItems()` holds the results, as a `List` in the order the
+API returned them, so a single result is `getItems().get(0)`. Non-2xx throws
 `DatahubApiException`:
 
 ```java
@@ -441,7 +444,7 @@ try {
 </TabItem>
 <TabItem value="python" label="Python">
 
-Methods return plain `list[T]`. Non-2xx raises `DataHubException`:
+Most methods return plain `list[T]`. Non-2xx raises `DataHubException`:
 
 ```python
 from intellistream_datahub_sdk import DataHubException
@@ -456,7 +459,8 @@ except DataHubException as e:
 <TabItem value="rust" label="Rust">
 
 Most methods return `Result<DataWrapper<T>, ResponseError>`, where `get_items()` holds the
-results. `resources.by_ids`, `create`, `update` and `delete`, and `edges.by_ids`, return a
+results. `resources.by_ids`, `create`, `update` and `delete`, `assets.update`,
+`functions.update` and `edges.by_ids` return a
 `GraphDataWrapper` instead, whose `nodes()` holds them. `ResponseError` exposes
 `get_status()` and `get_message()` (its `Display` prints both):
 
@@ -598,14 +602,14 @@ rotated credential does not cost the batch. What each ingest path does with eith
 [which failures are worth retrying](#retryable-failures).
 
 :::caution Not every failure is a problem document
-Some endpoints still answer in a shape the API has not converged yet: plain text, a Spring
-whitelabel body carrying a stack trace, the legacy `{"error": {...}}` wrapper, or a
-success-shaped `{"items": [...]}` envelope. Those all arrive labelled `application/json`, so the
-`Content-Type` does not separate them and the clients read the body's structure instead.
-`problem` is absent for every one of them in Python and Rust; in Java `problem()` is never null,
-but carries the HTTP status alone and leaves `slug()` null. A real problem document may also carry no `type`
-(some `404`s), which leaves the slug absent too. Write that branch first and keep the status and raw
-message as the fallback: it stays load-bearing until the API is done converging.
+The API now answers every refusal with a typed problem document, but a proxy or gateway in front
+of it, or an older API, can still hand you plain text, HTML, a Spring whitelabel body, the legacy
+`{"error": {...}}` wrapper or a success-shaped `{"items": [...]}` envelope. Several of those
+arrive labelled `application/json`, so the `Content-Type` does not separate them and the clients
+read the body's structure instead. `problem` is absent for every one of them in Python and Rust;
+in Java `problem()` is never null, but carries the HTTP status alone and leaves `slug()` null. A
+problem document from something other than this API may also carry no `type`, which leaves the
+slug absent too. Write that branch first and keep the status and raw message as the fallback.
 :::
 
 ### Which failures are worth retrying {#retryable-failures}
@@ -632,7 +636,7 @@ sleeping when that is over 30 seconds, so a spent daily quota reaches your code,
 instead of parking a thread until midnight UTC.
 
 Rust and Python retry JSON ingest through the [durable spool](#durable-ingest-buffering): with
-buffering on, a `429`, `5xx` or network failure and a `401` or `403` are written to disk and sent
+buffering on, a `408`, `429`, `5xx` or network failure and a `401` or `403` are written to disk and sent
 again, oldest first, by the next ingest call; with it off, they reach you. Their binary path,
 `insert_datapoints_binary`, retries `429`, `5xx` and network failures up to three times by
 default, 1, 2 and 3 seconds apart, and rebuilds a request refused for a removed or renamed

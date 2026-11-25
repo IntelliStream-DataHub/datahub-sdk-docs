@@ -121,6 +121,20 @@ and nothing of the request was inserted:
 | Decompressed total per request | 64 MiB | `413`, `request-too-large` |
 | Binary requests validated at once, per API instance | deployment policy | `429`, `too-many-in-flight`, `Retry-After: 1` |
 
+[`POST /timeseries/data/list/binary`](./binary-datapoints#reading) answers a read in the same
+frames, under the same per-frame caps but not the request caps above, and with no cap on the
+rows of a request: an item without a `limit` returns every point in its window, streamed as it
+is read. What it does check, before the first byte:
+
+| Read cap | Value | Answered with |
+| --- | --- | --- |
+| An item's `limit` | at most 100 000, the retrieve body's own; leave it out, or send `null`, to read more | `400` |
+| The request's `limit`, if given | the request's total | `400` when the items' limits add up to more |
+| Rows per aggregate frame | 50 000 | |
+
+A read's answer posted back to `POST /timeseries/data/binary` is held to the request caps above,
+so split it at frame boundaries.
+
 The `400`s mean the producer is wrong and the `413`s mean split; only the `429` clears by
 waiting. The full list of reasons, and the retry rules, are on
 [Binary datapoint frames](./binary-datapoints#responses).
@@ -296,8 +310,8 @@ times; a `500` the API marks `needs-operator` is surfaced instead. Its backoff i
 rather than sleeping, so a spent daily quota reaches your code, or the spool, instead of holding
 a thread until 00:00 UTC.
 
-Rust and Python retry JSON ingest through the spool instead: with buffering on, a `429`, `5xx` or
-network failure is written to disk and the next ingest call sends it again, oldest first, before
+Rust and Python retry JSON ingest through the spool instead: with buffering on, a `408`, `429`, `5xx`
+or network failure is written to disk and the next ingest call sends it again, oldest first, before
 its own data; with it off, the error reaches your code. Their binary
 path, `insert_datapoints_binary`, retries `429`, `5xx` and network failures up to three times
 by default, 1, 2 and 3 seconds apart. Neither waits the `Retry-After`, so a rate limit that
@@ -330,8 +344,9 @@ Things to check in your own configuration:
   request at a time. Each request can carry 100 000 points that the API holds in memory while
   it parses them, so raise it with care. Java's counterpart is `parallelism` on
   [IngestOptions](./timeseries#ingestoptions).
-- **The binary path has no size knob to get wrong**: `ingestBinary` (Java) and
-  `insert_datapoints_binary` (Rust, Python) cut frames and requests under the
+- **The binary path has no size knob to get wrong**: `ingestBinary` (Java),
+  `insert_datapoints_binary` (Rust, Python), `insert_table_binary` (Rust) and
+  `insert_dataframe_binary` (Python) cut frames and requests under the
   [binary frame caps](#binary-frames) themselves. Rust tunes it with `BinaryIngestOptions`:
-  `zstd_level` (`9`), `max_retries` (`3`) and `request_concurrency` (`4`). Python takes only
-  `zstd_level=`.
+  `zstd_level` (`3`), `compression` (`Buffers`), `max_retries` (`3`) and `request_concurrency`
+  (`4`). Python takes `zstd_level=` and `compression=`.

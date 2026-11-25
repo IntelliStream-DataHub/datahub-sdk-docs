@@ -84,13 +84,14 @@ use chrono::Utc;
 let mut listener = api.subscriptions.listen(&["fleet_eta"]).await?;
 while let Some(Ok(msg)) = listener.next().await {
     if eta_past_window(&msg.payload) {
-        let mut risk = Event::new(format!("delivery_at_risk_v22_{}", Utc::now().timestamp()));
-        risk.r#type = Some("delivery_at_risk".into());
+        let mut risk = Event::new(
+            format!("delivery_at_risk_v22_{}", Utc::now().timestamp()),
+            "delivery_at_risk".into(),
+            Utc::now());
         risk.status = Some("open".into());
         risk.add_metadata("van".into(), "van_22".into());
         risk.add_metadata("route".into(), "route_oslo_e".into());
         risk.add_metadata("stops_left".into(), "9".into());
-        risk.set_event_time(Utc::now());
         api.events.create(&vec![risk]).await?;
     }
     listener.ack(&[msg.message_id.as_str()]).await?;

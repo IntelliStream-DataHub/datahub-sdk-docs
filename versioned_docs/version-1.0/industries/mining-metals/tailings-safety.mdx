@@ -1,0 +1,134 @@
+---
+sidebar_position: 3
+title: Mining — tailings dam safety
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Mining — tailings dam safety
+
+**The problem.** A tailings storage facility — the dam holding the mine's waste slurry —
+is one of the highest-consequence structures a company operates. A failure is
+catastrophic: lives, communities and the licence to operate. The warning signs are
+**slow and subtle**: pore-water pressure creeping up inside the embankment, the phreatic
+(water) surface rising, millimetres of movement accumulating. They're invisible day to
+day and only obvious in the trend. Engineers need those instruments watched continuously
+against trigger levels, with an alarm the instant one is crossed.
+
+What we solve here is the continuous, trigger-based monitoring a tailings dam's safety
+case depends on.
+
+## Set up demo data
+
+New workspace? Run this once (Python) to create a piezometer's pore-pressure series,
+**create the subscription before we listen**, and feed in a pressure that climbs past its
+trigger. Safe to re-run.
+
+```python
+import intellistream_datahub_sdk, numpy as np, pandas as pd
+
+client = intellistream_datahub_sdk.DataHubClient.from_env()
+
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id="piezometer_p14_pore_pressure_kpa", name="Piezometer P14 pore pressure", unit="kpa", value_type="float")])
+client.subscriptions.create([intellistream_datahub_sdk.Subscription(
+    external_id="tsf_instruments", name="Tailings instruments", timeseries=["piezometer_p14_pore_pressure_kpa"])])
+idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=90, freq="1h")
+client.timeseries.insert_from_lists(timestamps=idx, values=150 + np.linspace(0, 40, 90),   # rises past ~180 trigger
+    ts="piezometer_p14_pore_pressure_kpa")
+```
+
+## 1. Watch the instruments against trigger levels
+
+Piezometers (pore pressure), phreatic levels and movement prisms stream in. A reading
+past its **trigger level** raises a `tailings_alarm` — graded by severity — straight to
+the engineer of record. See [Consume live data](/guides/realtime-subscriptions).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+import ai.intellistream.datahub.sdk.subscriptions.SubscriptionMessage;
+
+try (var stream = client.subscriptions().listen(List.of("tsf_instruments"))
+        .stream((SubscriptionMessage msg) -> {   // auto-acks after each message
+            String level = triggerLevel(msg.payload());   // null | "amber" | "red"
+            if (level != null) {
+                EventModel alarm = new EventModel();
+                alarm.setExternalId("tailings_alarm_p14_" + System.currentTimeMillis());
+                alarm.setType("tailings_alarm");
+                alarm.setStatus(level.equals("red") ? "critical" : "warning");
+                alarm.setMetadata(Map.of("instrument", "piezometer_p14", "level", level,
+                                         "pore_pressure_kpa", "186"));
+                alarm.setEventTime(ZonedDateTime.now());
+                client.events().create(List.of(alarm));
+            }
+        })) {
+    awaitShutdown();   // your app lifecycle; closing the stream ends delivery
+}
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+with client.subscriptions.listen(["tsf_instruments"]) as listener:
+    for msg in listener:
+        level = trigger_level(msg.payload)             # None | "amber" | "red"
+        if level:
+            client.events.create([intellistream_datahub_sdk.Event(
+                external_id=f"tailings_alarm_p14_{int(pd.Timestamp.now().timestamp())}",
+                type="tailings_alarm",
+                status="critical" if level == "red" else "warning",
+                event_time=pd.Timestamp.now(tz="UTC"),
+                metadata={"instrument": "piezometer_p14", "level": level,
+                          "pore_pressure_kpa": "186"})])
+        listener.ack([msg.message_id])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use intellistream_datahub_sdk::events::Event;
+use chrono::Utc;
+
+let mut listener = api.subscriptions.listen(&["tsf_instruments"]).await?;
+while let Some(Ok(msg)) = listener.next().await {
+    if let Some(level) = trigger_level(&msg.payload) {  // "amber" | "red"
+        let mut alarm = Event::new(
+            format!("tailings_alarm_p14_{}", Utc::now().timestamp()),
+            "tailings_alarm".into(),
+            Utc::now());
+        alarm.status = Some(if level == "red" { "critical" } else { "warning" }.into());
+        alarm.add_metadata("instrument".into(), "piezometer_p14".into());
+        alarm.add_metadata("level".into(), level.into());
+        alarm.add_metadata("pore_pressure_kpa".into(), "186".into());
+        api.events.create(&vec![alarm]).await?;
+    }
+    listener.ack(&[msg.message_id.as_str()]).await?;
+}
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Watch the trend, not just the level
+
+A single reading rarely fails a dam; a rising *trend* is the real signal. Roll pore
+pressure up to daily values and watch the slope — a steady climb toward the trigger is
+the early warning the safety case is built on. See [Query & aggregate](/guides/query-and-aggregate),
+and for an ahead-of-time call, the [early-warning model](/advanced/oxygen-crash-early-warning).
+
+## See the result
+
+The climbing pore pressure crosses its trigger and raises a graded alarm:
+
+```text
+tailings_alarm_p14_…  → warning   (pore pressure past its amber trigger level)
+```
+
+## See also
+
+- [Consume live data](/guides/realtime-subscriptions) — continuous instrument monitoring.
+- [Turn readings into events](/guides/detect-events) — trigger-level alarms.
+- [Water utilities](/industries/energy-utilities/water) — related dam/flow-network monitoring.

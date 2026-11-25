@@ -1,0 +1,193 @@
+---
+sidebar_position: 2
+title: Smart buildings — BMS & energy
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Smart buildings — BMS & energy
+
+**The problem.** A commercial building's management system runs hundreds of points —
+zone temperatures, CO₂, air-handler status, sub-metered energy. Facilities teams want
+two things at once: a live comfort view that flags a stuffy or overheating zone
+*before* the complaints come in, and an energy picture that shows where the kilowatt-
+hours actually go so they can cut waste.
+
+This scenario pairs **live comfort monitoring** with **energy aggregation** on the same
+building model.
+
+## Set up demo data
+
+New workspace? Run this once (Python) to create a zone's CO₂ series, **create the
+subscription before we listen** (with a stuffy spell), and an energy series for the
+roll-up. Safe to re-run.
+
+```python
+import intellistream_datahub_sdk, numpy as np, pandas as pd
+
+client = intellistream_datahub_sdk.DataHubClient.from_env()
+
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id="zone_l8_co2_ppm", name="L8 open-plan CO2", unit="ppm", value_type="float")])
+client.subscriptions.create([intellistream_datahub_sdk.Subscription(
+    external_id="tower_a_comfort", name="Tower A comfort", timeseries=["zone_l8_co2_ppm"])])
+idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=60, freq="1min")
+co2 = np.full(60, 600.0); co2[-10:] = 1180.0          # out of comfort band
+client.timeseries.insert_from_lists(timestamps=idx, values=co2, ts="zone_l8_co2_ppm")
+
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id="tower_a_l8_energy_kwh", name="Tower A L8 energy", unit="kwh", value_type="float")])
+idx2 = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=30, freq="1d")
+client.timeseries.insert_from_lists(timestamps=idx2, values=np.random.uniform(200, 400, 30), ts="tower_a_l8_energy_kwh")
+```
+
+## 1. Watch comfort live
+
+Subscribe to the zone comfort series and react as readings land — raise a
+`comfort_alert` when a zone drifts out of band. See
+[Consume live data](/guides/realtime-subscriptions).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+import ai.intellistream.datahub.sdk.subscriptions.SubscriptionMessage;
+
+try (var stream = client.subscriptions().listen(List.of("tower_a_comfort"))
+        .stream((SubscriptionMessage msg) -> {   // auto-acks after each message
+            if (outsideComfort(msg.payload())) {       // temp or CO2 out of band
+                EventModel alert = new EventModel();
+                alert.setExternalId("comfort_alert_l8_" + System.currentTimeMillis());
+                alert.setType("comfort_alert");
+                alert.setStatus("open");
+                alert.setMetadata(Map.of("zone", "zone_l8_open_plan", "co2_ppm", "1180"));
+                alert.setEventTime(ZonedDateTime.now());
+                client.events().create(List.of(alert));
+            }
+        })) {
+    awaitShutdown();   // your app lifecycle; closing the stream ends delivery
+}
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+with client.subscriptions.listen(["tower_a_comfort"]) as listener:
+    for msg in listener:
+        if outside_comfort(msg.payload):            # temp or CO2 out of band
+            client.events.create([intellistream_datahub_sdk.Event(
+                external_id=f"comfort_alert_l8_{int(pd.Timestamp.now().timestamp())}",
+                type="comfort_alert", status="open",
+                event_time=pd.Timestamp.now(tz="UTC"),
+                metadata={"zone": "zone_l8_open_plan", "co2_ppm": "1180"})])
+        listener.ack([msg.message_id])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use intellistream_datahub_sdk::events::Event;
+use chrono::Utc;
+
+let mut listener = api.subscriptions.listen(&["tower_a_comfort"]).await?;
+while let Some(Ok(msg)) = listener.next().await {
+    if outside_comfort(&msg.payload) {              // temp or CO2 out of band
+        let mut alert = Event::new(
+            format!("comfort_alert_l8_{}", Utc::now().timestamp()),
+            "comfort_alert".into(),
+            Utc::now());
+        alert.status = Some("open".into());
+        alert.add_metadata("zone".into(), "zone_l8_open_plan".into());
+        alert.add_metadata("co2_ppm".into(), "1180".into());
+        api.events.create(&vec![alert]).await?;
+    }
+    listener.ack(&[msg.message_id.as_str()]).await?;
+}
+```
+
+</TabItem>
+</Tabs>
+
+## 2. See where the energy goes
+
+Sub-meters report per floor and system. Roll consumption up to daily totals per meter
+to rank the biggest users and spot overnight waste. See
+[Query & aggregate](/guides/query-and-aggregate).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+var filter = new RetrieveFilter();
+filter.setExternalId("tower_a_l8_energy_kwh");
+filter.setStart(ZonedDateTime.now().minusDays(30));
+filter.setEnd(ZonedDateTime.now());
+filter.setAggregates(List.of("sum"));
+filter.setGranularity("1d");
+
+var request = new DataRetriever<RetrieveFilter>();
+request.setItems(List.of(filter));
+
+client.timeseries().retrieve(request).getItems().get(0).getDatapoints()
+    .forEach(p -> chartDailyKwh(p.getTimestamp(), p.getValue()));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import pandas as pd
+
+rf = intellistream_datahub_sdk.RetrieveFilter(
+    ts="tower_a_l8_energy_kwh",
+    start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=30),
+    end=pd.Timestamp.now(tz="UTC"),
+    aggregates=["sum"], granularity="1d")
+
+for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
+    chart_daily_kwh(dp.timestamp, dp.sum)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use intellistream_datahub_sdk::generic::{DataWrapper, RetrieveFilter};
+use chrono::Utc;
+
+let filter = RetrieveFilter {
+    external_id: Some("tower_a_l8_energy_kwh".into()),
+    aggregates: Some(vec!["sum".into()]),
+    granularity: Some("1d".into()),
+    start: Some(Utc::now() - chrono::Duration::days(30)),
+    end: Some(Utc::now()),
+    ..Default::default()
+};
+let page = api.time_series
+    .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?;
+let series = &page.get_items()[0];
+for p in &series.datapoints { chart_daily_kwh(&p.timestamp, p.sum); }
+```
+
+</TabItem>
+</Tabs>
+
+:::tip Correlate comfort and equipment
+When several zones go uncomfortable together, walk the graph from each to the air
+handler they share — the same [alarm correlation](/guides/correlate-alarms) trick finds
+the one unit behind the complaints.
+:::
+
+## See the result
+
+The stuffy zone trips the loop before the complaints come in:
+
+```text
+comfort_alert_l8_…  → open   (CO₂ 1180 ppm, above the comfort band)
+```
+
+## See also
+
+- [Consume live data](/guides/realtime-subscriptions) — the comfort-monitoring loop.
+- [Query & aggregate](/guides/query-and-aggregate) — energy roll-ups.
+- [Correlate alarms with the graph](/guides/correlate-alarms) — find a shared air handler.

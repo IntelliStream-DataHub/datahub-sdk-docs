@@ -98,9 +98,9 @@ let filter = RetrieveFilter {
     end: Some(Utc::now()),
     ..Default::default()
 };
-let series = api.time_series
-    .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?
-    .get_items().remove(0);
+let page = api.time_series
+    .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?;
+let series = &page.get_items()[0];
 for p in &series.datapoints { flag_if_saturated(&p.timestamp, p.max); }
 ```
 
@@ -122,8 +122,8 @@ field team at the one link to fix instead of a dozen cells to chase.
 ResourceNetwork c1 = client.resources().fetchRelated("cell_oslo_4412", 4);
 ResourceNetwork c2 = client.resources().fetchRelated("cell_oslo_4418", 4);
 
-Set<String> n1 = c1.nodes().stream().map(Resource::getExternalId).collect(Collectors.toSet());
-Set<String> shared = c2.nodes().stream().map(Resource::getExternalId)
+Set<String> n1 = c1.nodes().stream().map(NodeModel::getExternalId).collect(Collectors.toSet());
+Set<String> shared = c2.nodes().stream().map(NodeModel::getExternalId)
     .filter(n1::contains).collect(Collectors.toSet());
 // shared contains "backhaul_link_88" → fix the link, not the cells
 ```
@@ -149,9 +149,9 @@ let c1 = api.resources.fetch_related(
     &RelatedResourcesForm::from_external_id("cell_oslo_4412").with_depth(4)).await?;
 let c2 = api.resources.fetch_related(
     &RelatedResourcesForm::from_external_id("cell_oslo_4418").with_depth(4)).await?;
-let n1: HashSet<&str> = c1.nodes().iter().map(|n| n.external_id.as_str()).collect();
+let n1: HashSet<&str> = c1.nodes().iter().map(|n| n.external_id()).collect();
 let shared: Vec<&str> = c2.nodes().iter()
-    .map(|n| n.external_id.as_str()).filter(|id| n1.contains(id)).collect();
+    .map(|n| n.external_id()).filter(|id| n1.contains(id)).collect();
 // shared contains "backhaul_link_88"
 ```
 

@@ -19,7 +19,7 @@ reference a unit by its external id when you create a series.
 
 ```java
 client.units().list().getItems().forEach(u ->
-    System.out.println(u.getExternalId() + "  " + u.getName() + "  (" + u.getSymbol() + ")  —  " + u.getQuantity()));
+    System.out.println(u.getExternalId() + "  " + u.getName() + "  (" + u.getSymbol() + ")  -  " + u.getQuantity()));
 ```
 
 </TabItem>
@@ -27,7 +27,7 @@ client.units().list().getItems().forEach(u ->
 
 ```python
 for u in client.units.list():
-    print(u.external_id, u.name, u.symbol, "—", u.quantity)
+    print(u.external_id, u.name, u.symbol, "-", u.quantity)
 ```
 
 </TabItem>
@@ -35,7 +35,7 @@ for u in client.units.list():
 
 ```rust
 for u in api.units.list().await?.get_items() {
-    println!("{}  {}  ({})  —  {}", u.external_id, u.name, u.symbol, u.quantity);
+    println!("{}  {}  ({})  -  {}", u.external_id, u.name, u.symbol, u.quantity);
 }
 ```
 
@@ -44,17 +44,31 @@ for u in api.units.list().await?.get_items() {
 
 ## Tag a series with a unit
 
-A series carries two unit fields. `unit` is required free text of at most 64 characters, the
-label a chart shows (`bar`, `°C`); it is never checked against the catalogue. `unitExternalId`
-is optional and is the catalogue key (`pressure_bar`); set it when a consumer should be able to
-resolve the unit's symbol, quantity and conversion. The unit leaves the value type alone (the Python
-and Rust examples set `float`); it describes what the numbers mean.
+A series carries two unit fields. `unit` is free text of at most 64 characters, the label a
+chart shows (`bar`, `°C`). `unitExternalId` is the catalogue key (`pressure_bar`); set it when a
+consumer should be able to resolve the unit's symbol, quantity and conversion. A create needs at
+least one of them:
+
+| You send | Result |
+| --- | --- |
+| `unitExternalId` only | Accepted if the catalogue has it; `unit` is filled from the entry's symbol (its name if it has no symbol). |
+| `unit` and `unitExternalId` | Both kept as sent, as long as the catalogue has the `unitExternalId`. |
+| `unit` only | Accepted as is; the catalogue is not consulted. |
+| A blank `unitExternalId`, or one the catalogue does not have | `400`, with a field error on `unitExternalId`, whether or not `unit` is set. |
+| Neither | `400`. |
+
+The lookup normalises the id to lower snake_case first, so `Temperature_Deg_C` finds
+`temperature_deg_c`. An update that sets `unitExternalId` is checked the same way before
+anything is written; clearing it with `setNull` is still allowed. The unit leaves the value type
+alone (the Python and Rust examples set `float`); it describes what the numbers mean.
 
 <Tabs groupId="lang">
 <TabItem value="java" label="Java">
 
 ```java
-var series = Timeseries.of("wellhead_pressure_bar").name("Wellhead pressure");
+var series = new Timeseries();
+series.setExternalId("wellhead_pressure_bar");
+series.setName("Wellhead pressure");
 series.setUnit("bar");
 series.setUnitExternalId("pressure_bar");
 client.timeseries().create(series);
@@ -101,9 +115,9 @@ Resolve a unit you already know, by external id, or by numeric id.
 
 ```java
 UnitModel celsius = client.units().byIds(List.of(
-        IdCollection.createFromExternalId("temperature_deg_c"))).getItems().iterator().next();
+        IdCollection.createFromExternalId("temperature_deg_c"))).getItems().get(0);
 UnitModel byId = client.units().byIds(List.of(
-        IdCollection.createFromId(7))).getItems().iterator().next();
+        IdCollection.createFromId(celsius.getId()))).getItems().get(0);
 ```
 
 </TabItem>
@@ -112,8 +126,8 @@ UnitModel byId = client.units().byIds(List.of(
 ```python
 import intellistream_datahub_sdk
 
-celsius = client.units.by_external_ids("temperature_deg_c")
-by_id = client.units.by_ids([intellistream_datahub_sdk.IdCollection(id=7)])
+celsius = client.units.by_external_id("temperature_deg_c")
+by_id = client.units.by_ids([intellistream_datahub_sdk.IdCollection(id=celsius[0].id)])
 ```
 
 </TabItem>
@@ -123,7 +137,7 @@ by_id = client.units.by_ids([intellistream_datahub_sdk.IdCollection(id=7)])
 use intellistream_datahub_sdk::generic::{DataWrapper, IdAndExtId};
 
 let celsius = api.units.by_external_id("temperature_deg_c").await?;
-let by_id = api.units.by_ids(&DataWrapper::from(vec![IdAndExtId::from_id(7)])).await?;
+let by_id = api.units.by_ids(&DataWrapper::from(vec![IdAndExtId::from_id(celsius.get_items()[0].id)])).await?;
 ```
 
 </TabItem>

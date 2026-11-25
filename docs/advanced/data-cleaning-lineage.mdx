@@ -157,10 +157,25 @@ it poison?** Walk *forward* from the raw sensor and every downstream series it t
 lights up, while the vibration-only features stay clean. That's the precise list to
 recompute or quarantine.
 
+`fetch_related` walks edges in both directions, so from the raw sensor it reaches the
+whole connected pipeline, the vibration branch included. Each returned edge keeps its
+direction, though, `start` → `end`, so follow those from the sensor to keep only what lies
+downstream of it.
+
 ```python
-fwd = client.resources.fetch_related(external_id="engine_temperature_raw", depth=12)
-affected = [n.external_id for n in fwd.nodes
-            if n.external_id.startswith("engine_") and n.external_id != "engine_temperature_raw"]
+net = client.resources.fetch_related(external_id="engine_temperature_raw", depth=12)
+ext_id = {n.id: n.external_id for n in net.nodes}
+start = next(i for i, x in ext_id.items() if x == "engine_temperature_raw")
+
+downstream, frontier = set(), [start]
+while frontier:
+    node = frontier.pop()
+    for e in net.edges:
+        if e.start == node and e.end not in downstream:
+            downstream.add(e.end)
+            frontier.append(e.end)
+
+affected = sorted(ext_id[i] for i in downstream if ext_id[i].startswith("engine_"))
 print("affected by the bad temperature sensor:", affected)
 # engine_temperature_clean, engine_temp_roll_mean, engine_temp_roc,
 # engine_feature_vector, engine_health_score   — but NOT the vibration features

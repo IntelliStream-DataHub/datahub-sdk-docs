@@ -1,0 +1,296 @@
+---
+sidebar_position: 1
+title: IT operations — observability
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# IT operations — service observability
+
+**The problem.** A platform team runs dozens of services across a fleet of hosts.
+They need every service's golden signals — request latency, error rate, CPU, memory
+— in one place, a live alerting worker that reacts the instant an SLO is breached,
+and an event trail for post-incident review.
+
+This scenario centres on **live consumption**: a long-running worker that tails the
+metrics stream and reacts in real time, rather than polling on a timer.
+
+## Set up demo data
+
+New workspace? Run this once (Python) to create the checkout latency series, **create the
+subscription before we listen** (with a breach), and build the dependency graph where two
+services share a database — so step 4's correlation finds the shared cause. Safe to re-run.
+
+```python
+import intellistream_datahub_sdk, numpy as np, pandas as pd
+
+client = intellistream_datahub_sdk.DataHubClient.from_env()
+
+client.timeseries.create([intellistream_datahub_sdk.TimeSeries(external_id="service_checkout_request_latency_ms", name="Checkout p99 latency", unit="ms", value_type="float")])
+client.subscriptions.create([intellistream_datahub_sdk.Subscription(
+    external_id="checkout_slo", name="Checkout SLO", timeseries=["service_checkout_request_latency_ms"])])
+idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=60, freq="1min")
+lat = np.full(60, 180.0); lat[-10:] = 360.0          # p99 breaches the 300 ms SLO
+client.timeseries.insert_from_lists(timestamps=idx, values=lat, ts="service_checkout_request_latency_ms")
+
+client.resources.create(
+    [intellistream_datahub_sdk.Resource(external_id=x, name=x, labels=[lbl]) for x, lbl in
+     [("service_checkout", "Service"), ("service_payments", "Service"),
+      ("order_db", "Database"), ("host_web_01", "Host")]],
+    [intellistream_datahub_sdk.RelForm.by_external_ids("service_checkout", "order_db", "depends_on"),
+     intellistream_datahub_sdk.RelForm.by_external_ids("service_payments", "order_db", "depends_on"),
+     intellistream_datahub_sdk.RelForm.by_external_ids("service_checkout", "host_web_01", "runs_on")])
+```
+
+## 1. Model services and hosts
+
+A service *runs on* hosts; both are resources. Modeling the topology lets an alert
+on a host fan out to the services it affects.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+Resource service = new Resource();
+service.setExternalId("service_checkout");
+service.setName("Checkout service");
+service.setLabels(List.of("Service"));
+
+Resource host = new Resource();
+host.setExternalId("host_web_01");
+host.setName("web-01");
+host.setLabels(List.of("Host"));
+
+RelForm runsOn = new RelForm();
+runsOn.setName("runs_on");
+runsOn.setFromExternalId("service_checkout");
+runsOn.setToExternalId("host_web_01");
+
+client.resources().create(List.of(service, host), List.of(runsOn));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import intellistream_datahub_sdk
+
+client.resources.create(
+    [intellistream_datahub_sdk.Resource(external_id="service_checkout", name="Checkout service", labels=["Service"]),
+     intellistream_datahub_sdk.Resource(external_id="host_web_01", name="web-01", labels=["Host"])],
+    [intellistream_datahub_sdk.RelForm.by_external_ids("service_checkout", "host_web_01", "runs_on")])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use intellistream_datahub_sdk::resources::Resource;
+use intellistream_datahub_sdk::relations::RelForm;
+
+let mut service = Resource::new();
+service.external_id = "service_checkout".into();
+service.name = "Checkout service".into();
+service.labels = Some(vec!["Service".into()]);
+
+let mut host = Resource::new();
+host.external_id = "host_web_01".into();
+host.name = "web-01".into();
+host.labels = Some(vec!["Host".into()]);
+
+api.resources.create(
+    vec![service, host],
+    vec![RelForm::by_external_ids("service_checkout", "host_web_01", "runs_on")],
+).await?;
+```
+
+</TabItem>
+</Tabs>
+
+Metrics become series: `service_checkout_request_latency_ms`,
+`service_checkout_error_rate`, `host_web_01_cpu_utilization`.
+
+## 2. Alert in real time on an SLO breach
+
+Subscribe to the service's golden-signal series and run the SLO check inside the
+delivery loop — the worker reacts the moment a bad datapoint lands, and records an
+event the on-call dashboard is watching. See [Consume live data](/guides/realtime-subscriptions)
+for the listener lifecycle.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+import ai.intellistream.datahub.sdk.subscriptions.SubscriptionMessage;
+
+try (var stream = client.subscriptions().listen(List.of("checkout_slo"))
+        .stream((SubscriptionMessage msg) -> {   // auto-acks after each message
+            if (breachesSlo(msg.payload())) {       // e.g. p99 latency > 300 ms
+                EventModel event = new EventModel();
+                event.setExternalId("slo_breach_checkout_" + System.currentTimeMillis());
+                event.setType("slo_breach");
+                event.setStatus("firing");
+                event.setMetadata(Map.of("service", "service_checkout", "slo", "latency_p99"));
+                event.setEventTime(ZonedDateTime.now());
+                client.events().create(List.of(event));
+            }
+        })) {
+    awaitShutdown();   // your app lifecycle; closing the stream ends delivery
+}
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+with client.subscriptions.listen(["checkout_slo"]) as listener:
+    for msg in listener:
+        if breaches_slo(msg.payload):        # e.g. p99 latency > 300 ms
+            client.events.create([intellistream_datahub_sdk.Event(
+                external_id=f"slo_breach_checkout_{int(pd.Timestamp.now().timestamp())}",
+                type="slo_breach", status="firing",
+                event_time=pd.Timestamp.now(tz="UTC"),
+                metadata={"service": "service_checkout", "slo": "latency_p99"})])
+        listener.ack([msg.message_id])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use intellistream_datahub_sdk::events::Event;
+use chrono::Utc;
+
+let mut listener = api.subscriptions.listen(&["checkout_slo"]).await?;
+while let Some(Ok(msg)) = listener.next().await {
+    if breaches_slo(&msg.payload) {           // e.g. p99 latency > 300 ms
+        let mut event = Event::new(
+            format!("slo_breach_checkout_{}", Utc::now().timestamp()),
+            "slo_breach".into(),
+            Utc::now());
+        event.status = Some("firing".into());
+        event.add_metadata("service".into(), "service_checkout".into());
+        event.add_metadata("slo".into(), "latency_p99".into());
+        api.events.create(&vec![event]).await?;
+    }
+    listener.ack(&[msg.message_id.as_str()]).await?;
+}
+```
+
+</TabItem>
+</Tabs>
+
+## 3. Review the incident afterward
+
+Every breach is a durable event. Filter by type and time to reconstruct an incident
+timeline, or by the `service` metadata to see one service's history.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+EventRetreiver retriever = new EventRetreiver();
+retriever.getFilter().setType(List.of("slo_breach"));
+retriever.setLimit(200);
+DataWrapper<EventModel> breaches = client.events().filter(retriever);
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+breaches = client.events.filter(type="slo_breach", limit=200)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use intellistream_datahub_sdk::filters::{EventFilter, EventFilterForm};
+
+let filter = EventFilterForm::default()
+    .set_filter(EventFilter {
+        r#type: Some(vec!["slo_breach".into()]), ..Default::default() })
+    .set_limit(200)
+    .build();
+let breaches = api.events.filter(&filter).await?;
+```
+
+</TabItem>
+</Tabs>
+
+## 4. Which services share a failing dependency?
+
+When `service_checkout` and `service_payments` breach their SLOs at the same moment,
+the on-call question is whether they're independent incidents or both downstream of
+one failing component. Model dependencies as edges — a service `depends_on` the
+datastores and caches it calls — and the graph answers it: walk out from each
+breaching service and intersect to find the component they have in common.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+ResourceNetwork checkout = client.resources().fetchRelated("service_checkout", 4);
+ResourceNetwork payments = client.resources().fetchRelated("service_payments", 4);
+
+Set<String> checkoutDeps = checkout.nodes().stream()
+    .map(NodeModel::getExternalId).collect(Collectors.toSet());
+Set<String> shared = payments.nodes().stream()
+    .map(NodeModel::getExternalId).filter(checkoutDeps::contains).collect(Collectors.toSet());
+
+// shared contains "order_db" → one failing dependency, not two outages
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+checkout = client.resources.fetch_related(external_id="service_checkout", depth=4)
+payments = client.resources.fetch_related(external_id="service_payments", depth=4)
+
+shared = ({n.external_id for n in checkout.nodes}
+          & {n.external_id for n in payments.nodes})
+# 'order_db' in shared → one failing dependency, not two outages
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use intellistream_datahub_sdk::resources::RelatedResourcesForm;
+use std::collections::HashSet;
+
+let checkout = api.resources.fetch_related(
+    &RelatedResourcesForm::from_external_id("service_checkout").with_depth(4)).await?;
+let payments = api.resources.fetch_related(
+    &RelatedResourcesForm::from_external_id("service_payments").with_depth(4)).await?;
+
+let deps: HashSet<&str> = checkout.nodes().iter().map(|n| n.external_id()).collect();
+let shared: Vec<&str> = payments.nodes().iter()
+    .map(|n| n.external_id()).filter(|id| deps.contains(id)).collect();
+// shared contains "order_db" → one failing dependency, not two outages
+```
+
+</TabItem>
+</Tabs>
+
+The reverse is just as useful for change management: `fetchRelated` from a component
+you're about to restart returns its **blast radius** — every service that depends on
+it. See [Correlate alarms with the graph](/guides/correlate-alarms) for the pattern.
+
+## See the result
+
+The breach trips the loop, and expanding the two affected services finds their common cause:
+
+```text
+slo_breach event raised for service_checkout
+shared dependency: order_db        ← fix the database, not each service
+```
+
+## See also
+
+- [Consume live data](/guides/realtime-subscriptions) — the subscription + ack lifecycle.
+- [Turn readings into events](/guides/detect-events) — detection rules, on a timer or live.
+- [Model assets as a graph](/guides/model-assets-graph) — service/host topology.
+- [Correlate alarms with the graph](/guides/correlate-alarms) — find the shared dependency behind two alerts.

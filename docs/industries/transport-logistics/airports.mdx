@@ -86,13 +86,14 @@ use chrono::Utc;
 let mut listener = api.subscriptions.listen(&["stand_b12_turnaround"]).await?;
 while let Some(Ok(msg)) = listener.next().await {
     if leg_overrunning(&msg.payload) {                // e.g. fuelling past plan
-        let mut risk = Event::new(format!("turnaround_risk_su204_{}", Utc::now().timestamp()));
-        risk.r#type = Some("turnaround_risk".into());
+        let mut risk = Event::new(
+            format!("turnaround_risk_su204_{}", Utc::now().timestamp()),
+            "turnaround_risk".into(),
+            Utc::now());
         risk.status = Some("open".into());
         risk.add_metadata("flight".into(), "flight_su204".into());
         risk.add_metadata("leg".into(), "fuelling".into());
         risk.add_metadata("stand".into(), "stand_b12".into());
-        risk.set_event_time(Utc::now());
         api.events.create(&vec![risk]).await?;
     }
     listener.ack(&[msg.message_id.as_str()]).await?;

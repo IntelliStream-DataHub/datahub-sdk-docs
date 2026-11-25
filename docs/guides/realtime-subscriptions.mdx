@@ -93,7 +93,7 @@ to the timeout and returns `null` on a quiet interval (it is a blocking queue ha
 **not** network polling):
 
 ```java
-import ai.intellistream.datahub.sdk.subscriptions.SubscriptionListener;
+import ai.intellistream.datahub.sdk.client.SubscriptionListener;
 import java.time.Duration;
 
 try (SubscriptionListener listener = client.subscriptions().listen(List.of("engine_room"))) {

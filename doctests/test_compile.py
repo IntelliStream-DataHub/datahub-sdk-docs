@@ -68,6 +68,12 @@ CONTROLS = {
                 placeholders=frozenset({"readerValue", "recordReading"})),
         Control("missing_method_with_reader_argument", "client.timeseries().noSuchMethodForDoctest(readerValue);",
                 hard_lines=(1,), placeholders=frozenset({"readerValue"})),
+        # `ingest` is overloaded (List<DatapointsCollection> and Map<String, List<Datapoint>>),
+        # so javac reports the unresolved argument *and* an overload failure on the call. The
+        # call is the page's own and compiles once the reader's value has a type; only the
+        # argument is left to the reader. See `_typing_failed`.
+        Control("overload_with_reader_argument", 'client.timeseries().ingest(Map.of("x", readerReadings));',
+                placeholders=frozenset({"readerReadings"})),
     ],
     "rust": [
         Control("compiles", "use intellistream_datahub_sdk::timeseries::TimeSeries;\n"
@@ -80,6 +86,14 @@ CONTROLS = {
         Control("missing_method_with_reader_argument",
                 "api.time_series.no_such_method_for_doctest(reader_value).await?;",
                 hard_lines=(1,), placeholders=frozenset({"reader_value"})),
+        # rustc reports E0282 at the *use* of a value destructured out of a reader-supplied call,
+        # where no annotation the page could write reaches it. The page is what a reader needs;
+        # only the function is theirs to write. See the note at the end of `check_rust`.
+        Control("reader_supplied_destructured",
+                'if let Some(level) = reader_trigger(&payload) {\n'
+                '    let owned: String = level.into();\n'
+                '    println!("{owned}");\n}',
+                placeholders=frozenset({"reader_trigger", "payload"})),
     ],
 }
 

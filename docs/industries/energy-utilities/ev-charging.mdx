@@ -87,12 +87,13 @@ use intellistream_datahub_sdk::events::Event;
 let mut listener = api.subscriptions.listen(&["network_status"]).await?;
 while let Some(Ok(msg)) = listener.next().await {
     if faulted(&msg.payload) {
-        let mut down = Event::new(format!("charger_down_oslo_14_{}", Utc::now().timestamp()));
-        down.r#type = Some("charger_down".into());
+        let mut down = Event::new(
+            format!("charger_down_oslo_14_{}", Utc::now().timestamp()),
+            "charger_down".into(),
+            Utc::now());
         down.status = Some("open".into());
         down.add_metadata("charger".into(), "charger_oslo_14".into());
         down.add_metadata("connector".into(), "2".into());
-        down.set_event_time(Utc::now());
         api.events.create(&vec![down]).await?;
     }
     listener.ack(&[msg.message_id.as_str()]).await?;
@@ -114,8 +115,7 @@ close it runs to its grid limit — the input to load-balancing. See
 The faulted reading in the demo trips the loop, and a `charger_down` event lands:
 
 ```python
-for e in client.events.filter(intellistream_datahub_sdk.EventFilter(
-        basic_filter=intellistream_datahub_sdk.BasicEventFilter(type="charger_down"), limit=5)):
+for e in client.events.filter(type="charger_down", limit=5):
     print(e.external_id, e.metadata)
 # charger_down_oslo_14_…  {'charger': 'charger_oslo_14', 'connector': '2'}
 ```

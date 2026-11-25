@@ -87,9 +87,9 @@ let filter = RetrieveFilter {
     granularity: Some("1h".into()),
     ..Default::default()
 };
-let series = api.time_series
-    .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?
-    .get_items().remove(0);
+let page = api.time_series
+    .retrieve_datapoints(&DataWrapper::from(vec![filter])).await?;
+let series = &page.get_items()[0];
 for p in &series.datapoints { compare_to_target(&p.timestamp, p.sum); }
 ```
 
@@ -133,12 +133,13 @@ client.events.create([intellistream_datahub_sdk.Event(
 use intellistream_datahub_sdk::events::Event;
 use chrono::Utc;
 
-let mut congestion = Event::new(format!("yard_congestion_b07_{}", Utc::now().timestamp()));
-congestion.r#type = Some("yard_congestion".into());
+let mut congestion = Event::new(
+    format!("yard_congestion_b07_{}", Utc::now().timestamp()),
+    "yard_congestion".into(),
+    Utc::now());
 congestion.status = Some("open".into());
 congestion.add_metadata("block".into(), "yard_block_b07".into());
 congestion.add_metadata("occupancy_pct".into(), "94".into());
-congestion.set_event_time(Utc::now());
 api.events.create(&vec![congestion]).await?;
 ```
 

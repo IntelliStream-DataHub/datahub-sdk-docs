@@ -1,0 +1,1114 @@
+---
+sidebar_position: 3
+title: "Tutorial: stream system metrics"
+sidebar_label: Tutorial
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Tutorial: stream system metrics
+
+Build a small **metrics agent**, end to end: a program that samples this machine's
+memory every three seconds and streams it into DataHub as time-series data, and keeps
+working when the API doesn't. It runs on Linux, macOS, and Windows. The same program is
+shown in Java, Python and Rust; pick your language once and every code block on the
+page follows.
+
+The whole flow is five steps, and each is a section below:
+
+1. **Build the client**: authenticate with a bearer token and turn on a durable,
+   spool-to-disk ingest buffer.
+2. **Ensure the time series exist**: look up three series by external id and create
+   only the ones that are missing, so the program is safe to re-run.
+3. **Sample the data**: read memory usage via a small OS-info library (this is just
+   the tutorial's data source, swap in your own).
+4. **Ingest datapoints**: every three seconds, send one datapoint per series.
+5. **Survive outages**: when the API is unreachable, datapoints spool to disk and
+   flush automatically once it recovers.
+
+## Before you start
+
+You need a reachable DataHub API and credentials. This tutorial uses **OAuth2
+client-credentials**, the SDK fetches the bearer token and refreshes it when it
+expires, so a long-running agent never works with a stale token. The program reads the
+configuration from environment variables:
+
+```bash
+export BASE_URL="https://api.intellistream.ai"                  # or your own instance
+export CLIENT_ID="metrics-agent"
+export CLIENT_SECRET="..."
+export TOKEN_URI="https://auth.intellistream.ai/oauth2/token"
+```
+
+:::note Windows
+Setting environment variables uses different syntax: `set BASE_URL=...` (cmd.exe) or
+`$env:BASE_URL = "..."` (PowerShell), in place of `export`.
+:::
+
+If all you have is a static bearer token, that works too: set `TOKEN` instead and use
+the token variant shown in step 1. See
+[Authentication](/reference/client#authentication) for the full picture.
+
+## Set up a project
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+One dependency and a main class. Memory and swap come from a JDK-builtin API, so
+nothing extra is needed for that. The SDK comes from Maven Central:
+
+```kotlin
+// build.gradle.kts
+plugins {
+    application
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation("ai.intellistream:datahub-sdk:1.0.0")
+}
+
+application {
+    mainClass = "example.MemoryIngestTutorial"
+}
+```
+
+The code below lives in `src/main/java/example/MemoryIngestTutorial.java`.
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+`psutil` reads memory and swap portably across Linux, macOS and Windows:
+
+```bash
+pip install intellistream-datahub-sdk psutil
+```
+
+The code below lives in a single file, `memory_ingest.py`.
+
+</TabItem>
+<TabItem value="rust" label="Rust (async)">
+
+`sysinfo` reads memory and swap portably; `hostname` reads the machine's hostname
+portably:
+
+```toml
+# Cargo.toml
+[dependencies]
+intellistream-datahub-sdk = "1.0"
+tokio = { version = "1", features = ["full"] }
+chrono = "0.4"
+sysinfo = "0.37"
+hostname = "0.4"
+```
+
+The code below lives in `src/main.rs`, with `#[tokio::main]` driving the async calls.
+
+</TabItem>
+<TabItem value="rust-blocking" label="Rust (blocking)">
+
+```toml
+# Cargo.toml
+[dependencies]
+intellistream-datahub-sdk = { version = "1.0", features = ["blocking"] }
+chrono = "0.4"
+sysinfo = "0.37"
+hostname = "0.4"
+```
+
+The code below lives in `src/main.rs`. The `blocking` feature enables the SDK's
+synchronous client (`intellistream_datahub_sdk::blocking`): no async runtime and no
+`async`/`.await` in your code. It has every call this tutorial makes, but not yet all of the
+async API: `subscriptions` and a few calls such as `time_series.filter` are async only.
+
+</TabItem>
+</Tabs>
+
+## Step 1: Build the client
+
+Everything starts from one client object. Two things happen here: authentication
+(client-credentials from the environment, the SDK exchanges them for a bearer token
+and refreshes it as needed) and, the part that makes this program resilient, turning
+on the **durable ingest buffer**. With it enabled, an ingest that can't reach the API
+is written to compressed segments on disk and replayed automatically later. Without
+it, ingestion is best-effort and an outage loses data.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+DatahubClient client = DatahubClient.create(DatahubConfig.builder()
+        .baseUrl(System.getenv("BASE_URL"))
+        .clientCredentials(System.getenv("CLIENT_ID"),
+                System.getenv("CLIENT_SECRET"),
+                System.getenv("TOKEN_URI"))
+        .enableBuffering()                          // spool to disk when unreachable
+        .bufferRetention(Duration.ofMinutes(60))    // keep up to an hour of backlog
+        .bufferDirectory(Path.of("datahub-spool"))
+        .build());
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import intellistream_datahub_sdk
+from intellistream_datahub_sdk import DataHubClient
+
+client = DataHubClient(
+    base_url=os.environ["BASE_URL"],
+    client_id=os.environ["CLIENT_ID"],
+    client_secret=os.environ["CLIENT_SECRET"],
+    token_url=os.environ["TOKEN_URI"],
+    enable_buffering=True,             # spool to disk when unreachable
+    buffer_retention_secs=3600,        # keep up to an hour of backlog
+    buffer_dir="datahub-spool",
+)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust (async)">
+
+`from_env` picks up `CLIENT_ID` / `CLIENT_SECRET` / `TOKEN_URI` (or a static `TOKEN`)
+by itself:
+
+```rust
+use intellistream_datahub_sdk::{ApiService, datahub::DataHubConfig};
+
+let mut config = DataHubConfig::from_env().expect("BASE_URL and credentials must be set");
+config
+    .enable_buffering()                 // spool to disk when unreachable
+    .set_buffer_retention_secs(3600)    // keep up to an hour of backlog
+    .set_buffer_dir("datahub-spool");
+let api = ApiService::new(config);
+```
+
+</TabItem>
+<TabItem value="rust-blocking" label="Rust (blocking)">
+
+`from_env` picks up `CLIENT_ID` / `CLIENT_SECRET` / `TOKEN_URI` (or a static `TOKEN`)
+by itself:
+
+```rust
+use intellistream_datahub_sdk::blocking;
+use intellistream_datahub_sdk::datahub::DataHubConfig;
+
+let mut config = DataHubConfig::from_env().expect("BASE_URL and credentials must be set");
+config
+    .enable_buffering()                 // spool to disk when unreachable
+    .set_buffer_retention_secs(3600)    // keep up to an hour of backlog
+    .set_buffer_dir("datahub-spool");
+let api = blocking::ApiService::new(config);
+```
+
+</TabItem>
+</Tabs>
+
+:::note Static token instead?
+Replace the credentials with `.token(System.getenv("TOKEN"))` in Java or
+`token=os.environ["TOKEN"]` in Python; in Rust just export `TOKEN` instead of the
+three OAuth variables. Everything else on this page stays the same.
+:::
+
+:::note
+Buffering is optional and off by default, bounded by a time window and a size cap
+(72 h / 5 GiB unless overridden). See
+[Durable ingest buffering](/reference/client#durable-ingest-buffering) for the full
+story.
+:::
+
+## Step 2: Ensure the time series exist
+
+Before you can ingest, the target series have to exist. The create endpoint rejects a
+duplicate external id with `409`, so rather than blindly creating them the program **looks up first, then
+creates only the gap**, which makes it safe to re-run and safe to start on a machine
+where the series already exist.
+
+Each external id is **namespaced by hostname** (`system_memory_used_web01`, …), so the
+same program running on several machines writes to distinct series instead of
+overwriting one another. The three series, all integer-valued in `bytes`:
+
+| External id | What it tracks |
+| --- | --- |
+| `system_memory_used_<host>` | Used physical memory |
+| `system_memory_available_<host>` | Available physical memory |
+| `system_swap_used_<host>` | Used swap space |
+
+:::note Numbers aren't identical across languages
+`used`/`available` come from a different OS API per language, and those APIs don't all
+mean quite the same thing. Java's `available` is raw OS free memory; Python's and
+Rust's `available` is closer to Linux's cache-aware `MemAvailable` estimate, so on the
+same machine, Java tends to read a lower `available` (and higher `used`) than Python or
+Rust. `used + available == total` holds for Java but generally not for Python/Rust,
+that's expected, not a bug.
+:::
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+record Metric(String baseId, String name) {}
+
+List<Metric> METRICS = List.of(
+        new Metric("system_memory_used", "System memory used"),
+        new Metric("system_memory_available", "System memory available"),
+        new Metric("system_swap_used", "System swap used"));
+
+List<IdCollection> lookups = METRICS.stream()
+        .map(m -> IdCollection.createFromExternalId(m.baseId() + "_" + host))
+        .toList();
+Set<String> existing = client.timeseries().byIds(lookups).getItems().stream()
+        .map(Timeseries::getExternalId)
+        .collect(Collectors.toSet());
+
+List<Timeseries> missing = METRICS.stream()
+        .filter(m -> !existing.contains(m.baseId() + "_" + host))
+        .map(m -> {
+            Timeseries ts = new Timeseries();
+            ts.setExternalId(m.baseId() + "_" + host);
+            ts.setName(m.name() + " (" + host + ")");
+            ts.setValueType("BIGINT");
+            ts.setUnit("bytes");
+            return ts;
+        })
+        .toList();
+if (!missing.isEmpty()) {
+    client.timeseries().create(missing);
+}
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+wanted = {f"{base}_{host}": name for base, name in METRICS.items()}
+existing = {ts.external_id for ts in client.timeseries.by_ids(list(wanted))}
+
+missing = [
+    intellistream_datahub_sdk.TimeSeries(
+        external_id=ext_id, name=f"{name} ({host})",
+        unit="bytes", value_type="BIGINT")
+    for ext_id, name in wanted.items()
+    if ext_id not in existing
+]
+if missing:
+    client.timeseries.create(missing)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust (async)">
+
+```rust
+use intellistream_datahub_sdk::generic::{DataWrapper, IdAndExtId};
+use intellistream_datahub_sdk::timeseries::TimeSeries;
+
+let lookups: Vec<IdAndExtId> = METRICS.iter()
+    .map(|(base, _)| IdAndExtId::from_external_id(&format!("{base}_{host}")))
+    .collect();
+let existing: Vec<String> = api.time_series.by_ids(&DataWrapper::from(lookups)).await?
+    .get_items().iter()
+    .map(|ts| ts.external_id.clone())
+    .collect();
+
+for (base, name) in METRICS {
+    let ext_id = format!("{base}_{host}");
+    if existing.contains(&ext_id) {
+        continue;
+    }
+    let mut ts = TimeSeries::new(&ext_id, &format!("{name} ({host})"));
+    ts.unit = Some("bytes".into());
+    ts.value_type = Some("BIGINT".into());
+    api.time_series.create_one(&ts).await?;
+}
+```
+
+</TabItem>
+<TabItem value="rust-blocking" label="Rust (blocking)">
+
+```rust
+use intellistream_datahub_sdk::generic::{DataWrapper, IdAndExtId};
+use intellistream_datahub_sdk::timeseries::TimeSeries;
+
+let lookups: Vec<IdAndExtId> = METRICS.iter()
+    .map(|(base, _)| IdAndExtId::from_external_id(&format!("{base}_{host}")))
+    .collect();
+let existing: Vec<String> = api.time_series.by_ids(&DataWrapper::from(lookups))?
+    .get_items().iter()
+    .map(|ts| ts.external_id.clone())
+    .collect();
+
+for (base, name) in METRICS {
+    let ext_id = format!("{base}_{host}");
+    if existing.contains(&ext_id) {
+        continue;
+    }
+    let mut ts = TimeSeries::new(&ext_id, &format!("{name} ({host})"));
+    ts.unit = Some("bytes".into());
+    ts.value_type = Some("BIGINT".into());
+    api.time_series.create_one(&ts)?;
+}
+```
+
+</TabItem>
+</Tabs>
+
+The lookup is **best effort**: if the API is down at startup, the program just retries
+on the next tick, and thanks to the buffer from step 1, datapoints ingested in the
+meantime aren't lost.
+
+## Step 3: Sample the data
+
+This step has nothing to do with the SDK. It is just where the numbers come from. Each
+language uses a small OS-info library to read memory and swap in one call, in bytes, so
+the same code works on Linux, macOS and Windows. Replace this function with any data
+source of your own and the DataHub steps (1, 2, 4, 5) don't change.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+`com.sun.management.OperatingSystemMXBean` is built into the JDK, no dependency
+needed. There's no direct "used" getter, so it's derived as total minus free:
+
+```java
+private static Map<String, Long> sample() {
+    OperatingSystemMXBean os =
+            ManagementFactory.getPlatformMXBean(OperatingSystemMXBean.class);
+
+    Map<String, Long> values = new HashMap<>();
+    values.put("system_memory_used", os.getTotalMemorySize() - os.getFreeMemorySize());
+    values.put("system_memory_available", os.getFreeMemorySize());
+    values.put("system_swap_used", os.getTotalSwapSpaceSize() - os.getFreeSwapSpaceSize());
+    return values;
+}
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+`psutil.virtual_memory()` and `psutil.swap_memory()` expose `used`/`available`
+directly, no arithmetic needed:
+
+```python
+def sample():
+    vm = psutil.virtual_memory()
+    swap = psutil.swap_memory()
+    return {
+        "system_memory_used": vm.used,
+        "system_memory_available": vm.available,
+        "system_swap_used": swap.used,
+    }
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust (async)">
+
+The sampler is plain synchronous code, identical in both Rust flavors. `sysinfo`
+exposes `used_memory()`/`available_memory()`/`used_swap()` directly:
+
+```rust
+use std::collections::HashMap;
+use sysinfo::System;
+
+fn sample() -> HashMap<&'static str, i64> {
+    let mut sys = System::new();
+    sys.refresh_memory();
+    HashMap::from([
+        ("system_memory_used", sys.used_memory() as i64),
+        ("system_memory_available", sys.available_memory() as i64),
+        ("system_swap_used", sys.used_swap() as i64),
+    ])
+}
+```
+
+</TabItem>
+<TabItem value="rust-blocking" label="Rust (blocking)">
+
+The sampler is plain synchronous code, identical in both Rust flavors. `sysinfo`
+exposes `used_memory()`/`available_memory()`/`used_swap()` directly:
+
+```rust
+use std::collections::HashMap;
+use sysinfo::System;
+
+fn sample() -> HashMap<&'static str, i64> {
+    let mut sys = System::new();
+    sys.refresh_memory();
+    HashMap::from([
+        ("system_memory_used", sys.used_memory() as i64),
+        ("system_memory_available", sys.available_memory() as i64),
+        ("system_swap_used", sys.used_swap() as i64),
+    ])
+}
+```
+
+</TabItem>
+</Tabs>
+
+## Step 4: Ingest on a tick
+
+A timer fires every three seconds. Each tick samples memory and sends one datapoint per
+series, three datapoints, stamped with the same timestamp.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+The payload is a map of external id to datapoints. `ingest` chunks, parallelises and
+retries under the hood, and returns an `IngestResult` saying what happened:
+
+```java
+Instant now = Instant.now();
+Map<String, List<Datapoint>> byExternalId = new LinkedHashMap<>();
+for (Metric m : METRICS) {
+    byExternalId.put(m.baseId() + "_" + host,
+            List.of(Datapoint.of(now, sample.get(m.baseId()))));
+}
+
+IngestResult result = client.timeseries().ingest(byExternalId);
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+One `insert_from_lists` call per series, here each carries a single datapoint, but the
+same call takes whole arrays when you have them. Any timezone-aware timestamps work
+(plain `datetime` here; pandas if you already have it):
+
+```python
+now = datetime.now(timezone.utc)
+values = sample()
+for base in METRICS:
+    client.timeseries.insert_from_lists(
+        timestamps=[now], values=[values[base]], ts=f"{base}_{host}")
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust (async)">
+
+One `insert_datapoint` call per series:
+
+```rust
+use chrono::Utc;
+
+let now = Utc::now();
+let values = sample();
+for (base, _) in METRICS {
+    api.time_series
+        .insert_datapoint(None, Some(format!("{base}_{host}")), now, values[base].to_string())
+        .await?;
+}
+```
+
+</TabItem>
+<TabItem value="rust-blocking" label="Rust (blocking)">
+
+One `insert_datapoint` call per series:
+
+```rust
+use chrono::Utc;
+
+let now = Utc::now();
+let values = sample();
+for (base, _) in METRICS {
+    api.time_series
+        .insert_datapoint(None, Some(format!("{base}_{host}")), now, values[base].to_string())?;
+}
+```
+
+</TabItem>
+</Tabs>
+
+Whatever a single tick does, a sampling error, a rejected request, it must never kill
+the loop: catch, log, and let the next tick try again. The complete programs below wrap
+each tick that way.
+
+## Step 5: Survive an outage
+
+This is what the buffer from step 1 buys you. Stop the DataHub API while the program is
+running: instead of raising, each ingest spools its datapoints to compressed segments
+under `datahub-spool/`. Start the API again and the backlog flushes automatically on
+the next call, no data lost within the retention window. The same happens when the
+token is rejected (HTTP 401/403, e.g. expired): datapoints keep spooling until you
+restore a valid token.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+The Java client reports buffering explicitly, `IngestResult.buffered()` is the number
+of datapoints that were spooled instead of sent:
+
+```java
+if (result.buffered() > 0) {
+    System.out.printf("%s  API unreachable: %d datapoints buffered%n",
+            now, result.buffered());
+    wasBuffering = true;
+} else {
+    if (wasBuffering) {
+        System.out.println(now + "  recovered: buffered backlog flushed");
+        wasBuffering = false;
+    }
+    System.out.printf("%s  ingested %d datapoints%n", now, result.succeeded());
+}
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+With buffering enabled the calls simply don't raise on an outage, the datapoints are
+spooled and the program keeps ticking. Watch the spool itself to see it happen:
+
+```bash
+ls datahub-spool/    # segments appear while the API is down, drain when it's back
+```
+
+Exceptions still surface for non-retriable errors (e.g. a malformed request), so keep
+the tick wrapped in `try`/`except`.
+
+</TabItem>
+<TabItem value="rust" label="Rust (async)">
+
+With buffering enabled the calls return `Ok` on an outage, the datapoints are spooled
+and the program keeps ticking. Watch the spool itself to see it happen:
+
+```bash
+ls datahub-spool/    # segments appear while the API is down, drain when it's back
+```
+
+Errors still surface for non-retriable failures (e.g. a malformed request), so keep
+handling the `Result`.
+
+</TabItem>
+<TabItem value="rust-blocking" label="Rust (blocking)">
+
+With buffering enabled the calls return `Ok` on an outage, the datapoints are spooled
+and the program keeps ticking. Watch the spool itself to see it happen:
+
+```bash
+ls datahub-spool/    # segments appear while the API is down, drain when it's back
+```
+
+Errors still surface for non-retriable failures (e.g. a malformed request), so keep
+handling the `Result`.
+
+</TabItem>
+</Tabs>
+
+:::note Retries are idempotent
+A flush re-sends buffered data, which is safe: datapoints are keyed by
+`(series, timestamp)`, so the backend collapses duplicates. See
+[Durable ingest buffering](/reference/client#durable-ingest-buffering).
+:::
+
+## Run it
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```bash
+./gradlew run
+```
+
+On Windows, use `gradlew.bat run` instead.
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```bash
+python memory_ingest.py
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust (async)">
+
+```bash
+cargo run
+```
+
+</TabItem>
+<TabItem value="rust-blocking" label="Rust (blocking)">
+
+```bash
+cargo run
+```
+
+</TabItem>
+</Tabs>
+
+On the first run the program creates the three series; on later runs they already
+exist and it goes straight to ingesting:
+
+```
+2026-07-02T09:00:00Z  ingested 3 datapoints
+2026-07-02T09:00:03Z  ingested 3 datapoints
+...
+```
+
+Now simulate the outage: stop the API for a minute, watch the ticks report buffering in Java
+(and `datahub-spool/` fill up in every language; the Python and Rust programs keep printing
+`ingested`, since a spooled call succeeds), then start it again and watch the backlog flush. To see
+the ingested data, read it back with a
+[retrieve filter](/reference/timeseries#retrieve-datapoints) or aggregate it as in
+[Query & aggregate](/guides/query-and-aggregate).
+
+## The complete program
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java title="src/main/java/example/MemoryIngestTutorial.java"
+package example;
+
+import ai.intellistream.datahub.models.IdCollection;
+import ai.intellistream.datahub.sdk.client.DatahubClient;
+import ai.intellistream.datahub.sdk.client.DatahubConfig;
+import ai.intellistream.datahub.sdk.ingest.IngestResult;
+import ai.intellistream.datahub.sdk.timeseries.Datapoint;
+import ai.intellistream.datahub.timeseries.Timeseries;
+
+import com.sun.management.OperatingSystemMXBean;
+
+import java.lang.management.ManagementFactory;
+import java.net.InetAddress;
+import java.nio.file.Path;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+
+public final class MemoryIngestTutorial {
+
+    private record Metric(String baseId, String name) {}
+
+    /** The three series this program owns; external ids get "_<host>" appended. */
+    private static final List<Metric> METRICS = List.of(
+            new Metric("system_memory_used", "System memory used"),
+            new Metric("system_memory_available", "System memory available"),
+            new Metric("system_swap_used", "System swap used"));
+
+    private static boolean ensured;
+    private static boolean wasBuffering;
+
+    public static void main(String[] args) throws Exception {
+        // Step 1: build the client with a durable, spool-to-disk ingest buffer.
+        DatahubClient client = DatahubClient.create(DatahubConfig.builder()
+                .baseUrl(System.getenv("BASE_URL"))
+                .clientCredentials(System.getenv("CLIENT_ID"),
+                        System.getenv("CLIENT_SECRET"),
+                        System.getenv("TOKEN_URI"))
+                .enableBuffering()
+                .bufferRetention(Duration.ofMinutes(60))
+                .bufferDirectory(Path.of("datahub-spool"))
+                .build());
+        String host = System.getenv().getOrDefault("HOST_ID",
+                InetAddress.getLocalHost().getHostName().toLowerCase());
+
+        Executors.newSingleThreadScheduledExecutor()
+                .scheduleAtFixedRate(() -> tick(client, host), 0, 3, TimeUnit.SECONDS);
+    }
+
+    /** One tick: ensure the series exist, sample memory, ingest, report. */
+    private static void tick(DatahubClient client, String host) {
+        try {
+            try {
+                ensureSeries(client, host);
+            } catch (RuntimeException e) {
+                // API down: retry next tick — datapoints buffer meanwhile.
+            }
+
+            // Steps 3 & 4: sample and send one datapoint per series.
+            Map<String, Long> sample = sample();
+            Instant now = Instant.now();
+            Map<String, List<Datapoint>> byExternalId = new LinkedHashMap<>();
+            for (Metric m : METRICS) {
+                byExternalId.put(m.baseId() + "_" + host,
+                        List.of(Datapoint.of(now, sample.get(m.baseId()))));
+            }
+            IngestResult result = client.timeseries().ingest(byExternalId);
+
+            // Step 5: report — buffered() > 0 means spooled, not sent.
+            if (result.buffered() > 0) {
+                System.out.printf("%s  API unreachable: %d datapoints buffered%n",
+                        now, result.buffered());
+                wasBuffering = true;
+            } else {
+                if (wasBuffering) {
+                    System.out.println(now + "  recovered: buffered backlog flushed");
+                    wasBuffering = false;
+                }
+                System.out.printf("%s  ingested %d datapoints%n", now, result.succeeded());
+            }
+        } catch (Exception e) {
+            System.err.println("tick failed: " + e.getMessage()); // never kill the loop
+        }
+    }
+
+    /** Step 2: look up the three series by external id, create only the missing ones. */
+    private static void ensureSeries(DatahubClient client, String host) {
+        if (ensured) {
+            return;
+        }
+        List<IdCollection> lookups = METRICS.stream()
+                .map(m -> IdCollection.createFromExternalId(m.baseId() + "_" + host))
+                .toList();
+        Set<String> existing = client.timeseries().byIds(lookups).getItems().stream()
+                .map(Timeseries::getExternalId)
+                .collect(Collectors.toSet());
+
+        List<Timeseries> missing = METRICS.stream()
+                .filter(m -> !existing.contains(m.baseId() + "_" + host))
+                .map(m -> {
+                    Timeseries ts = new Timeseries();
+                    ts.setExternalId(m.baseId() + "_" + host);
+                    ts.setName(m.name() + " (" + host + ")");
+                    ts.setValueType("BIGINT");
+                    ts.setUnit("bytes");
+                    return ts;
+                })
+                .toList();
+        if (!missing.isEmpty()) {
+            client.timeseries().create(missing);
+        }
+        ensured = true;
+    }
+
+    /** Step 3: sample memory and swap via the JDK's platform MXBean, in bytes. */
+    private static Map<String, Long> sample() {
+        OperatingSystemMXBean os =
+                ManagementFactory.getPlatformMXBean(OperatingSystemMXBean.class);
+
+        Map<String, Long> values = new HashMap<>();
+        values.put("system_memory_used", os.getTotalMemorySize() - os.getFreeMemorySize());
+        values.put("system_memory_available", os.getFreeMemorySize());
+        values.put("system_swap_used", os.getTotalSwapSpaceSize() - os.getFreeSwapSpaceSize());
+        return values;
+    }
+}
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python title="memory_ingest.py"
+import os
+import socket
+import time
+from datetime import datetime, timezone
+
+import psutil
+
+import intellistream_datahub_sdk
+from intellistream_datahub_sdk import DataHubClient
+
+INTERVAL_SECS = 3
+
+# The three series this program owns; external ids get "_<host>" appended.
+METRICS = {
+    "system_memory_used": "System memory used",
+    "system_memory_available": "System memory available",
+    "system_swap_used": "System swap used",
+}
+
+
+def sample():
+    """Step 3: sample memory and swap via psutil, in bytes."""
+    vm = psutil.virtual_memory()
+    swap = psutil.swap_memory()
+    return {
+        "system_memory_used": vm.used,
+        "system_memory_available": vm.available,
+        "system_swap_used": swap.used,
+    }
+
+
+def ensure_series(client, host):
+    """Step 2: look up the three series by external id, create only the missing ones."""
+    wanted = {f"{base}_{host}": name for base, name in METRICS.items()}
+    existing = {ts.external_id for ts in client.timeseries.by_ids(list(wanted))}
+
+    missing = [
+        intellistream_datahub_sdk.TimeSeries(
+            external_id=ext_id, name=f"{name} ({host})",
+            unit="bytes", value_type="BIGINT")
+        for ext_id, name in wanted.items()
+        if ext_id not in existing
+    ]
+    if missing:
+        client.timeseries.create(missing)
+
+
+def main():
+    # Step 1: build the client with a durable, spool-to-disk ingest buffer.
+    client = DataHubClient(
+        base_url=os.environ["BASE_URL"],
+        client_id=os.environ["CLIENT_ID"],
+        client_secret=os.environ["CLIENT_SECRET"],
+        token_url=os.environ["TOKEN_URI"],
+        enable_buffering=True,
+        buffer_retention_secs=3600,
+        buffer_dir="datahub-spool",
+    )
+    host = os.environ.get("HOST_ID", socket.gethostname().lower())
+
+    ensured = False
+    while True:
+        try:
+            if not ensured:
+                try:
+                    ensure_series(client, host)
+                    ensured = True
+                except Exception:
+                    pass  # API down: retry next tick — datapoints buffer meanwhile
+
+            # Steps 4 & 5: send one datapoint per series. With buffering on, an
+            # outage spools to datahub-spool/ instead of raising.
+            now = datetime.now(timezone.utc)
+            values = sample()
+            for base in METRICS:
+                client.timeseries.insert_from_lists(
+                    timestamps=[now], values=[values[base]], ts=f"{base}_{host}")
+            print(f"{now}  ingested {len(METRICS)} datapoints")
+        except Exception as e:
+            print(f"tick failed: {e}")  # never kill the loop
+        time.sleep(INTERVAL_SECS)
+
+
+if __name__ == "__main__":
+    main()
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust (async)">
+
+```rust title="src/main.rs"
+use std::collections::HashMap;
+use std::time::Duration;
+
+use chrono::Utc;
+use intellistream_datahub_sdk::datahub::DataHubConfig;
+use intellistream_datahub_sdk::generic::{DataWrapper, IdAndExtId};
+use intellistream_datahub_sdk::timeseries::TimeSeries;
+use intellistream_datahub_sdk::ApiService;
+use sysinfo::System;
+
+const INTERVAL_SECS: u64 = 3;
+
+// The three series this program owns; external ids get "_<host>" appended.
+const METRICS: [(&str, &str); 3] = [
+    ("system_memory_used", "System memory used"),
+    ("system_memory_available", "System memory available"),
+    ("system_swap_used", "System swap used"),
+];
+
+#[tokio::main]
+async fn main() {
+    // Step 1: build the client with a durable, spool-to-disk ingest buffer.
+    let mut config = DataHubConfig::from_env().expect("BASE_URL and credentials must be set");
+    config
+        .enable_buffering()
+        .set_buffer_retention_secs(3600)
+        .set_buffer_dir("datahub-spool");
+    let api = ApiService::new(config);
+
+    let host = std::env::var("HOST_ID").unwrap_or_else(|_| hostname());
+
+    let mut ensured = false;
+    let mut ticker = tokio::time::interval(Duration::from_secs(INTERVAL_SECS));
+    loop {
+        ticker.tick().await;
+
+        if !ensured {
+            // API down: retry next tick — datapoints buffer meanwhile.
+            ensured = ensure_series(&api, &host).await.is_ok();
+        }
+
+        // Steps 4 & 5: send one datapoint per series. With buffering on, an
+        // outage spools to datahub-spool/ instead of failing the call.
+        let values = sample();
+        let now = Utc::now();
+        let mut sent = 0;
+        for (base, _) in METRICS {
+            let ext_id = format!("{base}_{host}");
+            match api.time_series
+                .insert_datapoint(None, Some(ext_id), now, values[base].to_string())
+                .await
+            {
+                Ok(_) => sent += 1,
+                Err(e) => eprintln!("{now}  ingest failed: {e}"),
+            }
+        }
+        println!("{now}  ingested {sent} datapoints");
+    }
+}
+
+/// Step 2: look up the three series by external id, create only the missing ones.
+async fn ensure_series(api: &ApiService, host: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let lookups: Vec<IdAndExtId> = METRICS.iter()
+        .map(|(base, _)| IdAndExtId::from_external_id(&format!("{base}_{host}")))
+        .collect();
+    let existing: Vec<String> = api.time_series.by_ids(&DataWrapper::from(lookups)).await?
+        .get_items().iter()
+        .map(|ts| ts.external_id.clone())
+        .collect();
+
+    for (base, name) in METRICS {
+        let ext_id = format!("{base}_{host}");
+        if existing.contains(&ext_id) {
+            continue;
+        }
+        let mut ts = TimeSeries::new(&ext_id, &format!("{name} ({host})"));
+        ts.unit = Some("bytes".into());
+        ts.value_type = Some("BIGINT".into());
+        api.time_series.create_one(&ts).await?;
+    }
+    Ok(())
+}
+
+/// Step 3: sample memory and swap via sysinfo, in bytes.
+fn sample() -> HashMap<&'static str, i64> {
+    let mut sys = System::new();
+    sys.refresh_memory();
+    HashMap::from([
+        ("system_memory_used", sys.used_memory() as i64),
+        ("system_memory_available", sys.available_memory() as i64),
+        ("system_swap_used", sys.used_swap() as i64),
+    ])
+}
+
+/// Cross-platform hostname lookup.
+fn hostname() -> String {
+    hostname::get()
+        .ok()
+        .and_then(|s| s.into_string().ok())
+        .map(|s| s.to_lowercase())
+        .unwrap_or_else(|| "localhost".into())
+}
+```
+
+</TabItem>
+<TabItem value="rust-blocking" label="Rust (blocking)">
+
+```rust title="src/main.rs"
+use std::collections::HashMap;
+use std::time::Duration;
+
+use chrono::Utc;
+use intellistream_datahub_sdk::blocking;
+use intellistream_datahub_sdk::datahub::DataHubConfig;
+use intellistream_datahub_sdk::generic::{DataWrapper, IdAndExtId};
+use intellistream_datahub_sdk::timeseries::TimeSeries;
+use sysinfo::System;
+
+const INTERVAL_SECS: u64 = 3;
+
+// The three series this program owns; external ids get "_<host>" appended.
+const METRICS: [(&str, &str); 3] = [
+    ("system_memory_used", "System memory used"),
+    ("system_memory_available", "System memory available"),
+    ("system_swap_used", "System swap used"),
+];
+
+fn main() {
+    // Step 1: build the client with a durable, spool-to-disk ingest buffer.
+    let mut config = DataHubConfig::from_env().expect("BASE_URL and credentials must be set");
+    config
+        .enable_buffering()
+        .set_buffer_retention_secs(3600)
+        .set_buffer_dir("datahub-spool");
+    let api = blocking::ApiService::new(config);
+
+    let host = std::env::var("HOST_ID").unwrap_or_else(|_| hostname());
+
+    let mut ensured = false;
+    loop {
+        if !ensured {
+            // API down: retry next tick — datapoints buffer meanwhile.
+            ensured = ensure_series(&api, &host).is_ok();
+        }
+
+        // Steps 4 & 5: send one datapoint per series. With buffering on, an
+        // outage spools to datahub-spool/ instead of failing the call.
+        let values = sample();
+        let now = Utc::now();
+        let mut sent = 0;
+        for (base, _) in METRICS {
+            let ext_id = format!("{base}_{host}");
+            match api.time_series
+                .insert_datapoint(None, Some(ext_id), now, values[base].to_string())
+            {
+                Ok(_) => sent += 1,
+                Err(e) => eprintln!("{now}  ingest failed: {e}"),
+            }
+        }
+        println!("{now}  ingested {sent} datapoints");
+        std::thread::sleep(Duration::from_secs(INTERVAL_SECS));
+    }
+}
+
+/// Step 2: look up the three series by external id, create only the missing ones.
+fn ensure_series(api: &blocking::ApiService, host: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let lookups: Vec<IdAndExtId> = METRICS.iter()
+        .map(|(base, _)| IdAndExtId::from_external_id(&format!("{base}_{host}")))
+        .collect();
+    let existing: Vec<String> = api.time_series.by_ids(&DataWrapper::from(lookups))?
+        .get_items().iter()
+        .map(|ts| ts.external_id.clone())
+        .collect();
+
+    for (base, name) in METRICS {
+        let ext_id = format!("{base}_{host}");
+        if existing.contains(&ext_id) {
+            continue;
+        }
+        let mut ts = TimeSeries::new(&ext_id, &format!("{name} ({host})"));
+        ts.unit = Some("bytes".into());
+        ts.value_type = Some("BIGINT".into());
+        api.time_series.create_one(&ts)?;
+    }
+    Ok(())
+}
+
+/// Step 3: sample memory and swap via sysinfo, in bytes.
+fn sample() -> HashMap<&'static str, i64> {
+    let mut sys = System::new();
+    sys.refresh_memory();
+    HashMap::from([
+        ("system_memory_used", sys.used_memory() as i64),
+        ("system_memory_available", sys.available_memory() as i64),
+        ("system_swap_used", sys.used_swap() as i64),
+    ])
+}
+
+/// Cross-platform hostname lookup.
+fn hostname() -> String {
+    hostname::get()
+        .ok()
+        .and_then(|s| s.into_string().ok())
+        .map(|s| s.to_lowercase())
+        .unwrap_or_else(|| "localhost".into())
+}
+```
+
+</TabItem>
+</Tabs>
+
+## Try this next
+
+- **Add a metric.** Add one entry to the metric table (e.g. total memory) and extend
+  the sampler, series creation and ingestion both pick it up with no other changes.
+- **Namespace by host.** Run the program on two machines (or set `HOST_ID` to two
+  different values) and watch each get its own set of series.
+- **Swap the data source.** Replace the sampler with your own readings, the DataHub
+  steps don't change.
+- **Read it back.** Chart the trend with
+  [Query & aggregate time-series](/guides/query-and-aggregate), or tail it live with
+  [Real-time subscriptions](/guides/realtime-subscriptions).
+- **Scale it up.** When one datapoint per tick becomes millions, see
+  [High-throughput ingestion](/guides/ingest-timeseries).

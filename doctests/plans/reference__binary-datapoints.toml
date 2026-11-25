@@ -1,10 +1,12 @@
 page = "docs/reference/binary-datapoints.md"
 
 # Blocks on this page:
-#   python #1   L220   Producing frames from pyarrow
+#   python #1   L296   Producing frames from pyarrow
+#   python #2   L383   Reading frames with pyarrow, continuing from #1
 
 [blocks]
-python = 1
+python = 2
+rust = 1
 
 [python]
 # The page's banner: it writes into `engine_temperature`, which section A of the

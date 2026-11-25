@@ -25,6 +25,20 @@ client.resources.create(
                                         labels=["Pump"])], [])
 """
 
+# The look-up and delete examples continue from the create above them, which a reader
+# has just run; independent blocks each start from a swept backend, so it is made again.
+[[python.inject]]
+before = 2
+code = """
+created = client.edges.create([intellistream_datahub_sdk.RelForm.by_external_ids("plant_oslo", "pump_1", "CONTAINS")])
+"""
+
+[[python.inject]]
+before = 3
+code = """
+edge_id = client.edges.create([intellistream_datahub_sdk.RelForm.by_external_ids("plant_oslo", "pump_1", "CONTAINS")])[0].id
+"""
+
 # ONCE PER STACK for block #4. It creates the `FLOWS_TO` relationship type, and the SDK has no
 # call that deletes a type (edges: create_types and types only), so a second run on the same
 # stack fails with "Relationship type with same name already exists". That is the stack's

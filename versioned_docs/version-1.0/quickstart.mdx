@@ -1,0 +1,218 @@
+---
+sidebar_position: 2
+title: Quick start
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Quick start
+
+From zero to a stored datapoint in about five minutes.
+
+## 1. Install
+
+:::note Which version this page describes
+This is the documentation for the 1.0.0 release of the Python, Rust and Java SDKs.
+
+| SDK | Release |
+| --- | --- |
+| Python | 1.0.0, on PyPI |
+| Rust | 1.0.0, on crates.io |
+| Java | 1.0.0, on Maven Central |
+:::
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+The Java SDK is on Maven Central and needs Java 25 or newer. It brings
+`datahub-api-model` with it, so one dependency is enough:
+
+```kotlin
+// build.gradle.kts
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation("ai.intellistream:datahub-sdk:1.0.0")
+}
+```
+
+To try calls newer than the release, build the SDK from the
+[platform repository](https://github.com/IntelliStream-DataHub/datahub-platform) with
+`./gradlew :datahub-api-model:publishToMavenLocal :datahub-java-sdk:publishToMavenLocal`,
+add `mavenLocal()` to `repositories`, and use the `version` from its `gradle.properties`.
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```bash
+pip install intellistream-datahub-sdk
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```toml
+# Cargo.toml
+[dependencies]
+intellistream-datahub-sdk = "1.0"
+```
+
+</TabItem>
+</Tabs>
+
+:::tip The name is long on purpose, and you can shorten it
+`datahub-sdk` was already taken on PyPI by an unrelated project, and the `datahub` name is
+taken, so the package is qualified with the organization and the Rust crate takes the same
+name. Alias it if you would rather not type it:
+
+```python
+import intellistream_datahub_sdk as dh
+```
+
+```toml
+# Cargo.toml — a crate-wide rename
+dh = { package = "intellistream-datahub-sdk", version = "1.0" }
+```
+:::
+
+## 2. Configure credentials
+
+The client reads configuration from the environment (or a `.env` file): a base URL and
+**either** a static token **or** OAuth2 client-credentials.
+
+```bash
+BASE_URL=https://api.intellistream.ai
+TOKEN=eyJhbGciOi...          # or CLIENT_ID / CLIENT_SECRET / TOKEN_URI
+```
+
+## 3. Create a client and write a datapoint
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+var client = DatahubClient.fromEnv();
+
+var series = new Timeseries();
+series.setExternalId("engine_temperature");
+series.setName("Engine temperature");
+series.setUnit("celsius");
+series.setValueType("float");
+client.timeseries().create(series);
+
+client.timeseries().ingest(Map.of(
+    "engine_temperature", List.of(
+        Datapoint.of(Instant.now(), 92.4))));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+from datetime import datetime, timedelta, timezone
+
+import intellistream_datahub_sdk
+from intellistream_datahub_sdk import DataHubClient
+
+client = DataHubClient.from_envfile(None)  # the environment, plus a .env file if there is one
+
+client.timeseries.create([
+    intellistream_datahub_sdk.TimeSeries(external_id="engine_temperature", unit="celsius", value_type="float")])
+
+client.timeseries.insert_from_lists(
+    timestamps=[datetime.now(timezone.utc)], values=[92.4], ts="engine_temperature")
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+Every call is `async`, so run these lines inside
+`#[tokio::main] async fn main() -> Result<(), Box<dyn std::error::Error>>`, with
+`tokio = { version = "1", features = ["full"] }` and `chrono = "0.4"` added to your
+dependencies.
+
+```rust
+use intellistream_datahub_sdk::create_api_service;
+use intellistream_datahub_sdk::timeseries::TimeSeries;
+use chrono::Utc;
+
+let api = create_api_service();
+
+let mut ts = TimeSeries::new("engine_temperature", "Engine temperature");
+ts.set_unit("celsius");
+ts.set_value_type("float");
+api.time_series.create_one(&ts).await?;
+api.time_series
+    .insert_datapoint(None, Some("engine_temperature".into()), Utc::now(), "92.4".into())
+    .await?;
+```
+
+</TabItem>
+</Tabs>
+
+## 4. Read it back
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+var filter = new RetrieveFilter();
+filter.setExternalId("engine_temperature");
+filter.setStart(ZonedDateTime.now().minusHours(1));
+filter.setEnd(ZonedDateTime.now());
+
+var request = new DataRetriever<RetrieveFilter>();
+request.setItems(List.of(filter));
+
+client.timeseries().retrieve(request).getItems()
+    .forEach(c -> c.getDatapoints().forEach(System.out::println));
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+rf = intellistream_datahub_sdk.RetrieveFilter(
+    ts="engine_temperature",
+    start=datetime.now(timezone.utc) - timedelta(hours=1),
+    end=datetime.now(timezone.utc))
+
+for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints():
+    print(dp.timestamp, dp.value)
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use intellistream_datahub_sdk::generic::{DataWrapper, RetrieveFilter};
+
+let filter = RetrieveFilter {
+    external_id: Some("engine_temperature".into()),
+    start: Some(Utc::now() - chrono::Duration::hours(1)),
+    end: Some(Utc::now()),
+    ..Default::default()
+};
+let points = api.time_series.retrieve_datapoints(&DataWrapper::from(vec![filter])).await?;
+for c in points.get_items() {
+    for p in &c.datapoints {
+        println!("{} = {:?}", p.timestamp, p.value);
+    }
+}
+```
+
+</TabItem>
+</Tabs>
+
+:::note Pick once, follow everywhere
+The tabs above all switch together, and your choice persists as you move through the
+docs. One selection for the whole site.
+:::
+
+## Next: a real program
+
+The [tutorial](/tutorial) turns these calls into a complete agent: it samples your
+machine's memory every few seconds, creates its series idempotently, and survives API
+outages with the durable ingest buffer.

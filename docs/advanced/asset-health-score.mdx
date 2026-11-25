@@ -81,10 +81,10 @@ double bearingTemp = Double.parseDouble(pts.get(pts.size() - 1).getValue());
 // The latest datapoint, per signal; the scoring arithmetic below is shown in Python.
 use intellistream_datahub_sdk::generic::{DataWrapper, IdAndExtId};
 
-let latest = api.time_series
+let page = api.time_series
     .retrieve_latest_datapoint(&DataWrapper::from(vec![
-        IdAndExtId::from_external_id("pump_07_bearing_temp_c")])).await?
-    .get_items().remove(0);
+        IdAndExtId::from_external_id("pump_07_bearing_temp_c")])).await?;
+let latest = &page.get_items()[0];
 let bearing_temp = latest.datapoints.last().and_then(|p| p.value).unwrap_or(f64::NAN);
 ```
 

@@ -1,0 +1,155 @@
+---
+sidebar_position: 6
+title: Environmental — air quality
+---
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Environmental — air-quality monitoring
+
+**The problem.** An air-quality network mixes sensor types: particulates in
+micrograms per cubic metre, nitrogen dioxide in parts per billion, carbon monoxide in
+parts per million. If a series doesn't carry its unit, `42` is meaningless — is that a
+healthy CO reading or a hazardous one? Getting **units** right, consistently, across a
+heterogeneous fleet is what makes the data comparable and the dashboards trustworthy.
+
+This is the scenario where **units** are the hero: pick the right unit for each
+pollutant and tag every series with it.
+
+## Set up demo data
+
+New workspace? Run this once (Python) to create the station's pollutant series (each with
+its unit) and a day of readings — so the daily-average roll-up has data. The unit
+catalogue browsed in step 1 is built-in reference data. Safe to re-run.
+
+```python
+import intellistream_datahub_sdk, numpy as np, pandas as pd
+
+client = intellistream_datahub_sdk.DataHubClient.from_env()
+
+for s, u in [("station_kirkeveien_pm25", "ug_m3"), ("station_kirkeveien_no2", "ppb"),
+             ("station_kirkeveien_co", "ppm")]:
+    client.timeseries.create([intellistream_datahub_sdk.TimeSeries(value_type="float", external_id=s, name=s, unit=u)])
+idx = pd.date_range(end=pd.Timestamp.now(tz="UTC"), periods=24, freq="1h")
+client.timeseries.insert_from_lists(timestamps=idx, values=np.random.uniform(5, 45, 24), ts="station_kirkeveien_pm25")
+```
+
+## 1. Find the right unit
+
+Browse the unit catalogue to get the canonical external id for each pollutant's unit.
+See the [Units reference](/reference/units).
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+client.units().list().getItems().forEach(u ->
+    System.out.println(u.getExternalId() + "  " + u.getName() + "  (" + u.getSymbol() + ")"));
+// e.g. ug_m3  micrograms per cubic metre  (µg/m³)
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+for u in client.units.list():
+    print(u.external_id, u.name, u.symbol)
+
+ugm3 = client.units.by_external_id("ug_m3")     # confirm the one you'll use
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+for u in api.units.list().await?.get_items() {
+    println!("{}  {}  ({})", u.external_id, u.name, u.symbol);
+}
+let ugm3 = api.units.by_external_id("ug_m3").await?;
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Tag each series with its unit
+
+Create one series per pollutant per station, each carrying its unit's external id — so
+every value is self-describing and a chart can label its axis correctly.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+var pm25 = new Timeseries();
+pm25.setExternalId("station_kirkeveien_pm25");
+pm25.setName("Kirkeveien PM2.5");
+pm25.setUnit("ug_m3");
+var no2 = new Timeseries();
+no2.setExternalId("station_kirkeveien_no2");
+no2.setName("Kirkeveien NO2");
+no2.setUnit("ppb");
+var co = new Timeseries();
+co.setExternalId("station_kirkeveien_co");
+co.setName("Kirkeveien CO");
+co.setUnit("ppm");
+client.timeseries().create(pm25, no2, co);
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+import intellistream_datahub_sdk
+
+client.timeseries.create([
+    intellistream_datahub_sdk.TimeSeries(value_type="float", external_id="station_kirkeveien_pm25", name="Kirkeveien PM2.5", unit="ug_m3"),
+    intellistream_datahub_sdk.TimeSeries(value_type="float", external_id="station_kirkeveien_no2", name="Kirkeveien NO2", unit="ppb"),
+    intellistream_datahub_sdk.TimeSeries(value_type="float", external_id="station_kirkeveien_co", name="Kirkeveien CO", unit="ppm")])
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use intellistream_datahub_sdk::timeseries::TimeSeries;
+
+for (id, name, unit) in [
+    ("station_kirkeveien_pm25", "Kirkeveien PM2.5", "ug_m3"),
+    ("station_kirkeveien_no2", "Kirkeveien NO2", "ppb"),
+    ("station_kirkeveien_co", "Kirkeveien CO", "ppm"),
+] {
+    let mut ts = TimeSeries::new(id, name);
+    ts.unit = Some(unit.into());
+    api.time_series.create_one(&ts).await?;
+}
+```
+
+</TabItem>
+</Tabs>
+
+## 3. Daily averages and exceedances
+
+Roll each pollutant up to daily averages for the public index, and raise an
+`exceedance` [event](/guides/detect-events) when a station crosses a regulatory limit —
+the metadata carrying the pollutant, its unit, and the threshold so the record is
+unambiguous. See [Query & aggregate](/guides/query-and-aggregate).
+
+## See the result
+
+Chart the day's PM2.5 — now self-describing, because the series carries its `ug_m3` unit:
+
+```python
+import matplotlib.pyplot as plt
+
+rf = intellistream_datahub_sdk.RetrieveFilter(ts="station_kirkeveien_pm25",
+    start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=1), end=pd.Timestamp.now(tz="UTC"),
+    aggregates=["avg"], granularity="1h")
+vals = [dp.average for dp in client.timeseries.retrieve_datapoints(rf)[0].get_datapoints()]
+plt.plot(vals); plt.title("Kirkeveien PM2.5 (µg/m³)"); plt.show()
+```
+
+## See also
+
+- [Units reference](/reference/units) — the unit catalogue and lookups.
+- [Work with units of measure](/guides/work-with-units) — tagging series with units.
+- [Query & aggregate](/guides/query-and-aggregate) — daily-average index.

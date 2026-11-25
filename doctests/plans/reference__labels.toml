@@ -1,0 +1,20 @@
+page = "docs/reference/labels.md"
+
+# Blocks on this page:
+#   java   #1   L26    Read
+#   java   #2   L37    Create and update
+#   java   #3   L52    Create and update
+#   java   #4   L61    Create and update
+#   java   #5   L70    Delete
+
+# Pinned so an edit to the page fails this plan instead of silently
+# re-pointing its block selections. Update deliberately, after re-reading.
+[blocks]
+java = 5
+
+[java]
+disabled = "Java scenario not written yet; compiled by test_compile.py."
+# A reference page, not a tutorial: the blocks are separate examples of one call
+# each, and #5 deletes the label #2 to #4 create. Compiled one at a time, so
+# reusing a name across them is not a redeclaration.
+independent = true

@@ -45,12 +45,12 @@ for any physical estate, which lets a ward-level alert roll up to the whole site
 <TabItem value="java" label="Java">
 
 ```java
-ResourceForm hospital = new ResourceForm();
+Resource hospital = new Resource();
 hospital.setExternalId("hospital_central");
 hospital.setName("Central Hospital");
 hospital.setLabels(List.of("Hospital"));
 
-ResourceForm ward = new ResourceForm();
+Resource ward = new Resource();
 ward.setExternalId("ward_icu");
 ward.setName("Intensive care");
 ward.setLabels(List.of("Ward"));
@@ -161,12 +161,13 @@ let mut listener = api.subscriptions.listen(&["bed_capacity"]).await?;
 while let Some(Ok(msg)) = listener.next().await {
     update_wallboard(&msg.payload);
     if over_threshold(&msg.payload) {                  // e.g. occupancy > 95%
-        let mut warning = Event::new(format!("capacity_warning_icu_{}", Utc::now().timestamp()));
-        warning.r#type = Some("capacity_warning".into());
+        let mut warning = Event::new(
+            format!("capacity_warning_icu_{}", Utc::now().timestamp()),
+            "capacity_warning".into(),
+            Utc::now());
         warning.status = Some("open".into());
         warning.add_metadata("ward".into(), "ward_icu".into());
         warning.add_metadata("occupancy_pct".into(), "96".into());
-        warning.set_event_time(Utc::now());
         api.events.create(&vec![warning]).await?;
     }
     listener.ack(&[msg.message_id.as_str()]).await?;

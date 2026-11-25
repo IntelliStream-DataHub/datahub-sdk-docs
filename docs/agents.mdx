@@ -1,0 +1,278 @@
+---
+sidebar_position: 4.5
+title: Agents
+description: A flow that hands your events to a model with the MCP tools, on the flow service - the definition, the agent processor, the tool servers you register, the transcript endpoint and the flagged events it writes.
+---
+
+# Agents
+
+An agent is a flow on the flow service whose working step is a model: it reads a window of
+events, lets the model act on them with the [MCP tools](./mcp-server) and with those of any
+[MCP server your organization registers](#tool-servers), and writes a **flagged** event when
+the model decides a person should look. The console's Agents form
+builds one; this page is the REST surface behind that form, for anyone driving agents from
+their own code. There are no SDK methods for it.
+
+| | |
+| --- | --- |
+| Service | the flow service, `intellistream-flow` (port 8084 locally) |
+| Authentication | the same bearer JWT as the API, on every request |
+| Needs | the organization's `flow` feature, the `/flows/read` or `/flows/write` organization group, and the usual [data set access](./reference/datasets#access-control) |
+
+## What an agent is {#definition}
+
+A flow whose definition has `"kind": "agent"` and whose steps are fixed:
+`read-events` → `agent` → `write-events`. This is the definition the console's form writes:
+
+```json
+{
+  "schemaVersion": 1,
+  "kind": "agent",
+  "externalId": "pump_watch",
+  "name": "Pump watch",
+  "dataSet": "plant_a",
+  "processors": [
+    { "id": "events", "type": "read-events",
+      "properties": { "type": ["error"], "timeField": "createdTime", "excludeSource": ["agent:*"] } },
+    { "id": "agent", "type": "agent", "terminate": ["done"],
+      "properties": {
+        "instructions": "For each event, look up the related resource and flag it with a summary.",
+        "tools": ["event_get", "resource_get", "event_create"] } },
+    { "id": "flagged", "type": "write-events",
+      "properties": { "type": "agent", "subType": "flagged", "source": "agent:pump_watch" } }
+  ],
+  "connections": [
+    { "from": "events", "relationship": "success", "to": "agent" },
+    { "from": "agent", "relationship": "flagged", "to": "flagged" }
+  ],
+  "trigger": { "type": "schedule", "cron": "0 */15 * * * *", "timezone": "Europe/Oslo", "delay": "PT1M" },
+  "execution": { "maxAttempts": 2, "timeout": "PT20M" }
+}
+```
+
+| | |
+| --- | --- |
+| `kind` | `flow` (the default) or `agent`. |
+| An `agent` definition | Must contain an `agent` step with a connection into it. That step may not carry a `retry`. |
+| A manual agent | `"trigger": { "type": "manual", "window": "PT1H" }` in place of the schedule. |
+
+## The `agent` processor {#processor}
+
+Listed by `GET /catalog/processors`, category `agent`.
+
+| Property | Default | |
+| --- | --- | --- |
+| `instructions` | | What the model is to do. Required. |
+| `tools` | none | Name patterns of the tools the model may call, `*` and `?` wildcards (`event_*`). A [registered server](#tool-servers)'s tools are `<server>__<tool>`, and a pattern naming a server (`crm__*`) is what connects the run to it; a bare `*` covers the platform's own tools only. Empty means no tools. |
+| `effort` | the service's | The model's reasoning effort. |
+| `maxIterations` | `6` | Model calls per run. |
+| `maxOutputTokens` | | The model's output limit. |
+| `turnTimeout` | `PT2M` | ISO-8601 duration for one turn. |
+| `maxToolResultChars` | `24000` | Characters of a tool result passed to the model. |
+
+| Relationship | Carries | |
+| --- | --- | --- |
+| `done` | The items, when the model finishes with `done`. | May be terminated. |
+| `flagged` | One item per run, holding the flagged event row. | Must be connected or terminated. |
+| `failure` | The items, when the iteration cap or the model's output limit is hit, or the model server fails. | Fails the run when unconnected. |
+
+Each item leaving the step carries `agent.outcome`, `agent.summary`, `agent.iterations`,
+`agent.tokens.input`, `agent.tokens.output` and `agent.toolCalls`.
+
+The model always has a built-in `finish` tool, and calling it is how a run ends. `outcome` is
+`done` or `flagged`:
+
+```json
+{ "outcome": "flagged", "summary": "pump_12 raised three errors in a row and its bearing temperature is climbing." }
+```
+
+### Which tools the model gets {#tools}
+
+The step reads the servers' `tools/list` and keeps the
+[annotations](./mcp-server#annotations) they carry:
+
+| A tool with | Is |
+| --- | --- |
+| `destructiveHint: true` | Never offered, whatever `tools` says. |
+| no `readOnlyHint: true` | Mutating. In a preview it is refused with `preview: not executed`, and an attempt that called one is not retried: the second attempt fails with `not retried: the first attempt changed data`. |
+| `readOnlyHint: true` | Called freely. |
+
+Every `event_create` call gets `source: agent:<flow externalId>` added, so the agent's own events
+can be told apart, and kept out of its next window with `excludeSource` below. A `429` from a tool
+server is waited out once, for its `Retry-After` and at most 10 seconds, then retried.
+
+The platform's servers are called with the run's own token. A registered server is called with
+the credential stored for it, so the same three rules apply to its tools on its own annotations,
+and what it returns is shown to the model and kept in the transcript as it is.
+
+## Tool servers of your own {#tool-servers}
+
+An organization registers an MCP server under a name through the
+[flow settings](./reference/tenant#flow-settings), or under **Agents → Tool servers** in the
+console, and every agent may then name its tools. Three rules tie the two together:
+
+| | |
+| --- | --- |
+| Names | A server's tools are offered as `<server>__<tool>`: `crm__ticket_get` for the `ticket_get` tool of the server registered as `crm`. The name is `[a-z0-9][a-z0-9-]{0,23}`, and a tool name longer than 38 characters, or outside `[A-Za-z0-9_-]`, is left out of the list. |
+| Sessions | The part of a `tools` pattern before its first `__` names the server, and a run opens one session per server its patterns name, when it starts, and closes them when it ends. `*` never reaches a registered server, so a server registered later is not picked up by an existing agent until its `tools` name it. |
+| Validation | Saving or validating a definition checks the names: what comes before `__` must have the shape above and be registered, or the problem is reported at `#/processors/<n>/properties/tools/<i>`. A server removed after the agent was saved fails its next run with `tools name the server "crm", which is not registered`. |
+
+### What the server must speak {#tool-servers-transport}
+
+The [Streamable HTTP](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports)
+transport, at the registered URL as given, nothing appended:
+
+- **Handshake.** `initialize` with `protocolVersion` `2025-06-18`, then `notifications/initialized`.
+  A `Mcp-Session-Id` the server issues is sent back on every later request, with the
+  `MCP-Protocol-Version` it settled on; a session the server has forgotten (`404`) is started
+  over once. A `DELETE` ends the session when one was issued.
+- **Replies** as `application/json` or `text/event-stream`, whichever the server chooses; the
+  request accepts both. A reply is read up to 4 MB and must arrive within the flow service's
+  `external-tool-timeout`, 30 seconds by default.
+- **`tools/list`**, paged with `nextCursor` (up to 20 pages), with the
+  [annotations](./mcp-server#annotations) the platform's own servers carry: `readOnlyHint` and
+  `destructiveHint` decide how a tool is treated, exactly as above.
+- **`tools/call`**, answered with `content` blocks of which the `text` ones are joined into the
+  tool result, and `isError`.
+- **Not supported:** redirects, which are never followed, and requests from the server back to
+  the client (sampling, elicitation), which are passed over. A server that needs them answered
+  cannot be used.
+
+Authentication is one of two kinds, chosen when the server is registered:
+
+| `auth` | On every call |
+| --- | --- |
+| `header` | One fixed header, `headerName` (`Authorization` by default) with the stored `headerValue`. |
+| `client-credentials` | `Authorization: Bearer <token>`, the token taken at `tokenUrl` with the OAuth 2.0 client-credentials grant, the client authenticated with HTTP Basic, asking for `scope` and `resource` ([RFC 8707](https://www.rfc-editor.org/rfc/rfc8707)) when they were given. The token is reused until shortly before it expires, a tenth of its lifetime early and at most a minute, five minutes in all when the endpoint states no `expires_in`, and renewed once when the server answers `401`. |
+
+Where a server may sit is the deployment's decision: a URL that resolves to a private, loopback or
+link-local address, or a plain `http` one, is refused at registration and again before the first
+connection unless the platform runs with `datahub.outbound.allow-private-networks`.
+
+## `read-events` and `write-events` {#read-write-events}
+
+| Step | Property | |
+| --- | --- | --- |
+| `read-events` | `timeField` | Which timestamp the window bounds: `eventTime` (the default), or `createdTime`, when DataHub recorded the event, which catches late arrivals. |
+| `read-events` | `excludeSource` | Patterns of `source` values to leave out, `*` wildcard, characters `[A-Za-z0-9_.:*-]`. Sent to the API as an [advanced filter](./reference/events#advanced-filters): `["agent:*"]` becomes `(source IS NULL OR source NOT LIKE 'agent:%')`. |
+| `write-events` | `source` | The provenance written on every event the step creates. |
+
+## Endpoints {#endpoints}
+
+Three endpoints are new for agents. The rest is the [flow API](./flows), the same for agents as
+for any flow: [save and validate](./flows#flows), [deployment](./flows#deployment), and
+[runs](./flows#runs-section), with the [run lifecycle](./flows#lifecycle) and
+[limits](./flows#limits) a run can hit.
+
+| Endpoint | |
+| --- | --- |
+| `GET /flows?kind=flow\|agent&cursor=&limit=` | The listing, filtered by kind. Omit `kind` for both. Each `FlowView` carries its `kind`. |
+| `GET /agents/tools` | What the tool servers advertise: the platform's, asked as the caller, and the registered ones, asked with their own credential. |
+| `GET /runs/{id}/transcript?attempt=&after=` | A run's transcript, the conversation between the model and the tools. |
+
+### Whose access a run uses {#run-identity}
+
+A deployment acts as one of two identities, and `GET /flows/{id}/deployment` says which:
+`identity` is `deployer` or `client`, `runAs` the person's subject or the client's name.
+
+- **`deployer`.** `POST /flows/{id}/deployment/authorize` returns an `authorizationUrl`; the
+  caller's browser goes there to grant an offline token in Keycloak, and the runs act as them. The deployment lasts as long as that
+  offline session: each run renews it, and Keycloak ends it after its *Offline Session Idle*
+  time without a run (30 days by default), at its *Offline Session Max* age if the realm sets
+  one, or when the person is disabled or revokes it. A run carries the person's access as it
+  is at the time.
+- **`client`.** `PUT /flows/{id}/deployment` with `"runAs": "<name>"` names a client registered
+  in the organization's flow settings (`PUT /tenant/settings/flow/clients/{name}` on the API),
+  and runs take `client_credentials` tokens for it. Nothing lapses; the caller must hold every
+  group the client holds.
+
+When Keycloak refuses the identity, `identityState` turns from `ok` to
+`needs-reauthorisation`, with the reason in `identityStateReason`. The schedule stops, the run
+fails without a retry, and no failure event is written, since the run cannot write as anyone.
+`PUT /flows/{id}/deployment` without `runAs` keeps the identity it has and does not clear the
+state; authorize again, or name a client. Windows missed in between are not run.
+
+### `GET /agents/tools` {#agents-tools}
+
+Needs `/flows/read`. Returns the API server's tools and, when the service is configured with
+it, the analysis server's, then the tools of every [registered server](#tool-servers), with
+hints for a picker:
+
+```json
+{
+  "tools": [
+    { "server": "datahub-api", "name": "event_get", "description": "...", "readOnly": true, "destructive": false, "external": false },
+    { "server": "crm", "name": "crm__ticket_get", "description": "...", "readOnly": true, "destructive": false, "external": true }
+  ],
+  "unavailable": [
+    { "server": "erp", "error": "erp refused the credential (HTTP 401)" }
+  ]
+}
+```
+
+`external` marks a registered server's tool, whose `name` carries the server's prefix. A
+platform server that does not answer is a `503`, problem type `tools-unavailable`; a registered
+one that does not answer is listed under `unavailable` with what it said, and the rest of the
+tools are returned.
+
+### `GET /runs/{id}/transcript` {#transcript}
+
+| Parameter | Default | |
+| --- | --- | --- |
+| `attempt` | the latest | Which attempt of the run. Out of range is a `400`. |
+| `after` | `-1` | Return rows with a greater `seq`. Poll with the last `seq` you hold. |
+
+```json
+{
+  "runId": "...",
+  "attempt": 1,
+  "status": "RUNNING",
+  "rows": [
+    { "seq": 0, "time": "2026-10-12T01:00:00Z", "kind": "system", "payload": { "text": "..." } }
+  ]
+}
+```
+
+| `kind` | `payload` |
+| --- | --- |
+| `system` | `{ text }`, the instructions given to the model |
+| `user` | `{ text }`, the events |
+| `assistant` | `{ text }` |
+| `tool_call` | `{ id, name, args, mutating }` |
+| `tool_result` | `{ id, name, text, isError, millis }` |
+| `usage` | `{ iteration, inputTokens, outputTokens, cacheReadInputTokens, cacheCreationInputTokens, stopReason, millis }` |
+| `note` | `{ text }` |
+| `truncated` | `{ bytes }`, the transcript was cut at the 1 MB cap |
+
+`404` unless the caller may write the flow: a transcript carries tool results from any data set
+the run's identity can reach. Rows are served from the run store while the run is live and from
+history afterwards, and kept with the run's history, 90 days by default.
+
+## The flagged event {#flagged-event}
+
+When the model finishes with `flagged`, the `write-events` step writes one event into the
+flow's data set:
+
+```json
+{
+  "externalId": "agent:pump_watch:<runId>",
+  "type": "agent",
+  "subType": "flagged",
+  "status": "open",
+  "source": "agent:pump_watch",
+  "eventTime": "<when the run finished>",
+  "metadata": { "summary": "...", "runId": "...", "flow": "pump_watch" }
+}
+```
+
+The console dismisses one by writing the same `externalId` with status `dismissed`. To list the
+ones still open, `POST /events/latest` with:
+
+```json
+{ "filter": { "type": ["agent"], "subType": ["flagged"] }, "status": ["open"] }
+```
+
+## Cost and data {#cost}
+
+The organization's own [model credential](./reference/tenant#llm-settings) pays for every run,
+and the events in the window, every tool result and the instructions go to that model provider.

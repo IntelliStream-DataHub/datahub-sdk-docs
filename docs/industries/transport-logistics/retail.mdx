@@ -46,11 +46,12 @@ DataSetModel region = new DataSetModel();
 region.setExternalId("region_nordics");
 region.setName("Nordics region");
 long regionId = client.datasets().create(List.of(region))
-    .getItems().iterator().next().getId();
+    .getItems().get(0).getId();
 
-var salesSeries = Timeseries.of("store_oslo_01_sku_4471_sales")
-    .name("Oslo 01 — SKU 4471 units sold")
-    .setDataSetId(regionId);
+var salesSeries = new Timeseries();
+salesSeries.setExternalId("store_oslo_01_sku_4471_sales");
+salesSeries.setName("Oslo 01 — SKU 4471 units sold");
+salesSeries.setDataSetId(regionId);
 salesSeries.setUnit("units");
 client.timeseries().create(salesSeries);
 ```
@@ -101,9 +102,11 @@ replenishment. See [Datasets reference](/reference/datasets) and
 <TabItem value="java" label="Java">
 
 ```java
-DataSetRetreiver retriever = new DataSetRetreiver();
-retriever.getFilter().setExternalIdPrefix("region_nordics");   // scope to the region's dataset
-DataWrapper<DataSetModel> regional = client.datasets().filter(retriever);
+import ai.intellistream.datahub.models.IdCollection;
+
+// scope to the region's dataset
+DataWrapper<DataSetModel> regional = client.datasets().byIds(
+        List.of(IdCollection.createFromExternalId("region_nordics")));
 ```
 
 </TabItem>

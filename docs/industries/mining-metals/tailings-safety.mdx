@@ -95,13 +95,14 @@ use chrono::Utc;
 let mut listener = api.subscriptions.listen(&["tsf_instruments"]).await?;
 while let Some(Ok(msg)) = listener.next().await {
     if let Some(level) = trigger_level(&msg.payload) {  // "amber" | "red"
-        let mut alarm = Event::new(format!("tailings_alarm_p14_{}", Utc::now().timestamp()));
-        alarm.r#type = Some("tailings_alarm".into());
+        let mut alarm = Event::new(
+            format!("tailings_alarm_p14_{}", Utc::now().timestamp()),
+            "tailings_alarm".into(),
+            Utc::now());
         alarm.status = Some(if level == "red" { "critical" } else { "warning" }.into());
         alarm.add_metadata("instrument".into(), "piezometer_p14".into());
         alarm.add_metadata("level".into(), level.into());
         alarm.add_metadata("pore_pressure_kpa".into(), "186".into());
-        alarm.set_event_time(Utc::now());
         api.events.create(&vec![alarm]).await?;
     }
     listener.ack(&[msg.message_id.as_str()]).await?;

@@ -35,9 +35,9 @@ page = "docs/reference/timeseries.md"
 #   java   #14  L734   IngestResult
 
 [blocks]
-python = 9
-java = 14
-rust = 9
+python = 14
+java = 19
+rust = 13
 
 [python]
 timeout = 600
@@ -56,12 +56,32 @@ import intellistream_datahub_sdk
 client = intellistream_datahub_sdk.DataHubClient.from_env()
 """
 
+# Two blocks continue from the one before them, as a reader has them part way down the
+# page: #10 (insert_dataframe_binary) uses the `pd` and `now` of #9, and #13 (the
+# streaming read) the `last_hour` filter of #12.
+[[python.inject]]
+before = 10
+code = """
+import pandas as pd
+now = pd.Timestamp.now(tz="UTC")
+"""
+
+[[python.inject]]
+before = 13
+code = """
+import pandas as pd
+last_hour = intellistream_datahub_sdk.RetrieveFilter(
+    ts="engine_temperature",
+    start=pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=1),
+    end=pd.Timestamp.now(tz="UTC"))
+"""
+
 [java]
 disabled = "Java scenario not written yet."
-# Independent examples, as for Python. #13 is a list of IngestResult's method signatures,
+# Independent examples, as for Python. #18 is a list of IngestResult's method signatures,
 # not code.
 independent = true
-exclude = [13]
+exclude = [18]
 
 [owns]
 timeseries = ["book_value_usd", "engine_temperature"]

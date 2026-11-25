@@ -17,6 +17,9 @@ timeout = 180
 prologue = """
 import pathlib as _pathlib
 _pathlib.Path("calibration_a12.pdf").write_bytes(b"%PDF-1.4\\n% doc-test fixture\\n%%EOF\\n")
+# The upload examples file under `plant_a`, the data set the Datasets reference creates.
+if not client.datasets.by_ids(["plant_a"]):
+    client.datasets.create([intellistream_datahub_sdk.Dataset(external_id="plant_a", name="Plant A")])
 """
 
 # Block 3 deletes the file itself, which is the page's own teardown; the sweep is
@@ -33,6 +36,7 @@ _pathlib.Path("calibration_a12.pdf").write_bytes(b"%PDF-1.4\\n% doc-test fixture
 # delete and re-upload — not something to hide by renaming the path in this plan.
 
 [owns]
+datasets = ["plant_a"]
 timeseries = ["engine_temperature"]
 files = ["calibration_pump_esp_a12"]
 

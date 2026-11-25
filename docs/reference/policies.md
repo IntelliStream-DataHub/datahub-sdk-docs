@@ -17,6 +17,11 @@ The Java client reaches both through `client.policies()` and `client.governance(
 [`datasets().policies()`](./datasets#client-coverage) lists the same catalogue from the data
 set side, in all three clients.
 
+Python and Rust have no policy service. A policy is a node, so they reach one through
+[`resources`](./resources#typed-reads): a read narrowed to node type `policy` comes back as `Policy`,
+and `resources.create` takes a `Policy` node, under the same `403` rule as any
+[`POLICY`-labelled create](./resources#body).
+
 ## Policy types {#types}
 
 `GET /policies/types` lists the types a policy can instantiate. Each entry carries the type's
@@ -45,7 +50,7 @@ rather than accepted and quietly enforcing nothing.
 
 ```java
 DataWrapper<Policy> some = client.policies().list(100);
-DataWrapper<Policy> one = client.policies().getById(5677892L);
+DataWrapper<Policy> one = client.policies().getById(some.getItems().get(0).getId());
 
 Policy readOnly = new Policy();
 readOnly.setName("IS_WRITE_PROTECTED");             // the type it instantiates
@@ -88,7 +93,8 @@ import ai.intellistream.datahub.models.policy.PolicyFinding;
 NamingCheckForm form = new NamingCheckForm();
 form.setExternalIds(List.of("COM-99-PT-1034", "vps"));
 form.setNames(List.of("Valve 21 PT 1034", "Valve pressure sensors"));
-form.setDataSetId(12L);                      // omit for the tenant policy
+form.setDataSetId(client.datasets().byIds(List.of(IdCollection.createFromExternalId("plant_a")))
+        .getItems().get(0).getId());          // omit for the tenant policy
 
 List<PolicyFinding> findings = client.policies().checkNaming(form);
 for (PolicyFinding finding : findings) {

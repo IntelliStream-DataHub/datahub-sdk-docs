@@ -16,5 +16,6 @@ matplotlib
 networkx
 psutil
 pyarrow
+polars
 requests
 zstandard

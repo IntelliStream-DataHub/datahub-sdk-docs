@@ -151,9 +151,9 @@ update echo: `relatedResources` is left empty on purpose. The request touched on
 node's edges, and answering with those alone would be indistinguishable from answering with all
 of them. A delete has no echo at all, being a `204` with no body.
 
-The Python and Rust clients read the update echo as a flat `Resource` whatever the node's type,
-so a time series updated there comes back without its `unit`, and an asset without its
-`geoLocation`. Read the node again with `get_by_id` or `by_ids` when you need its typed shape.
+The Python and Rust clients read the update echo typed as well: Python's `GraphResult.nodes`
+holds each node as its own class, and Rust's `update` returns `GraphDataWrapper<Node>`, so a
+time series updated there comes back with its `unit` and an asset with its `geoLocation`.
 
 ## Look up
 
@@ -168,19 +168,23 @@ compare the returned items against what you asked for when a miss matters.
 ```java
 import ai.intellistream.datahub.models.IdCollection;
 
-NodeModel pump = client.resources().getById(5677892).getItems().iterator().next();
+NodeModel pump = client.resources().byIds(List.of(
+        IdCollection.createFromExternalId("pump_1"))).getItems().get(0);
+NodeModel byId = client.resources().getById(pump.getId()).getItems().get(0);
 
 DataWrapper<NodeModel> some = client.resources().byIds(List.of(
-        IdCollection.createFromExternalId("pump_1"),
-        IdCollection.createFromId(5677892)));
+        IdCollection.createFromExternalId("plant_oslo"),
+        IdCollection.createFromId(pump.getId())));
 ```
 
 </TabItem>
 <TabItem value="python" label="Python">
 
 ```python
+pump = client.resources.by_ids(["pump_1"])[0]
+
 # pass entity objects, external-id strings, or numeric ids
-resources = client.resources.by_ids(["pump_1", 5677892])
+resources = client.resources.by_ids(["plant_oslo", pump.id])
 ```
 
 </TabItem>
@@ -189,9 +193,12 @@ resources = client.resources.by_ids(["pump_1", 5677892])
 ```rust
 use intellistream_datahub_sdk::generic::IdAndExtId;
 
+let found = api.resources.by_ids(&vec![IdAndExtId::from_external_id("pump_1")]).await?;
+let pump_id = found.nodes().unwrap_or_default()[0].id().unwrap();
+
 let resources = api.resources.by_ids(&vec![
-    IdAndExtId::from_external_id("pump_1"),
-    IdAndExtId::from_id(5677892),
+    IdAndExtId::from_external_id("plant_oslo"),
+    IdAndExtId::from_id(pump_id),
 ]).await?;
 ```
 
@@ -266,12 +273,12 @@ retarget a relationship or change its type):
 <TabItem value="java" label="Java">
 
 ```java
-ResourceForm plant = new ResourceForm();
+Resource plant = new Resource();
 plant.setExternalId("plant_oslo");
 plant.setName("Oslo Plant");
 plant.setLabels(List.of("Plant"));
 
-ResourceForm pump = new ResourceForm();
+Resource pump = new Resource();
 pump.setExternalId("pump_1");
 pump.setName("Pump 1");
 pump.setLabels(List.of("Pump"));
@@ -281,7 +288,7 @@ contains.setName("contains");
 contains.setFromExternalId("plant_oslo");
 contains.setToExternalId("pump_1");
 
-GraphDataWrapper<Resource, EdgeProxy> created = client.resources()
+GraphDataWrapper<NodeModel, EdgeProxy> created = client.resources()
         .create(List.of(plant, pump), List.of(contains));
 
 System.out.println(created.getNodes().size() + " resources, "
@@ -443,7 +450,7 @@ ResourceRetreiver retriever = new ResourceRetreiver();
 retriever.setLimit(100);
 retriever.getFilter().setName(List.of("pipe%"));
 retriever.getFilter().setMetadata(Map.of("work_order", "wo-sap-12344"));
-retriever.getFilter().setDataSetId(List.of(IdCollection.createFromId(12L)));
+retriever.getFilter().setDataSetId(List.of(IdCollection.createFromExternalId("plant_a")));
 
 DataWrapper<NodeModel> matches = client.resources().filter(retriever);
 ```
@@ -455,7 +462,7 @@ DataWrapper<NodeModel> matches = client.resources().filter(retriever);
 matches = client.resources.filter(
     name="pipe%",
     metadata={"work_order": "wo-sap-12344"},
-    data_set_id=[12],
+    data_set_id=["plant_a"],
     limit=100)
 ```
 
@@ -475,7 +482,7 @@ let form = ResourceFilterForm::new(ResourceFilter {
         metadata: Some([("work_order".into(), Some("wo-sap-12344".into()))].into()),
         ..Default::default()
     },
-    data_set_id: Some(vec![IdAndExtId::from_id(12)]),
+    data_set_id: Some(vec![IdAndExtId::from_external_id("plant_a")]),
     ..Default::default()
 }).with_limit(100);
 
@@ -518,7 +525,7 @@ search query itself, everything else is applied to the hits afterwards.
 <TabItem value="java" label="Java">
 
 ```java
-ResourceSearch search = new ResourceSearch();
+SearchBody<ResourceFilter> search = new SearchBody<>();
 search.setLimit(10);
 search.getSearch().setQuery("pump");
 DataWrapper<NodeModel> matches = client.resources().search(search);
@@ -607,7 +614,8 @@ This is worth designing for rather than retrying blindly: two writers doing
 
 All three clients wrap this: `resources().update(nodes, relations)` in Java,
 `resources.update([...])` in Python, and `resources.update(&updates)` in Rust, each taking the
-per-entry update forms above.
+per-entry update forms above. The Python and Rust forms (`ResourceUpdate`) cover nodes only:
+neither client has a relation update form, so retarget or retype an edge from Java or over HTTP.
 
 ## Delete {#delete}
 
@@ -684,7 +692,7 @@ Nodes from `fetch-related` and `fetch-nearest` come back [typed by label](#typed
 carry the fields the graph mirror holds: `id`, `externalId`, `name`, `description`, `source`,
 `dataSetId`, `labels`, `metadata`, `createdTime` and `lastUpdatedTime`, plus `relatedResources`
 built from the edges of the network you fetched. By type: `isRoot` on resources and assets,
-`geoLocation` on assets, `unit`, `unitExternalId` and `valueType` on time series, and
+`geoLocation` on assets (a point only; other geometries are not carried), `unit`, `unitExternalId` and `valueType` on time series, and
 `deactivated` on policies. Fetch by id when you need a field outside that list.
 
 <Tabs groupId="lang">
@@ -765,7 +773,7 @@ clients build the request from a numeric `id` only, so there resolve an external
 
 ```java
 FetchNearestResourcesForm form = new FetchNearestResourcesForm();
-form.setExternalId("pump_1");               // or form.setId(5677892L)
+form.setExternalId("pump_1");               // or form.setId(a numeric id)
 form.setEndLabels(List.of("TIMESERIES"));
 form.setLimit(10);
 form.setExcludedLabels(List.of("POLICY"));
@@ -777,8 +785,9 @@ ResourceNetwork nearest = client.resources().fetchNearest(form);
 <TabItem value="python" label="Python">
 
 ```python
+pump = client.resources.by_ids(["pump_1"])[0]
 nearest = client.resources.fetch_nearest(
-    5677892,                       # the Python client takes the numeric id
+    pump.id,                       # the Python client takes the numeric id
     end_labels=["TIMESERIES"],
     limit=10,
     excluded_labels=["POLICY"])
@@ -788,10 +797,14 @@ nearest = client.resources.fetch_nearest(
 <TabItem value="rust" label="Rust">
 
 ```rust
+use intellistream_datahub_sdk::generic::IdAndExtId;
 use intellistream_datahub_sdk::resources::FetchNearestResourcesForm;
 
+let found = api.resources.by_ids(&vec![IdAndExtId::from_external_id("pump_1")]).await?;
+let pump_id = found.nodes().unwrap_or_default()[0].id().unwrap();
+
 let nearest = api.resources.fetch_nearest(
-    &FetchNearestResourcesForm::from_id(5677892)   // the Rust client takes the numeric id
+    &FetchNearestResourcesForm::from_id(pump_id)   // the Rust client takes the numeric id
         .with_end_labels(vec!["TIMESERIES".into()])
         .with_limit(10)
         .with_excluded_labels(vec!["POLICY".into()])).await?;
@@ -896,14 +909,20 @@ The nodes and relationships it creates count against their own daily quotas thro
 ordinary create path. A reverse proxy in front of the API has to pass the upload through
 unbuffered and uncapped, as the shipped nginx examples do for `/resources/import`.
 
-The Java client wraps the pair. `export` hands back the file as bytes and `importGraph` takes
-the same bytes, so moving a sub-graph between two tenants is two calls and no temporary file
-unless you want one:
+Every client wraps the pair. Export hands back the file as bytes and import takes the same
+bytes, so moving a sub-graph between two tenants is two calls and no temporary file unless you
+want one. Python and Rust also stream either end to or from a path, for a file too large to hold
+in memory.
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
 
 ```java
 import ai.intellistream.datahub.api.graphtransfer.GraphImportResult;
 
-byte[] graph = source.resources().export(5677892L);
+long plantId = source.resources().byIds(List.of(
+        IdCollection.createFromExternalId("plant_oslo"))).getItems().get(0).getId();
+byte[] graph = source.resources().export(plantId);
 
 GraphImportResult result = target.resources().importGraph(graph);
 System.out.println(result.nodesCreated() + " created, "
@@ -914,11 +933,58 @@ System.out.println(result.nodesCreated() + " created, "
 `GraphImportResult` is a record, so its fields read as `result.nodesCreated()` and so on, one
 per key of the JSON above.
 
-Python and Rust call the endpoints over HTTP with the bearer token the client already holds:
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+plant_id = source.resources.by_ids(["plant_oslo"])[0].id
+graph = source.resources.export_graph(plant_id)         # bytes
+
+result = target.resources.import_graph(graph)
+print(result.nodes_created, "created,",
+      result.nodes_skipped_existing, "already there,",
+      result.nodes_skipped_timeseries, "to create as series first")
+
+# Or through a file, never held whole in memory:
+source.resources.export_graph_to_path(plant_id, "plant_oslo.dhgraph")
+target.resources.import_graph_from_path("plant_oslo.dhgraph")
+```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use intellistream_datahub_sdk::generic::IdAndExtId;
+use intellistream_datahub_sdk::graph_data_wrapper::GraphDataWrapper;
+use intellistream_datahub_sdk::Node;
+
+let found: GraphDataWrapper<Node> =
+    source.resources.by_ids(&vec![IdAndExtId::from_external_id("plant_oslo")]).await?;
+let plant_id = found.nodes().unwrap_or_default()[0].id().unwrap();
+let graph: Vec<u8> = source.resources.export_graph(plant_id).await?;
+
+let result = target.resources.import_graph(graph).await?;
+println!("{} created, {} already there, {:?} to create as series first",
+    result.nodes_created, result.nodes_skipped_existing, result.nodes_skipped_timeseries);
+
+// Or through a file, never held whole in memory:
+source.resources.export_graph_to_path(plant_id, "plant_oslo.dhgraph").await?;
+target.resources.import_graph_from_path("plant_oslo.dhgraph").await?;
+```
+
+</TabItem>
+</Tabs>
+
+The export walks the graph, which settles a moment after a write. A component created and
+exported straight away can come back short; read it with `fetch_related` first when that
+matters.
+
+Over plain HTTP, send the bearer token the client already holds, with `PLANT_ID` set to the
+plant's numeric id:
 
 ```bash
 curl -fsS -H "Authorization: Bearer $TOKEN" \
-  -o plant_oslo.dhgraph "$API/resources/export/5677892"
+  -o plant_oslo.dhgraph "$API/resources/export/$PLANT_ID"
 
 curl -fsS -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/octet-stream" \
@@ -989,9 +1055,9 @@ plant.setIsRoot(true);
 client.assets().create(List.of(plant));
 
 DataWrapper<Asset> newest = client.assets().list(100);
-DataWrapper<Asset> one = client.assets().getById(5677892L);
 DataWrapper<Asset> some = client.assets().byIds(List.of(
         IdCollection.createFromExternalId("plant_oslo")));
+DataWrapper<Asset> one = client.assets().getById(some.getItems().get(0).getId());
 
 UpdateAssetForm rename = new UpdateAssetForm().setExternalId("plant_oslo");
 rename.getUpdate().getName().set("Oslo Plant (renamed)");
@@ -1004,12 +1070,104 @@ client.assets().update(List.of(rename));
 a `GraphDataWrapper<NodeModel, EdgeProxy>`, not an asset one, because an update may touch a
 relation whose other end is not an asset.
 
+Python and Rust have the same service as `assets` (`client.assets`, `api.assets`), with
+`create`, `get_by_id`, `by_ids`, `list`, `filter`, `search`, `update` and `delete`. Reads come
+back as `Asset`, and `update` echoes typed nodes as on `/resources`: a `GraphResult` in Python,
+a `GraphDataWrapper<Node>` in Rust.
+
 ## The `/functions` endpoints {#functions}
 
-A **function** is a plain node distinguished by its `FUNCTION` label. 
+A **function** is a plain node distinguished by its `FUNCTION` label. Like
+[`/assets`](#assets), every call is the shared pipeline with the `FUNCTION` type pinned: the same
+ACLs, naming policy and status codes. The type is fixed in the query itself, so nothing in the
+body can widen a call to other node types.
 
-`GET /functions/{id}` returns the one function wrapped in `items`, and reports a function
-you may not read as missing (`404`) rather than forbidden, exactly as `GET /assets/{id}` does.
+| Endpoint | Behaves as | Worth knowing |
+| --- | --- | --- |
+| `POST /functions/create` | [create](#create-resources-and-relations) | Nodes only, no `relations` array. `201`, and the echo is function-shaped. |
+| `GET /functions/{id}` | [look up](#look-up) | One function, wrapped in `items`. |
+| `POST /functions/byids` | [look up](#look-up) | Ids that are missing, are not functions, or are not readable are omitted rather than failing the call. |
+| `GET /functions?limit=` | [filter](#filter) | The first `limit` functions, newest first, no criteria and no `nextCursor`. `limit` defaults to 1000 and caps at 10 000. |
+| `POST /functions/filter` | [filter](#filter) | The criteria every node type shares plus `dataSetId` ([`FunctionFilter`](./filters)), with `sort`, `limit` and `cursor` paging. |
+| `POST /functions/search` | [search](#search) | Free text, with an optional `filter` block of the same criteria ANDed on. |
+| `POST /functions/update` | [update](#update) | `nodes` and `relations`. An entry naming a node of another type is a `404`, and nothing in the batch is written. |
+| `POST` or `DELETE /functions/delete` | [delete](#delete) | `204`. Ids that are not functions are skipped, not deleted. |
+
+```http
+POST /functions/filter
+{
+  "limit": 100,
+  "filter": {
+    "name": ["rolling*"],
+    "labels": ["AGGREGATION"],
+    "dataSetId": [{ "externalId": "plant_a" }]
+  }
+}
+```
+
+`GET /functions/{id}` reports a function you may not read as missing (`404`) rather than
+forbidden, exactly as `GET /assets/{id}` does.
+
+Each client has a typed `functions` service whose reads come back as `Function`:
+
+<Tabs groupId="lang">
+<TabItem value="java" label="Java">
+
+```java
+import ai.intellistream.datahub.function.Function;
+import ai.intellistream.datahub.models.datafilters.FunctionFilter;
+
+DataWrapper<Function> some = client.functions().byIds(List.of(
+        IdCollection.createFromExternalId("fn_rolling_average")));
+
+FunctionFilter criteria = new FunctionFilter();
+criteria.setLabels(List.of("AGGREGATION"));
+DataWrapper<Function> page = client.functions().filter(criteria);
+```
+
+`filter` also takes a `FunctionRetreiver` for `limit`, `sort` and `cursor`, and `search` takes a
+`SearchBody<FunctionFilter>`, the same forms as their `assets()` counterparts.
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+# entity objects, external-id strings, or numeric ids
+some = client.functions.by_ids(["fn_rolling_average"])
+
+page = client.functions.filter(labels=["AGGREGATION"])   # a Page; page.next_cursor pages on
+hits = client.functions.search("rolling average")
+```
+
+`filter` takes the criteria as keywords or a prepared `FunctionFilter` as `filter=`, never both,
+plus `limit`, `sort_by`, `sort_order` and `cursor`. `search` takes `query`, an optional
+`FunctionFilter` and `limit`.
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use intellistream_datahub_sdk::filters::NodeFilter;
+use intellistream_datahub_sdk::functions::{FunctionFilter, FunctionFilterForm};
+use intellistream_datahub_sdk::generic::IdAndExtId;
+
+let some = api.functions.by_ids(&vec![
+    IdAndExtId::from_external_id("fn_rolling_average"),
+]).await?;
+
+let criteria = FunctionFilter {
+    node: NodeFilter { labels: Some(vec!["AGGREGATION".into()]), ..Default::default() },
+    data_set_id: None,
+};
+let page = api.functions.filter(&FunctionFilterForm::new(criteria)).await?;
+let hits = api.functions.search_by_query("rolling average").await?;
+```
+
+`FunctionFilterForm` carries `limit` and a `PageRequest` for `sort` and `cursor`; `search` takes a
+`SearchAndFilterForm<FunctionFilter>`, and `search_by_query` is the shorthand for a bare phrase.
+
+</TabItem>
+</Tabs>
 
 Writes reach only functions, following the same rules as [their asset counterparts](#assets):
 
@@ -1035,7 +1193,7 @@ In Java, `client.functions().update(...)` takes `UpdateFunctionForm` entries
 | Filter | `resources().filter` | `resources.filter` | `resources.filter` |
 | Traverse (`fetch-related`) | `resources().fetchRelated` | `resources.fetch_related` | `resources.fetch_related` |
 | Nearest N (`fetch-nearest`) | `resources().fetchNearest` | `resources.fetch_nearest` | `resources.fetch_nearest` |
-| [Export / import a graph](#graph-transfer) | `resources().export` / `importGraph` | HTTP only | HTTP only |
+| [Export / import a graph](#graph-transfer) | `resources().export` / `importGraph` | `resources.export_graph` / `import_graph`, plus `_to_path` / `_from_path` | `resources.export_graph` / `import_graph`, plus `_to_path` / `_from_path` |
 
 
 Relations have their own client surface in all three clients, `edges()` in Java, `edges` in
